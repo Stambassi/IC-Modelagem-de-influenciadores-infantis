@@ -386,28 +386,25 @@ def process_video(video_id, video_title, processed_videos):
         writer = csv.writer(file)
         writer.writerow([video_id])
               
-def make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE, channel_id):
+def make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE):    
     api_manager = YouTubeAPIManager.get_instance()  # Obtendo a instância do objeto
     method_func = lambda client, **kwargs: api_manager.youtube.search().list(**kwargs)
-
-    print(">> Nova query")
-    
-    # Fazendo a requisição da API, agora com o parâmetro channelId
+    # print("Precisa adicionar o parâmetro location e radius para configurarmos os países")
+   # https://developers.google.com/youtube/v3/docs/search/list (Adicionar o parâmetro location e radius...)
+    print(">> Nova querie")
     search_response = api_manager.make_api_request(method_func,
-        part="id,snippet",
-        q=query,
-        maxResults=50,
-        type="video",
-        order="relevance",
-        publishedAfter=published_after,
-        publishedBefore=published_before,
-        regionCode=REGION_CODE,
-        relevanceLanguage=RELEVANCE_LANGUAGE,
-        channelId=channel_id  # Adicionando a restrição por canal
-    )
-    
+    part="id,snippet",
+    q=query,
+    maxResults=50,
+    type="video",
+    order="relevance",
+    publishedAfter=published_after,
+    publishedBefore=published_before,
+    regionCode=REGION_CODE,
+    relevanceLanguage=RELEVANCE_LANGUAGE)
     number_of_videos = len(search_response.get('items', []))
     print(f"A requisição da query retornou {number_of_videos} vídeos.")
+
 
     return search_response
 
@@ -465,25 +462,24 @@ def main():
             })
 
         for query in queries:
+            
             GlobalState.get_instance().set_state("atual_query", query)
             GlobalState.get_instance().set_state("query_progress", f"{queries.index(query) + 1}/{len(queries)}")
 
             published_after = start_interval.isoformat() + "Z"
             published_before = end_interval.isoformat() + "Z"
             video_details_list = []
-            
-            # Passando o channel_id para a função make_search_request
-            search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE, config['channel_id'])
-            
+            search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE) 
             videos = search_response.get("items", [])
             total_videos = len(videos)
-
             if total_videos == 0:  # Verifica se search_response foi obtido com sucesso
                 log("search", "Não foi possível obter uma resposta da API. Movendo para a próxima consulta.")
                 continue
 
             for index, item in enumerate(videos, start=1):
+                
                 VIDEO_TITLE = item['snippet']['title'].lower()
+
                 key_words = config['key_words']
 
                 # Verifica se o título possui as palavras chave
@@ -499,6 +495,7 @@ def main():
                             process_video(video_id, "", processed_videos)
 
             log("search", f"Coleta concluída para a consulta: {query} entre {start_interval} e {end_interval}")
+
 
 if __name__ == "__main__":
     main()
