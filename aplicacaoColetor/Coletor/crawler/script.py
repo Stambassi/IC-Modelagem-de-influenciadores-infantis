@@ -27,12 +27,14 @@ class YouTubeAPIManager:
     YOUTUBE_API_SERVICE_NAME = 'youtube'
     YOUTUBE_API_VERSION = 'v3'
     DEVELOPER_KEYS = config["youtube_keys"]
+    #DEVELOPER_CHANNELS = config["channel_id"]
     
     static_YouTubeAPIManager = None
     
 
     def __init__(self):
         self.current_key_index = -1
+        #self.current_channel_index = -1
         self.youtube = self.get_new_youtube_client()
 
     @staticmethod
@@ -44,6 +46,7 @@ class YouTubeAPIManager:
         
     def get_new_youtube_client(self):
         self.DEVELOPER_KEYS = config['youtube_keys']
+        #self.DEVELOPER_CHANNELS = config['channel_id']
         if self.current_key_index >= len(self.DEVELOPER_KEYS) - 1:  # Verifica se já tentou todas as chaves
             #timeout = secondsUntil(5)
             timeout = 60
@@ -57,6 +60,7 @@ class YouTubeAPIManager:
 
         #print(f"Id da chave após o incremento/reinicialização: {self.current_key_index}")
         developerKey = self.DEVELOPER_KEYS[self.current_key_index]
+        #contadorCanal = contadorCanal + 1
         GlobalState.get_instance().set_state("key_progress", f"{self.current_key_index + 1}/{len(self.DEVELOPER_KEYS)}")
         log("key", f"Usando developerKey: {developerKey}")
         return build(self.YOUTUBE_API_SERVICE_NAME, self.YOUTUBE_API_VERSION, developerKey=developerKey)
@@ -108,10 +112,9 @@ class YouTubeAPIManager:
                     print(f"Problema de conexão com o YouTube detectado - Tentando novamente em {try_again_timeout} segundos.")
                     time.sleep(try_again_timeout)
 
-def create_files_path():
-    DEST_DIRECTORY_NAME = "files"
+def create_files_path(nmCanal):
+    DEST_DIRECTORY_NAME = f"files/{nmCanal}"
 
-    
     if not os.path.exists("./" + DEST_DIRECTORY_NAME):
         os.makedirs("./" + DEST_DIRECTORY_NAME)
 
@@ -356,12 +359,12 @@ def get_channel_details(channel_id):
     return details
 
 # Função para processar um único vídeo
-def process_video(video_id, video_title, processed_videos):
+def process_video(video_id, video_title, processed_videos, nmCanal):
     global channels_info
     print(">> processando vídeos")
-    videos_file_exists = os.path.isfile('files/videos_info.csv')
-    channels_file_exists = os.path.isfile('files/channels_info.csv')
-    comments_file_exists = os.path.isfile('files/comments_info.csv')
+    videos_file_exists = os.path.isfile(f'files/{nmCanal}/videos_info.csv')
+    channels_file_exists = os.path.isfile(f'files/{nmCanal}/channels_info.csv')
+    comments_file_exists = os.path.isfile(f'files/{nmCanal}/comments_info.csv')
 
     video_details = get_video_details(video_id)
     if video_details == None:
@@ -370,27 +373,37 @@ def process_video(video_id, video_title, processed_videos):
     total_comment_count = video_details['comment_count']  # Assumindo que 'comment_count' é o total de comentários disponíveis
 
     if total_comment_count > 0 and total_comment_count < 10000000000000: #Sentinel 
-        pd.DataFrame([video_details]).to_csv('files/videos_info.csv', mode='a', header=not videos_file_exists, index=False)
+        pd.DataFrame([video_details]).to_csv(f'files/{nmCanal}/videos_info.csv', mode='a', header=not videos_file_exists, index=False)
         
         channel_details = get_channel_details(video_details['channel_id'])
-        pd.DataFrame([channel_details]).to_csv('files/channels_info.csv', mode='a', header=not channels_file_exists, index=False)
+        pd.DataFrame([channel_details]).to_csv(f'files/{nmCanal}/channels_info.csv', mode='a', header=not channels_file_exists, index=False)
         
         comments = get_comments(video_id, video_title, total_comment_count)
         comments_df = pd.DataFrame(comments)
         comments_df['channel_id'] = video_details['channel_id']
-        comments_df.to_csv('files/comments_info.csv', mode='a', header=not comments_file_exists, index=False)
+        comments_df.to_csv(f'files/{nmCanal}/comments_info.csv', mode='a', header=not comments_file_exists, index=False)
 
 
     processed_videos.add(video_id)
-    with open('files/processed_videos.csv', 'a', newline='') as file:
+    with open(f'files/{nmCanal}/processed_videos.csv', 'a', newline='') as file:
         writer = csv.writer(file)
         writer.writerow([video_id])
               
-def make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE):    
+def make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE, channel_id):    
     api_manager = YouTubeAPIManager.get_instance()  # Obtendo a instância do objeto
     method_func = lambda client, **kwargs: api_manager.youtube.search().list(**kwargs)
+    print("CHAMANDO")
     # print("Precisa adicionar o parâmetro location e radius para configurarmos os países")
    # https://developers.google.com/youtube/v3/docs/search/list (Adicionar o parâmetro location e radius...)
+    print(">> Nova querie")
+    print(">> Nova querie")
+    print(">> Nova querie")
+    print(">> Nova querie")
+    print(">> Nova querie")
+    print(">> Nova querie")
+    print(">> Nova querie")
+    print(">> Nova querie")
+    print(">> Nova querie")
     print(">> Nova querie")
     search_response = api_manager.make_api_request(method_func,
     part="id,snippet",
@@ -401,18 +414,43 @@ def make_search_request(query, published_after, published_before, REGION_CODE, R
     publishedAfter=published_after,
     publishedBefore=published_before,
     regionCode=REGION_CODE,
-    relevanceLanguage=RELEVANCE_LANGUAGE)
+    relevanceLanguage=RELEVANCE_LANGUAGE,
+    channelId=channel_id )
     number_of_videos = len(search_response.get('items', []))
     print(f"A requisição da query retornou {number_of_videos} vídeos.")
 
 
     return search_response
 
+def nomeCanal(channel_id):
+
+    api_manager = YouTubeAPIManager.get_instance()  # Obtendo a instância do objeto
+    method_func = lambda client, **kwargs: api_manager.youtube.channels().list(**kwargs)
+    print("Nova chamada de nome")
+    search_response = api_manager.make_api_request(method_func,
+    part="id,snippet",
+    id = channel_id
+    )
+    
+
+    if 'items' in search_response and len(search_response['items']) > 0:
+            channel_info = search_response['items'][0]['snippet']
+            channel_name = channel_info['title']
+            return channel_name
+    else:
+        print("Nenhum canal encontrado com esse ID")
+        return None
+
 def main():
    # Configurar com aspas duplas os termos chaves -> testar primeiro....
     queries = config["queries"]
 
-    create_files_path() # Cria diretório files para armazenar saidas 
+    contadorCanal = 0
+
+    nmCanal = nomeCanal(config['channel_id'][contadorCanal])
+    print(f"Nome do Canal eh: {nmCanal}")
+
+    create_files_path(nmCanal) # Cria diretório files para armazenar saidas 
 
     df_autal_date = pd.read_csv('files/atual_date.csv', header=None)
 
@@ -461,15 +499,15 @@ def main():
                 "day": end_interval.day
             })
 
-        for query in queries:
-            
+        for query in queries: 
+
             GlobalState.get_instance().set_state("atual_query", query)
             GlobalState.get_instance().set_state("query_progress", f"{queries.index(query) + 1}/{len(queries)}")
 
             published_after = start_interval.isoformat() + "Z"
             published_before = end_interval.isoformat() + "Z"
             video_details_list = []
-            search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE) 
+            search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE, config['channel_id'][contadorCanal]) 
             videos = search_response.get("items", [])
             total_videos = len(videos)
             if total_videos == 0:  # Verifica se search_response foi obtido com sucesso
@@ -492,10 +530,17 @@ def main():
                         print("Title:", video_details['title'], "# comments", video_details['comment_count'])
                         
                         if comment_count > 0:
-                            process_video(video_id, "", processed_videos)
+                            process_video(video_id, "", processed_videos, nmCanal)
 
             log("search", f"Coleta concluída para a consulta: {query} entre {start_interval} e {end_interval}")
 
+            contadorCanal = contadorCanal + 1
+            if(contadorCanal > len(config['channel_id']) - 1): 
+                contadorCanal = 0
+            nmCanal = nomeCanal(config['channel_id'][contadorCanal])
+            print(f"Nome do Canal eh: {nmCanal}")
+
+            create_files_path(nmCanal) # Cria diretório files para armazenar saidas
 
 if __name__ == "__main__":
     main()

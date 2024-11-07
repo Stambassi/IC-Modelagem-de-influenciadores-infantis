@@ -20,26 +20,35 @@ config = {
 
   # Palavras que serão utilizadas para filtrar os títulos dos vídeos
   'key_words': [
-      'Edukof',
-      'comida',
-      'carro', 
       'minecraft',
-      'vlog'],
+      'Minecraft'],
 
   # KEYs da API v3 do YouTube
   'youtube_keys': [
-    'AIzaSyB_nwBTSmNfVP2HyyJzc4NMKgAEFX-lJk0'
+    'AIzaSyBa7xnlhKulIqvh15fNgRXnJWIOMLzxYs8',
+    'AIzaSyB_nwBTSmNfVP2HyyJzc4NMKgAEFX-lJk0',
+    'AIzaSyDpOjnhCWpAbRKWsDI7mVqufzlMO4DNHUI',
+    'AIzaSyDx1kErv6e02FygrSgdYIrCmkWw4IIXZlU',
+    'AIzaSyCg9e0EeIEM_hE9LmjCvoo6qNQrHN1raz8',
+    'AIzaSyCuAKpgB5Q38PUbIrstFfU5ZQEr4xb13q0',
+    'AIzaSyDy3ioPkbzXVQ2EaDDjGGc3vYgxCIBtrJg'
   ],
+
 
   # Queries que serão utilizadas na pesquisa
 'queries': [
-      'Edukof',
-      'comida',
-      'carro', 
       'minecraft',
-      'vlog'
+      'Minecraft',
+      'mine'
 ],
 
 # ID do canal para restringir a busca
-    'channel_id': 'UCmrAdc8HKdprnWZ8wsusmnA'  # ID do canal desejado
+    'channel_id': [
+        'UCIPA6iWNaoetaa1T46RkzXw',
+        'UCIPA6iWNaoetaa1T46RkzXw',
+        'UCEfGV5hx2VrXl4jOUnG0MRQ',
+        'UCEfGV5hx2VrXl4jOUnG0MRQ',
+        'UCtKndmEnQyqkhOQfpi5CgvQ',
+        'UCtKndmEnQyqkhOQfpi5CgvQ'          
+    ], 
 }
