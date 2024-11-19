@@ -11,6 +11,12 @@ from scripts.console import log
 
 from config import config
 
+'''
+from transformers import AutoTokenizer
+from transformers import AutoModelForSequenceClassification
+from scipy.special import softmax
+'''
+
 import os
 import csv
 import time
@@ -114,6 +120,12 @@ class YouTubeAPIManager:
 
 def create_files_path(nmCanal):
     DEST_DIRECTORY_NAME = f"files/{nmCanal}"
+
+    if not os.path.exists("./" + DEST_DIRECTORY_NAME):
+        os.makedirs("./" + DEST_DIRECTORY_NAME)
+
+def create_filesVideo_path(nmCanal, anoVideo, mesVideo, nomeVideo):
+    DEST_DIRECTORY_NAME = f"files/{nmCanal}/{anoVideo}/{mesVideo}/{nomeVideo}"
 
     if not os.path.exists("./" + DEST_DIRECTORY_NAME):
         os.makedirs("./" + DEST_DIRECTORY_NAME)
@@ -359,12 +371,15 @@ def get_channel_details(channel_id):
     return details
 
 # Função para processar um único vídeo
-def process_video(video_id, video_title, processed_videos, nmCanal):
+def process_video(video_id, video_title, processed_videos, nmCanal, tituloVideo, anoPublicacaoVideo, mesPublicacaoVideo):
     global channels_info
+
+    create_filesVideo_path(nmCanal, anoPublicacaoVideo, mesPublicacaoVideo, tituloVideo)
+
     print(">> processando vídeos")
-    videos_file_exists = os.path.isfile(f'files/{nmCanal}/videos_info.csv')
-    channels_file_exists = os.path.isfile(f'files/{nmCanal}/channels_info.csv')
-    comments_file_exists = os.path.isfile(f'files/{nmCanal}/comments_info.csv')
+    videos_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/videos_info.csv')
+    channels_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/channels_info.csv')
+    comments_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/comments_info.csv')
 
     video_details = get_video_details(video_id)
     if video_details == None:
@@ -373,19 +388,19 @@ def process_video(video_id, video_title, processed_videos, nmCanal):
     total_comment_count = video_details['comment_count']  # Assumindo que 'comment_count' é o total de comentários disponíveis
 
     if total_comment_count > 0 and total_comment_count < 10000000000000: #Sentinel 
-        pd.DataFrame([video_details]).to_csv(f'files/{nmCanal}/videos_info.csv', mode='a', header=not videos_file_exists, index=False)
+        pd.DataFrame([video_details]).to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/videos_info.csv', mode='a', header=not videos_file_exists, index=False)
         
         channel_details = get_channel_details(video_details['channel_id'])
-        pd.DataFrame([channel_details]).to_csv(f'files/{nmCanal}/channels_info.csv', mode='a', header=not channels_file_exists, index=False)
+        pd.DataFrame([channel_details]).to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/channels_info.csv', mode='a', header=not channels_file_exists, index=False)
         
         comments = get_comments(video_id, video_title, total_comment_count)
         comments_df = pd.DataFrame(comments)
         comments_df['channel_id'] = video_details['channel_id']
-        comments_df.to_csv(f'files/{nmCanal}/comments_info.csv', mode='a', header=not comments_file_exists, index=False)
+        comments_df.to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/comments_info.csv', mode='a', header=not comments_file_exists, index=False)
 
 
     processed_videos.add(video_id)
-    with open(f'files/{nmCanal}/processed_videos.csv', 'a', newline='') as file:
+    with open(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/processed_videos.csv', 'a', newline='') as file:
         writer = csv.writer(file)
         writer.writerow([video_id])
               
@@ -395,15 +410,6 @@ def make_search_request(query, published_after, published_before, REGION_CODE, R
     print("CHAMANDO")
     # print("Precisa adicionar o parâmetro location e radius para configurarmos os países")
    # https://developers.google.com/youtube/v3/docs/search/list (Adicionar o parâmetro location e radius...)
-    print(">> Nova querie")
-    print(">> Nova querie")
-    print(">> Nova querie")
-    print(">> Nova querie")
-    print(">> Nova querie")
-    print(">> Nova querie")
-    print(">> Nova querie")
-    print(">> Nova querie")
-    print(">> Nova querie")
     print(">> Nova querie")
     search_response = api_manager.make_api_request(method_func,
     part="id,snippet",
@@ -440,12 +446,58 @@ def nomeCanal(channel_id):
     else:
         print("Nenhum canal encontrado com esse ID")
         return None
+    
+def nomeMesAno(numeroMes):
+
+    stringMes = ""
+
+    match numeroMes:
+        case "01":
+            stringMes = "Janeiro"
+        case "02":
+            stringMes = "Fevereiro"
+        case "03":
+            stringMes = "Marco"
+        case "04":
+            stringMes = "Abril"
+        case "05":
+            stringMes = "Maio"
+        case "06":
+            stringMes = "Junho"
+        case "07":
+            stringMes = "Julho"
+        case "08":
+            stringMes = "Agosto"
+        case "09":
+            stringMes = "Setembro"
+        case "10":
+            stringMes = "Outubro"
+        case "11":
+            stringMes = "Novembro"
+        case "12":
+            stringMes = "Dezembro"
+
+    return stringMes
 
 def main():
+
+    '''
+    MODEL  = f"cardiffnlp/twitter-roberta-base-sentiment"
+    tokenizer = AutoTokenizer.from_pretrained(MODEL)
+    model = AutoModelForSequenceClassification.from_pretrained(MODEL)
+
+    example = "Ola, tudo bem?"
+
+    encoded_text = tokenizer(example, return_tensors='pt')
+    output = model(**encoded_text)
+    print(output)
+    '''
+
    # Configurar com aspas duplas os termos chaves -> testar primeiro....
     queries = config["queries"]
 
     contadorCanal = 0
+    contadorQuery = 0
 
     nmCanal = nomeCanal(config['channel_id'][contadorCanal])
     print(f"Nome do Canal eh: {nmCanal}")
@@ -527,18 +579,33 @@ def main():
                     if video_id not in processed_videos:
                         video_details = get_video_details(video_id)
                         comment_count = video_details['comment_count']
+                        data_publicacao_Video = video_details['published_at']
+                        
+                        anoPublicacaoVideo = data_publicacao_Video[0:4]
+                        mesPublicacaoVideo = nomeMesAno(data_publicacao_Video[5:7])
+
+                        '''
+                        a = input('').split("")[0]
+                        print(a)
+                        '''
+
                         print("Title:", video_details['title'], "# comments", video_details['comment_count'])
                         
                         if comment_count > 0:
-                            process_video(video_id, "", processed_videos, nmCanal)
+                            process_video(video_id, "", processed_videos, nmCanal, video_details['title'], anoPublicacaoVideo, mesPublicacaoVideo)
 
             log("search", f"Coleta concluída para a consulta: {query} entre {start_interval} e {end_interval}")
 
-            contadorCanal = contadorCanal + 1
-            if(contadorCanal > len(config['channel_id']) - 1): 
-                contadorCanal = 0
+            contadorQuery = contadorQuery + 1
+            if(contadorQuery > len(config['queries']) - 1):
+                contadorCanal = contadorCanal + 1
+                if(contadorCanal > len(config['channel_id']) - 1): 
+                    contadorCanal = 0
+                contadorQuery = 0
             nmCanal = nomeCanal(config['channel_id'][contadorCanal])
             print(f"Nome do Canal eh: {nmCanal}")
+            a = input('')
+            print(a)
 
             create_files_path(nmCanal) # Cria diretório files para armazenar saidas
 

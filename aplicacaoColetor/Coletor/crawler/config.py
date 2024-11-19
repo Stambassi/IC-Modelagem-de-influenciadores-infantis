@@ -45,10 +45,7 @@ config = {
 # ID do canal para restringir a busca
     'channel_id': [
         'UCIPA6iWNaoetaa1T46RkzXw',
-        'UCIPA6iWNaoetaa1T46RkzXw',
         'UCEfGV5hx2VrXl4jOUnG0MRQ',
-        'UCEfGV5hx2VrXl4jOUnG0MRQ',
-        'UCtKndmEnQyqkhOQfpi5CgvQ',
-        'UCtKndmEnQyqkhOQfpi5CgvQ'          
+        'UCtKndmEnQyqkhOQfpi5CgvQ'         
     ], 
 }
