@@ -11,11 +11,24 @@ from scripts.console import log
 
 from config import config
 
-'''
+
 from transformers import AutoTokenizer
 from transformers import AutoModelForSequenceClassification
 from scipy.special import softmax
-'''
+
+from deep_translator import PonsTranslator
+
+from googletrans import Translator
+from transformers import pipeline
+
+import yt_dlp
+import os
+import wave
+import json
+import subprocess
+import time
+
+from vosk import Model, KaldiRecognizer
 
 import os
 import csv
@@ -28,6 +41,15 @@ import socket
 # timeout_in_sec = 15
 timeout_in_sec = 60*3 # 3 minutes timeout limit
 socket.setdefaulttimeout(timeout_in_sec)
+
+# inicializacao do tradutor para a análise de sentimentos
+translator = Translator()
+
+# inicializacaco do modelo BERT para a análise de sentimentos
+MODEL  = f"cardiffnlp/twitter-roberta-base-sentiment"
+tokenizer = AutoTokenizer.from_pretrained(MODEL)
+model = AutoModelForSequenceClassification.from_pretrained(MODEL)
+
 
 class YouTubeAPIManager:
     YOUTUBE_API_SERVICE_NAME = 'youtube'
@@ -244,6 +266,14 @@ def get_comments(video_id, video_title, total_comment_count):
             collected_comments +=1  # Inicializa o contador de comentários coletado
             comment_info = item["snippet"]["topLevelComment"]["snippet"]
             comment_id = item["snippet"]["topLevelComment"]["id"]
+
+            #Pegar o conteudo principal do comentario 
+            comment_content = comment_info.get("textDisplay")
+            #Traduzir ele para inglês
+            comment_content = traducaoPTEN(comment_content)
+            #Rodar analise de sentimentos BERT
+            resultadoSentimentos = sentiment_analisys(comment_content)
+
             comments_data.append({
                 "video_id": video_id,
                 "comment_id": comment_id,
@@ -258,7 +288,10 @@ def get_comments(video_id, video_title, total_comment_count):
                 "viewer_rating": comment_info.get("viewerRating", ""), 
                 "can_rate": comment_info.get("canRate", ""),
                 "is_reply": False,
-                "parent_id": None
+                "parent_id": None,
+                "roberta-neg": resultadoSentimentos[0],
+                "roberta-neu": resultadoSentimentos[1],
+                "roberta-pos": resultadoSentimentos[2]
             })
             # Verifique se o comentário tem respostas e as colete
             total_reply_count = item["snippet"]["totalReplyCount"]            
@@ -399,10 +432,21 @@ def process_video(video_id, video_title, processed_videos, nmCanal, tituloVideo,
         comments_df.to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/comments_info.csv', mode='a', header=not comments_file_exists, index=False)
 
 
+    #Chamando transcricao do audio
+
+    output_audio = f"files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/output_audio"
+    transcription_result = video_to_text(video_id, output_audio)
+    textoIngles = traducaoPTEN(transcription_result)
+    resultadoSentimentos = sentiment_analisys(textoIngles)
+
     processed_videos.add(video_id)
     with open(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/processed_videos.csv', 'a', newline='') as file:
         writer = csv.writer(file)
         writer.writerow([video_id])
+        writer.writerow([transcription_result])
+        writer.writerow([f'Negativo: {resultadoSentimentos[0]}'])
+        writer.writerow([f'Neutro: {resultadoSentimentos[1]}'])
+        writer.writerow([f'Positivo: {resultadoSentimentos[2]}'])
               
 def make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE, channel_id):    
     api_manager = YouTubeAPIManager.get_instance()  # Obtendo a instância do objeto
@@ -479,19 +523,130 @@ def nomeMesAno(numeroMes):
 
     return stringMes
 
-def main():
+def traducaoPTEN(text):
+    try: 
+        translated_text = translator.translate(text, src='pt', dest='en').text
+        return translated_text
+    except:
+        return text
 
-    '''
-    MODEL  = f"cardiffnlp/twitter-roberta-base-sentiment"
-    tokenizer = AutoTokenizer.from_pretrained(MODEL)
-    model = AutoModelForSequenceClassification.from_pretrained(MODEL)
+def sentiment_analisys(text): 
 
-    example = "Ola, tudo bem?"
-
-    encoded_text = tokenizer(example, return_tensors='pt')
+    encoded_text = tokenizer(text, return_tensors='pt', truncation=True, max_length=512)
     output = model(**encoded_text)
-    print(output)
-    '''
+    scores = output[0][0].detach().numpy()
+    scores = softmax(scores)
+    scores_dict = {
+        'roberta-neg': scores[0],
+        'roberta-neu': scores[1],
+        'roberta-pos': scores[2],
+    }
+    #print(scores_dict)
+    return scores
+
+# Transcricao do Audio 
+
+def convert_to_wav(input_file, output_file):
+    print(f"> Convertendo para WAV | Arquivo ({input_file})")
+    try:
+        command = [
+            "ffmpeg", "-i", input_file,
+            "-ac", "1", "-ar", "16000", output_file
+        ]
+        subprocess.run(command, check=True)
+        print(f"> Sucesso na conversao para WAV: {output_file}")
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(f"Erro ao converter áudio: {e}")
+
+
+def download_youtube_audio(video_id, output_folder):
+    print(f"> Baixando audio | video_id({video_id})")
+    ydl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': f'{output_folder}/%(id)s.%(ext)s',
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+    }
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+    print(f"> Download do audio bem sucedido | video_id({video_id})")
+    input_file = f"{output_folder}/{video_id}.mp3"
+    output_file = f"{output_folder}/{video_id}.wav"
+    convert_to_wav(input_file, output_file)
+    return output_file
+
+
+
+def transcribe_audio(file_path, model_path):
+    # Verifica se o modelo está disponível
+    if not os.path.exists(model_path):
+        raise FileNotFoundError(f"Modelo não encontrado em {model_path}. Faça o download em https://alphacephei.com/vosk/models e descompacte.")
+    
+    # Carrega o modelo Vosk
+    model = Model(model_path)
+    recognizer = KaldiRecognizer(model, 16000)
+    
+    # Abre o arquivo de áudio
+    with wave.open(file_path, "rb") as wf:
+        # Verifica se o arquivo de áudio é mono e tem frequência de 16 kHz
+        if wf.getnchannels() != 1 or wf.getframerate() != 16000:
+            raise ValueError("O arquivo de áudio precisa ser mono e ter uma taxa de amostragem de 16 kHz.")
+        
+        recognizer.SetWords(True)
+        transcription = []
+        
+        # Lê o áudio em blocos e realiza a transcrição
+        while True:
+            data = wf.readframes(4000)
+            if len(data) == 0:
+                break
+            if recognizer.AcceptWaveform(data):
+                result = json.loads(recognizer.Result())
+                transcription.append(result.get("text", ""))
+        
+        # Obtém o texto final
+        final_result = json.loads(recognizer.FinalResult())
+        transcription.append(final_result.get("text", ""))
+    
+    # Retorna o texto completo
+    return " ".join(transcription)
+
+# Função principal para transcrever e deletar o arquivo
+def process_and_delete_audio(file_path, model_path="model"):
+    try:
+        # Realiza a transcrição
+        print(f"> Transcrevendo o audio | arquivo: {file_path}")
+        text = transcribe_audio(file_path, model_path)
+        
+        # Exibe o resultado
+        print(f"> Transcrição feita com sucesso | arquivo: {file_path}")
+        # print(text)
+        
+        # Remove o arquivo de áudio após a transcrição
+        os.remove(file_path)
+        print(f"> Arquivo deletado com sucesso | arquivo: {file_path}")
+        
+        return text
+    except Exception as e:
+        print(f"Erro ao processar o áudio: {e}")
+        return None
+
+# Exemplo de uso
+start_time = time.time()
+
+def video_to_text(video_id, output_audio):
+    local_audio = download_youtube_audio(video_id, output_audio)
+    model_directory = "vosk-model-small-pt-0.3"
+    transcription_result = process_and_delete_audio(local_audio, model_directory)
+
+    print(f">>> Tempo de execução do Video_id({video_id}) --- %s seconds ---" %(time.time() - start_time))
+
+    return transcription_result
+
+def main():
 
    # Configurar com aspas duplas os termos chaves -> testar primeiro....
     queries = config["queries"]
@@ -604,8 +759,6 @@ def main():
                 contadorQuery = 0
             nmCanal = nomeCanal(config['channel_id'][contadorCanal])
             print(f"Nome do Canal eh: {nmCanal}")
-            a = input('')
-            print(a)
 
             create_files_path(nmCanal) # Cria diretório files para armazenar saidas
 
