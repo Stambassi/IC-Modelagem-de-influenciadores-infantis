@@ -6,8 +6,8 @@ config = {
   'relevance_language': 'pt',     
 
   # A coleta ocorre da data final para a data inicial -> [ano, mês, dia]
-  'start_date': [2019, 1, 1], 
-  'end_date': [2021, 12, 31],
+  'start_date': [2020, 1, 1], 
+  'end_date': [2025, 1, 10],
 
   # API que receberá uma requisição PATCH com payload de um JSON contendo informações acerca da coleta
   # Mantenha uma string vazia '' Caso não tenha configurado
@@ -52,6 +52,5 @@ config = {
         'UCYCnGi1DXHvHlffFY7pEDmQ', #Minguado
         'UCjBO43ykxlSs3j7F7EXcBUQ', #Tazercraft
         'UCV306eHqgo0LvBf3Mh36AHg'  #Felipe Neto
-
     ], 
 }

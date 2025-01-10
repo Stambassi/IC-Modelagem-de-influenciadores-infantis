@@ -1,3 +1,5 @@
+import video_process
+
 import pandas as pd
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -35,6 +37,8 @@ import csv
 import time
 import requests
 import json
+
+from rich.console import Console
 
 # Configuração do timeout
 import socket
@@ -99,9 +103,7 @@ class YouTubeAPIManager:
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
             
             if csv_file.tell() == 0:
-                writer.writeheader() 
-            
-
+                writer.writeheader()
             while True:
                 try:
                     writer.writerow(kwargs)
@@ -434,8 +436,8 @@ def process_video(video_id, video_title, processed_videos, nmCanal, tituloVideo,
 
     #Chamando transcricao do audio
 
-    output_audio = f"files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/output_audio"
-    transcription_result = video_to_text(video_id, output_audio)
+    output_audio = f"files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}"
+    transcription_result = video_process.video_to_text(video_id, output_audio)
     textoIngles = traducaoPTEN(transcription_result)
     resultadoSentimentos = sentiment_analisys(textoIngles)
 
@@ -544,118 +546,20 @@ def sentiment_analisys(text):
     #print(scores_dict)
     return scores
 
-# Transcricao do Audio 
-
-def convert_to_wav(input_file, output_file):
-    print(f"> Convertendo para WAV | Arquivo ({input_file})")
-    try:
-        command = [
-            "ffmpeg", "-i", input_file,
-            "-ac", "1", "-ar", "16000", output_file
-        ]
-        subprocess.run(command, check=True)
-        print(f"> Sucesso na conversao para WAV: {output_file}")
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(f"Erro ao converter áudio: {e}")
-
-
-def download_youtube_audio(video_id, output_folder):
-    print(f"> Baixando audio | video_id({video_id})")
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': f'{output_folder}/%(id)s.%(ext)s',
-        'postprocessors': [{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
-    print(f"> Download do audio bem sucedido | video_id({video_id})")
-    input_file = f"{output_folder}/{video_id}.mp3"
-    output_file = f"{output_folder}/{video_id}.wav"
-    convert_to_wav(input_file, output_file)
-    return output_file
-
-
-
-def transcribe_audio(file_path, model_path):
-    # Verifica se o modelo está disponível
-    if not os.path.exists(model_path):
-        raise FileNotFoundError(f"Modelo não encontrado em {model_path}. Faça o download em https://alphacephei.com/vosk/models e descompacte.")
-    
-    # Carrega o modelo Vosk
-    model = Model(model_path)
-    recognizer = KaldiRecognizer(model, 16000)
-    
-    # Abre o arquivo de áudio
-    with wave.open(file_path, "rb") as wf:
-        # Verifica se o arquivo de áudio é mono e tem frequência de 16 kHz
-        if wf.getnchannels() != 1 or wf.getframerate() != 16000:
-            raise ValueError("O arquivo de áudio precisa ser mono e ter uma taxa de amostragem de 16 kHz.")
-        
-        recognizer.SetWords(True)
-        transcription = []
-        
-        # Lê o áudio em blocos e realiza a transcrição
-        while True:
-            data = wf.readframes(4000)
-            if len(data) == 0:
-                break
-            if recognizer.AcceptWaveform(data):
-                result = json.loads(recognizer.Result())
-                transcription.append(result.get("text", ""))
-        
-        # Obtém o texto final
-        final_result = json.loads(recognizer.FinalResult())
-        transcription.append(final_result.get("text", ""))
-    
-    # Retorna o texto completo
-    return " ".join(transcription)
-
-# Função principal para transcrever e deletar o arquivo
-def process_and_delete_audio(file_path, model_path="model"):
-    try:
-        # Realiza a transcrição
-        print(f"> Transcrevendo o audio | arquivo: {file_path}")
-        text = transcribe_audio(file_path, model_path)
-        
-        # Exibe o resultado
-        print(f"> Transcrição feita com sucesso | arquivo: {file_path}")
-        # print(text)
-        
-        # Remove o arquivo de áudio após a transcrição
-        os.remove(file_path)
-        print(f"> Arquivo deletado com sucesso | arquivo: {file_path}")
-        
-        return text
-    except Exception as e:
-        print(f"Erro ao processar o áudio: {e}")
-        return None
-
-# Exemplo de uso
-start_time = time.time()
-
-def video_to_text(video_id, output_audio):
-    local_audio = download_youtube_audio(video_id, output_audio)
-    model_directory = "vosk-model-small-pt-0.3"
-    transcription_result = process_and_delete_audio(local_audio, model_directory)
-
-    print(f">>> Tempo de execução do Video_id({video_id}) --- %s seconds ---" %(time.time() - start_time))
-
-    return transcription_result
-
 def main():
+    console = Console()
 
    # Configurar com aspas duplas os termos chaves -> testar primeiro....
     queries = config["queries"]
 
+    youtuberListPath = "youtuberslist.csv"
+    channel_data  = pd.read_csv(youtuberListPath)
+
     contadorCanal = 0
     contadorQuery = 0
 
-    nmCanal = nomeCanal(config['channel_id'][contadorCanal])
-    print(f"Nome do Canal eh: {nmCanal}")
+    nmCanal = channel_data['nome'].loc[channel_data.index[contadorCanal]]
+    console.print(">>>> Analisando Canal [bold green]"+nmCanal+"[/]")
 
     create_files_path(nmCanal) # Cria diretório files para armazenar saidas 
 
@@ -710,13 +614,15 @@ def main():
 
             GlobalState.get_instance().set_state("atual_query", query)
             GlobalState.get_instance().set_state("query_progress", f"{queries.index(query) + 1}/{len(queries)}")
-
+        
             published_after = start_interval.isoformat() + "Z"
             published_before = end_interval.isoformat() + "Z"
             video_details_list = []
-            search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE, config['channel_id'][contadorCanal]) 
+            channel_id = channel_data['channel_id'].loc[channel_data.index[contadorCanal]]
+            search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE,channel_id) 
             videos = search_response.get("items", [])
             total_videos = len(videos)
+            # console.log("dentro do for",log_locals=True)
             if total_videos == 0:  # Verifica se search_response foi obtido com sucesso
                 log("search", "Não foi possível obter uma resposta da API. Movendo para a próxima consulta.")
                 continue
@@ -752,12 +658,12 @@ def main():
             log("search", f"Coleta concluída para a consulta: {query} entre {start_interval} e {end_interval}")
 
             contadorQuery = contadorQuery + 1
-            if(contadorQuery > len(config['queries']) - 1):
+            if(contadorQuery > len(channel_data.index) - 1):
                 contadorCanal = contadorCanal + 1
-                if(contadorCanal > len(config['channel_id']) - 1): 
+                if(contadorCanal > len(channel_data.index) - 1): 
                     contadorCanal = 0
                 contadorQuery = 0
-            nmCanal = nomeCanal(config['channel_id'][contadorCanal])
+            nmCanal = channel_data['nome'].loc[channel_data.index[contadorCanal]]
             print(f"Nome do Canal eh: {nmCanal}")
 
             create_files_path(nmCanal) # Cria diretório files para armazenar saidas
