@@ -97,7 +97,7 @@ def adicionar_influenciador():
             total_subs.append(data[1])
             nomes[i] = nome.strip() # Deixar nome sem espaços em branco no comeco e final
             console.print("[green]Sucesso[/] ao inserir canal")
-            dict = {'nome': nomes_correto, 'channel_id': total_id, 'subscribers': total_subs, 'ultimoAnoColetado': "2019"}
+            dict = {'nome': nomes_correto, 'channel_id': total_id, 'subscribers': total_subs, 'ultimoAnoColetado': "2019", 'ultimoMesColetado': "Janeiro"}
             i += 1
         else:
             console.print("[red]Erro[/] ao inserir canal: Canal já existente")
@@ -127,14 +127,16 @@ def mostrar_lista_influenciadores():
             tabela.add_column("Nome", justify="center", style="red")
             tabela.add_column("Channel ID", justify="center", style="white")
             tabela.add_column("Subscribers", justify="right", style="green")
-            tabela.add_column("Ultimo Ano Coletado", justify="center")
+            tabela.add_column("Ultima Data de coleta", justify="center")
 
             for _, row in df.iterrows():
+                mes = str(row['ultimoMesColetado'])
+                ano = str(row['ultimoAnoColetado'])
                 tabela.add_row(
                     str(row["nome"]), 
                     str(row["channel_id"]), 
                     str(row["subscribers"]), 
-                    str(row["ultimoAnoColetado"])
+                    str(mes +"/"+ ano)
                 )
             console.print(tabela)
             print(" ")

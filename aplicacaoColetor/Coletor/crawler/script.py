@@ -1,3 +1,5 @@
+import codecs
+import re
 import video_process
 
 import pandas as pd
@@ -149,10 +151,76 @@ def create_files_path(nmCanal):
         os.makedirs("./" + DEST_DIRECTORY_NAME)
 
 def create_filesVideo_path(nmCanal, anoVideo, mesVideo, nomeVideo):
+
+    nomeVideo = limparTitulos(nomeVideo)
+    linhaTituloVideo = ""
+    resultado = True
+
+    if os.path.exists(f"files/{nmCanal}/videosProcessados.txt"):
+        fileRead = open(f"files/{nmCanal}/videosProcessados.txt", "r", encoding="utf-8")
+        # console = Console()
+        # console.log("eita",log_locals=True)
+        linhaTituloVideo = fileRead.readline()
+        while linhaTituloVideo and resultado:
+            if(linhaTituloVideo.strip() == nomeVideo.strip()):
+                resultado = False
+            linhaTituloVideo = fileRead.readline()
+
+    if(resultado == True):
+        print(f"Titulo do Video: {nmCanal}")
+        # resultado = False
+        # a = input()
+
+    if (resultado == True):
+        fileWrite = open(f"files/{nmCanal}/videosProcessados.txt", "a", encoding="utf-8") 
+        fileWrite.write(f"{nomeVideo}\n")
+        fileWrite.close()
+
     DEST_DIRECTORY_NAME = f"files/{nmCanal}/{anoVideo}/{mesVideo}/{nomeVideo}"
 
     if not os.path.exists("./" + DEST_DIRECTORY_NAME):
         os.makedirs("./" + DEST_DIRECTORY_NAME)
+
+    return resultado
+
+def limparTitulos (nmVideo):
+
+    """
+    Remove caracteres inválidos para nomes de arquivo/diretório.
+    """
+
+    i = 0
+    caracter = ''
+    while(i < len(nmVideo)):
+        
+        caracter = nmVideo[i]
+
+        match caracter:
+            case '<':
+                nmVideo = nmVideo.replace('<', '_')
+            case '>': 
+                nmVideo = nmVideo.replace('>', '_')
+            case ':': 
+                nmVideo = nmVideo.replace(':', '_')
+            case '"': 
+                nmVideo = nmVideo.replace('"', '_')
+            case '/': 
+                nmVideo = nmVideo.replace('/', '_')
+            case '|': 
+                nmVideo = nmVideo.replace('|', '_')
+            case '?': 
+                nmVideo = nmVideo.replace('?', '_')
+            case '*': 
+                nmVideo = nmVideo.replace('*', '_')
+            case 'ã':
+                nmVideo = nmVideo.replace('ã','a')
+            case 'Ã':
+                nmVideo = nmVideo.replace('Ã','A')
+        i += 1
+
+    print(f"O nome do video eh: {nmVideo} \n")
+    return nmVideo
+            
 
 def generate_date_intervals(start_date, end_date, interval_type):
     interval_delta = {"weekly": timedelta(weeks=1), "monthly": timedelta(days=30)}
@@ -405,51 +473,80 @@ def get_channel_details(channel_id):
     
     return details
 
+# Funcao para atualizar a data de coleta na lista de youtubers
+def atualizarUltimaDatadeColeta(nmCanal, mesPublicacaoVideo, anoPublicacaoVideo):
+    youtuberListPath = "youtuberslist.csv"
+    channel_data  = pd.read_csv(youtuberListPath)
+    for i in range(len(channel_data.index)):
+        nomeAtual = channel_data['nome'].loc[channel_data.index[i]]
+        if(nomeAtual == nmCanal):
+            console = Console()
+            ultimoAno = int(channel_data['ultimoAnoColetado'].loc[channel_data.index[i]])
+            ultimoMes = channel_data['ultimoMesColetado'].loc[channel_data.index[i]]
+            anoPublicacaoVideo = int(anoPublicacaoVideo)
+            # console.log("teste",log_locals = True)
+            if(anoPublicacaoVideo > ultimoAno):
+                channel_data.at[channel_data.index[i], 'ultimoAnoColetado'] = anoPublicacaoVideo
+                channel_data.at[channel_data.index[i], 'ultimoMesColetado'] = mesPublicacaoVideo
+                channel_data.to_csv(youtuberListPath, index=False)
+                console.print("[cyan] Data atualizada!! [/]")
+            elif(anoPublicacaoVideo == ultimoAno and numeroMesAno(mesPublicacaoVideo) > numeroMesAno(ultimoMes)):
+                channel_data.at[channel_data.index[i], 'ultimoMesColetado'] = mesPublicacaoVideo
+                channel_data.to_csv(youtuberListPath, index=False)
+                console.print("[cyan] Data atualizada!! [/]")
+
+            
 # Função para processar um único vídeo
 def process_video(video_id, video_title, processed_videos, nmCanal, tituloVideo, anoPublicacaoVideo, mesPublicacaoVideo):
     global channels_info
+    resposta = create_filesVideo_path(nmCanal, anoPublicacaoVideo, mesPublicacaoVideo, tituloVideo)
+    print(f"Conseguiu criar arquivo para o video: {resposta}")
+    if(resposta == True):
+        console = Console()
+        console.log("antes de limpar",log_locals=True)
+        tituloVideo = limparTitulos(tituloVideo)
+        console.log("depois de limpar",log_locals=True)
+        print(">> processando vídeos")
+        videos_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/videos_info.csv')
+        videosProcessed_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/processed_videos.csv')
+        channels_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/channels_info.csv')
+        comments_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/comments_info.csv')
 
-    create_filesVideo_path(nmCanal, anoPublicacaoVideo, mesPublicacaoVideo, tituloVideo)
+        video_details = get_video_details(video_id)
+        if video_details == None:
+            print("Erro por causa de autorização")
+            return
+        total_comment_count = video_details['comment_count']  # Assumindo que 'comment_count' é o total de comentários disponíveis
 
-    print(">> processando vídeos")
-    videos_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/videos_info.csv')
-    channels_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/channels_info.csv')
-    comments_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/comments_info.csv')
-
-    video_details = get_video_details(video_id)
-    if video_details == None:
-        print("Erro por causa de autorização")
-        return
-    total_comment_count = video_details['comment_count']  # Assumindo que 'comment_count' é o total de comentários disponíveis
-
-    if total_comment_count > 0 and total_comment_count < 10000000000000: #Sentinel 
-        pd.DataFrame([video_details]).to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/videos_info.csv', mode='a', header=not videos_file_exists, index=False)
-        
-        channel_details = get_channel_details(video_details['channel_id'])
-        pd.DataFrame([channel_details]).to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/channels_info.csv', mode='a', header=not channels_file_exists, index=False)
-        
-        comments = get_comments(video_id, video_title, total_comment_count)
-        comments_df = pd.DataFrame(comments)
-        comments_df['channel_id'] = video_details['channel_id']
-        comments_df.to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/comments_info.csv', mode='a', header=not comments_file_exists, index=False)
+        if total_comment_count > 0 and total_comment_count < 10000000000000: #Sentinel 
+            pd.DataFrame([video_details]).to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/videos_info.csv', mode='a', header=not videos_file_exists, index=False)
+            
+            channel_details = get_channel_details(video_details['channel_id'])
+            pd.DataFrame([channel_details]).to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/channels_info.csv', mode='a', header=not channels_file_exists, index=False)
+            
+            comments = get_comments(video_id, video_title, total_comment_count)
+            comments_df = pd.DataFrame(comments)
+            comments_df['channel_id'] = video_details['channel_id']
+            comments_df.to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/comments_info.csv', mode='a', header=not comments_file_exists, index=False)
 
 
-    #Chamando transcricao do audio
+        #Chamando transcricao do audio
 
-    output_audio = f"files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}"
-    transcription_result = video_process.video_to_text(video_id, output_audio)
-    textoIngles = traducaoPTEN(transcription_result)
-    resultadoSentimentos = sentiment_analisys(textoIngles)
+        output_audio = f"files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}"
+        transcription_result = video_process.video_to_text(video_id, output_audio)
+        textoIngles = traducaoPTEN(transcription_result)
+        resultadoSentimentos = sentiment_analisys(textoIngles)
 
-    processed_videos.add(video_id)
-    with open(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/processed_videos.csv', 'a', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow([video_id])
-        writer.writerow([transcription_result])
-        writer.writerow([f'Negativo: {resultadoSentimentos[0]}'])
-        writer.writerow([f'Neutro: {resultadoSentimentos[1]}'])
-        writer.writerow([f'Positivo: {resultadoSentimentos[2]}'])
-              
+        videos_data = {
+            "video_id": [video_id],
+            "video_transcription": [transcription_result],
+            "roberta-neg": [resultadoSentimentos[0]],
+            "roberta-neu": [resultadoSentimentos[1]],
+            "roberta-pos": [resultadoSentimentos[2]]
+        }
+
+        videos_df = pd.DataFrame(videos_data)
+        videos_df.to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/processed_videos.csv', mode='a', header=not videosProcessed_file_exists, index=False)
 def make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE, channel_id):    
     api_manager = YouTubeAPIManager.get_instance()  # Obtendo a instância do objeto
     method_func = lambda client, **kwargs: api_manager.youtube.search().list(**kwargs)
@@ -525,6 +622,38 @@ def nomeMesAno(numeroMes):
 
     return stringMes
 
+def numeroMesAno(stringMes):
+
+    numeroMes = 0
+
+    match stringMes:
+        case "Janeiro":
+            numeroMes = 1
+        case "Fevereiro":
+            numeroMes = 2
+        case "Marco":
+            numeroMes = 3
+        case "Abril":
+            numeroMes = 4
+        case "Maio":
+            numeroMes = 5
+        case "Junho":
+            numeroMes = 6
+        case "Julho":
+            numeroMes = 7
+        case "Agosto":
+            numeroMes = 8
+        case "Setembro":
+            numeroMes = 9
+        case "Outubro":
+            numeroMes = 10
+        case "Novembro":
+            numeroMes = 11
+        case "Dezembro":
+            numeroMes = 12
+
+    return numeroMes
+
 def traducaoPTEN(text):
     try: 
         translated_text = translator.translate(text, src='pt', dest='en').text
@@ -557,9 +686,7 @@ def main():
 
     contadorCanal = 0
     contadorQuery = 0
-
     nmCanal = channel_data['nome'].loc[channel_data.index[contadorCanal]]
-    console.print(">>>> Analisando Canal [bold green]"+nmCanal+"[/]")
 
     create_files_path(nmCanal) # Cria diretório files para armazenar saidas 
 
@@ -610,8 +737,22 @@ def main():
                 "day": end_interval.day
             })
 
-        for query in queries: 
-
+        quantidadeCanaisColetar = len(channel_data.index)
+        # Aqui ocorre o loop para a coleta de dados (Realiza uma vez para cada query com um youtuber depois muda o youtuber)
+        while contadorQuery != quantidadeCanaisColetar:
+            print(f">>> Youtuber: {contadorCanal+1}/{quantidadeCanaisColetar}") 
+            if(contadorQuery >= len(queries)):
+                console.print("[red]Youtuber não possui mais videos nas especificacoes pesquisadas [/]. Passando para o proximo da lista")
+                contadorCanal += 1
+                print(f">>> Youtuber: {contadorCanal+1}/{quantidadeCanaisColetar}")
+                contadorQuery = 0
+                if(contadorCanal >= quantidadeCanaisColetar):
+                    console.print("[red]Fim da lista de canais[/]")
+                    break
+                else:
+                    nmCanal = channel_data['nome'].loc[channel_data.index[contadorCanal]]
+                    create_files_path(nmCanal)
+            query = queries[contadorQuery]
             GlobalState.get_instance().set_state("atual_query", query)
             GlobalState.get_instance().set_state("query_progress", f"{queries.index(query) + 1}/{len(queries)}")
         
@@ -622,11 +763,13 @@ def main():
             search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE,channel_id) 
             videos = search_response.get("items", [])
             total_videos = len(videos)
+                
             # console.log("dentro do for",log_locals=True)
             if total_videos == 0:  # Verifica se search_response foi obtido com sucesso
+                contadorQuery = contadorQuery + 1
                 log("search", "Não foi possível obter uma resposta da API. Movendo para a próxima consulta.")
                 continue
-
+            
             for index, item in enumerate(videos, start=1):
                 
                 VIDEO_TITLE = item['snippet']['title'].lower()
@@ -651,21 +794,21 @@ def main():
                         '''
 
                         print("Title:", video_details['title'], "# comments", video_details['comment_count'])
-                        
+                        atualizarUltimaDatadeColeta(nmCanal,mesPublicacaoVideo,anoPublicacaoVideo)
                         if comment_count > 0:
                             process_video(video_id, "", processed_videos, nmCanal, video_details['title'], anoPublicacaoVideo, mesPublicacaoVideo)
 
             log("search", f"Coleta concluída para a consulta: {query} entre {start_interval} e {end_interval}")
-
+            console.print(">> Canal analisado foi: [bold green]"+nmCanal+"[/]")
             contadorQuery = contadorQuery + 1
-            if(contadorQuery > len(channel_data.index) - 1):
-                contadorCanal = contadorCanal + 1
-                if(contadorCanal > len(channel_data.index) - 1): 
+    
+            if(contadorQuery >= len(queries) - 1):
+                contadorCanal = contadorCanal + 1 
+                if(contadorCanal >= len(channel_data.index) - 1): 
                     contadorCanal = 0
+                    contadorQuery = -1 # condicao de parada
                 contadorQuery = 0
             nmCanal = channel_data['nome'].loc[channel_data.index[contadorCanal]]
-            print(f"Nome do Canal eh: {nmCanal}")
-
             create_files_path(nmCanal) # Cria diretório files para armazenar saidas
 
 if __name__ == "__main__":

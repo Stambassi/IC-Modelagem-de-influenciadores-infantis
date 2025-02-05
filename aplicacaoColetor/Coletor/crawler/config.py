@@ -31,7 +31,9 @@ config = {
     'AIzaSyDx1kErv6e02FygrSgdYIrCmkWw4IIXZlU',
     'AIzaSyCg9e0EeIEM_hE9LmjCvoo6qNQrHN1raz8',
     'AIzaSyCuAKpgB5Q38PUbIrstFfU5ZQEr4xb13q0',
-    'AIzaSyDy3ioPkbzXVQ2EaDDjGGc3vYgxCIBtrJg'
+    'AIzaSyDy3ioPkbzXVQ2EaDDjGGc3vYgxCIBtrJg',
+    'AIzaSyCmyWHJ7UM9i2Vb6_X3QSy1D_QgAlkY3Oo',
+    'AIzaSyBlnJKHNU3Z_7UUmFmzRWVxVjldOQNkrvw'
   ],
 
 
