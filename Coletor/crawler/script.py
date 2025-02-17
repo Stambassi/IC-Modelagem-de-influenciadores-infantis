@@ -150,7 +150,7 @@ def create_files_path(nmCanal):
     if not os.path.exists("./" + DEST_DIRECTORY_NAME):
         os.makedirs("./" + DEST_DIRECTORY_NAME)
 
-def create_filesVideo_path(nmCanal, anoVideo, mesVideo, nomeVideo):
+def create_filesVideo_path(nmCanal, anoVideo, mesVideo, nomeVideo, videoId):
 
     nomeVideo = limparTitulos(nomeVideo)
     linhaTituloVideo = ""
@@ -162,18 +162,19 @@ def create_filesVideo_path(nmCanal, anoVideo, mesVideo, nomeVideo):
         # console.log("eita",log_locals=True)
         linhaTituloVideo = fileRead.readline()
         while linhaTituloVideo and resultado:
-            if(linhaTituloVideo.strip() == nomeVideo.strip()):
+            if(linhaTituloVideo.strip() == videoId.strip()):
+                #print(f"Titulo do Video: {nmCanal} ja registrado!!!")
                 resultado = False
             linhaTituloVideo = fileRead.readline()
 
     if(resultado == True):
-        print(f"Titulo do Video: {nmCanal}")
-        # resultado = False
-        # a = input()
+        print(f"Titulo do Video: {nomeVideo}")
+        #resultado = False
+        #a = input()
 
     if (resultado == True):
         fileWrite = open(f"files/{nmCanal}/videosProcessados.txt", "a", encoding="utf-8") 
-        fileWrite.write(f"{nomeVideo}\n")
+        fileWrite.write(f"{videoId}\n")
         fileWrite.close()
 
     DEST_DIRECTORY_NAME = f"files/{nmCanal}/{anoVideo}/{mesVideo}/{nomeVideo}"
@@ -499,7 +500,7 @@ def atualizarUltimaDatadeColeta(nmCanal, mesPublicacaoVideo, anoPublicacaoVideo)
 # Função para processar um único vídeo
 def process_video(video_id, video_title, processed_videos, nmCanal, tituloVideo, anoPublicacaoVideo, mesPublicacaoVideo):
     global channels_info
-    resposta = create_filesVideo_path(nmCanal, anoPublicacaoVideo, mesPublicacaoVideo, tituloVideo)
+    resposta = create_filesVideo_path(nmCanal, anoPublicacaoVideo, mesPublicacaoVideo, tituloVideo, video_id)
     print(f"Conseguiu criar arquivo para o video: {resposta}")
     if(resposta == True):
         console = Console()
