@@ -55,4 +55,8 @@ config = {
         'UCjBO43ykxlSs3j7F7EXcBUQ', #Tazercraft
         'UCV306eHqgo0LvBf3Mh36AHg'  #Felipe Neto
     ], 
+
+# Grau onde considera o valor positivo, neutro ou negativo na analise de sentimento
+ 'treshold':[0.5, 0.5, 0.5]
 }
+
