@@ -10,10 +10,18 @@ from config import config
 def comment_analysis(csv_path):
     # Pegar valores ordenados por data e limpar valores nulos
     comments_info = pd.read_csv(csv_path)
-    comments_info = comments_info.dropna(subset=['roberta-neg', 'roberta-pos'])
+
+    # Adicionar o Interarrival Time dos comentarios
     comments_info['published_at'] = pd.to_datetime(comments_info['published_at'])
     comments_info = comments_info.sort_values('published_at')
+    comments_info['inter-arrival-time'] = comments_info['published_at'].diff()
+    comments_info['inter-arrival-time-seconds'] = comments_info['inter-arrival-time'].dt.total_seconds()
+    comments_info.to_csv(csv_path, index=False)
 
+    # Limpar os valores nulos da analise de sentimento
+    # tam = len(comments_info)
+    comments_info = comments_info.dropna(subset=['roberta-neg', 'roberta-pos'])
+    # print("Ruido = "+str(tam-len(comments_info))+" comentários") 
     comments_sentimental_pos = comments_info['roberta-pos']
     threshold_pos = config['treshold'][0]
     
@@ -126,13 +134,21 @@ def make_graph_neg_pos_comments(csv_path, folder_path, ytb_name):
     graph_path = f"{folder_path}/{ytb_name}_comment_sentimental_analysis_graph.png"
     plt.savefig(fname=graph_path)
 
-
+def atualizar_video_comentarios_coletados(nmCanal,total_videos, total_comentarios):
+    youtuberListPath = "youtuberslist.csv"
+    df = pd.read_csv(youtuberListPath)
+    df.loc[df.nome == nmCanal, 'videosColetados'] = total_videos
+    df.loc[df.nome == nmCanal, 'comentariosColetados'] = total_comentarios
+    df.to_csv(youtuberListPath, index=False)
 
 def main():
     base_dir = "files"
     console = Console()
+    # comment_analysis("files/AuthenticGames/2020/Janeiro/BALDE DE MADEIRA !! - Minecraft Dinossauros #05/comments_info.csv")
     # andar pelos youtubers
     for ytb_folder in os.listdir(base_dir):
+        videos_coletados = 0
+        comentarios_coletados = 0
         ytb_data = pd.DataFrame()
         next_ytb_dir = os.path.join(base_dir, ytb_folder)
         if os.path.isdir(next_ytb_dir):
@@ -155,9 +171,12 @@ def main():
                                     # Check if the file exists
                                     if os.path.exists(csv_path):
                                         result_df = pd.DataFrame(comment_analysis(csv_path))
-                                        result_df.to_csv(os.path.join(folder_path, 'comments_analysis.csv'), index=False)
-                                        console.print(">>>> Analise de video [green]completada[/] -> Salvo em: '"+folder_path+"'")
+                                        video_analysis_path = f"{folder_path}/comments_analysis.csv"
+                                        result_df.to_csv(video_analysis_path, index=False)
+                                        console.print(">>>> Analise de video [green]completada[/] -> Salvo em: '"+video_analysis_path+"'")
                                         month_data = pd.concat([month_data, result_df], ignore_index=True)
+                                        videos_coletados += 1
+                                        comentarios_coletados += result_df.loc[0,'comments_total']
 
                             month_csv_path = base_dir +f"/{ytb_folder}/{year_folder}/{month_folder}/{month_folder}_comments_analysis.csv"
                             month_data.to_csv(month_csv_path, index=False)
@@ -169,11 +188,12 @@ def main():
                     ytb_data = pd.concat([ytb_data, year_data],ignore_index=True)
                     console.print(">> Analise [cyan]"+year_folder+"[/] [green]completada[/] -> Salvo em: '"+year_csv_path+"'")
             
+            atualizar_video_comentarios_coletados(ytb_folder, videos_coletados, comentarios_coletados)
             ytb_csv_path = f"{base_dir}/{ytb_folder}/{ytb_folder}_comments_analysis.csv"
             ytb_data.to_csv(ytb_csv_path, index=False)
             console.print("> Analise [cyan]"+ytb_folder+"[/] [green]completada[/] -> Salvo em: '"+ytb_csv_path+"'")
             folder_path_graph = f"{base_dir}/{ytb_folder}"
             make_graph_neg_pos_comments(ytb_csv_path,folder_path_graph,ytb_folder)
-
+            
 if __name__ == "__main__":
     main()

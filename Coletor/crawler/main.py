@@ -61,7 +61,7 @@ def get_channel_id_subs(channel_name):
             subscriber_count = channel_response['items'][0]['statistics']['subscriberCount']
             return channel_id, subscriber_count
         else:
-            return channel_id, None
+            return channel_id, None  
     else:
         return None, None
 
@@ -97,7 +97,8 @@ def adicionar_influenciador():
             total_subs.append(data[1])
             nomes[i] = nome.strip() # Deixar nome sem espaços em branco no comeco e final
             console.print("[green]Sucesso[/] ao inserir canal")
-            dict = {'nome': nomes_correto, 'channel_id': total_id, 'subscribers': total_subs, 'ultimoAnoColetado': "2019", 'ultimoMesColetado': "Janeiro"}
+            dict = {'nome': nomes_correto, 'channel_id': total_id, 'subscribers': total_subs, 'ultimoAnoColetado': "2019", 'ultimoMesColetado': "Janeiro"
+            , "videosColetados":0,"comentariosColetados":0}
             i += 1
         else:
             console.print("[red]Erro[/] ao inserir canal: Canal já existente")
@@ -128,7 +129,10 @@ def mostrar_lista_influenciadores():
             tabela.add_column("Channel ID", justify="center", style="white")
             tabela.add_column("Subscribers", justify="right", style="green")
             tabela.add_column("Ultima Data de coleta", justify="center")
-
+            tabela.add_column("Videos coletados", justify="right", style="green")
+            tabela.add_column("Comentários coletados", justify="right", style="cyan")
+            total_videos = 0
+            total_comentarios = 0
             for _, row in df.iterrows():
                 mes = str(row['ultimoMesColetado'])
                 ano = str(row['ultimoAnoColetado'])
@@ -136,9 +140,14 @@ def mostrar_lista_influenciadores():
                     str(row["nome"]), 
                     str(row["channel_id"]), 
                     str(row["subscribers"]), 
-                    str(mes +"/"+ ano)
+                    str(mes +"/"+ ano),
+                    str(row["videosColetados"]),
+                    str(row["comentariosColetados"])
                 )
+                total_videos += row["videosColetados"]
+                total_comentarios += row["comentariosColetados"]
             console.print(tabela)
+            console.print("[bold]Total de vídeos coletados: [green]"+str(total_videos)+"[/]\nTotal de comentários coletados: [cyan]"+str(total_comentarios)+"[/][/]")
             print(" ")
     except FileNotFoundError:
         console.print("Lista [red]vazia[/]")
