@@ -6,6 +6,7 @@ from rich.table import Table
 from rich.markdown import Markdown
 import script
 import analise
+import video_process
 
 console = Console()
 # with open('../../../README.md',encoding="utf-8") as f:
@@ -13,21 +14,28 @@ console = Console()
 #     console.print(md)
 #     print("")
 
-console.print("\n===========================================================================================",style="bold white")
-console.print(" Coletor de dados do [red]Youtube[/] - [white]v1.0[/] - Authors: João Pedro Torres, Augusto Stambassi Duarte",style="bold white")
-console.print("===========================================================================================\n",style="bold white")
+console.print("\n==============================================================================================",style="bold white")
+console.print(" Coletor de dados do [bold red]Youtube[/] - [bold white]v1.1[/]\n Authors: João Pedro Torres, Augusto Stambassi Duarte, Lucas Carneiro Nassau Malta",style="bold white")
+console.print("==============================================================================================\n",style="bold white")
 
 csv_path = "youtuberslist.csv"
 perguntas = [
     {
         "type": "list",
         "message": "Escolha uma ação",
-        "choices": ["Mostrar Lista de influenciadores pesquisados", "Adicionar novo(s) influenciadore(s)", "Começar a coleta de dados", "Analisar dados", "Sair"]
+        "choices": ["Mostrar Lista de influenciadores pesquisados", "Adicionar novo(s) influenciadore(s)", 
+        "Começar a coleta de dados", "Analisar dados","Gerar speech-to-text de todos os videos",
+        "Gerar speech-to-text de apenas um youtuber","Sair"]
     },
     {
         "type": "list",
         "message": "Deseja adicionar novo(s)?",
         "choices": ["Sim", "Não"]
+    },
+    {
+        "type": "list",
+        "message": "Qual tamanho do modelo do Whisper?",
+        "choices": ["tiny", "base", "small", "medium", "large","turbo"]
     }
 ]
 
@@ -99,7 +107,7 @@ def adicionar_influenciador():
             nomes[i] = nome.strip() # Deixar nome sem espaços em branco no comeco e final
             console.print("[green]Sucesso[/] ao inserir canal")
             dict = {'nome': nomes_correto, 'channel_id': total_id, 'subscribers': total_subs, 'ultimoAnoColetado': "2019", 'ultimoMesColetado': "Janeiro"
-            , "videosColetados":0,"comentariosColetados":0}
+            , "videosColetados":0,"comentariosColetados":0,"videosTranscritos":0}
             i += 1
         else:
             console.print("[red]Erro[/] ao inserir canal: Canal já existente")
@@ -117,6 +125,24 @@ def adicionar_influenciador():
     df.to_csv(csv_path, mode='a', index=False, header=header)
     print(" ")
 
+def gerar_pergunta_youtube():
+    try:
+        df = pd.read_csv(csv_path)
+        if df.empty:
+            prompt (perguntas[1])
+        else:
+            youtubers = []
+            for _, row in df.iterrows():
+                youtubers.append(str(row["nome"]))
+            return [{ "type": "list", "message": "Escolha um youtuber", "choices": youtubers }]
+
+    except FileNotFoundError:
+        console.print("Lista [red]vazia[/]")
+        adicionar = prompt (perguntas[1])
+        print(" ")
+        if adicionar[0] == "Sim":
+            adicionar_influenciador()
+
 def mostrar_lista_influenciadores():
     try:
         df = pd.read_csv(csv_path)
@@ -127,23 +153,25 @@ def mostrar_lista_influenciadores():
         else:
             tabela = Table(title="Influenciadores")
             tabela.add_column("Nome", justify="center", style="red")
-            tabela.add_column("Channel ID", justify="center", style="white")
+            # tabela.add_column("Channel ID", justify="center", style="white")
             tabela.add_column("Subscribers", justify="right", style="green")
             tabela.add_column("Ultima Data de coleta", justify="center")
             tabela.add_column("Videos coletados", justify="right", style="green")
             tabela.add_column("Comentários coletados", justify="right", style="cyan")
+            tabela.add_column("Videos transcritos", justify="right", style="green")
             total_videos = 0
             total_comentarios = 0
             for _, row in df.iterrows():
                 mes = str(row['ultimoMesColetado'])
                 ano = str(row['ultimoAnoColetado'])
+                videosTranscritos = video_process.atualizar_video_total_transcritos(str(row["nome"]))
                 tabela.add_row(
                     str(row["nome"]), 
-                    str(row["channel_id"]), 
                     str(row["subscribers"]), 
                     str(mes +"/"+ ano),
                     str(row["videosColetados"]),
-                    str(row["comentariosColetados"])
+                    str(row["comentariosColetados"]),
+                    str(videosTranscritos)
                 )
                 total_videos += row["videosColetados"]
                 total_comentarios += row["comentariosColetados"]
@@ -173,6 +201,21 @@ while resultado[0] != "Sair":
         console.print(">> [green]Analisando dados[/]")
         analise.main()
         print(" ")
+    elif resultado[0] == "Gerar speech-to-text de todos os videos":
+        modelo = prompt(perguntas[2])
+        console.print(">> [green]Gerando speech-to-text[/]")
+        video_process.process_all_videos(modelo)
+        print(" ")
+    elif resultado[0] == "Gerar speech-to-text de apenas um youtuber":
+        modelo = prompt(perguntas[2])
+        pergunta_youtuber = gerar_pergunta_youtube()
+        print(" ")
+        youtuber = prompt(pergunta_youtuber)
+        print(youtuber)
+        console.print(">> [green]Gerando speech-to-text do "+youtuber[0])
+        video_process.process_youtuber_video(modelo,youtuber[0])
+        print(" ")
+
     resultado = prompt (perguntas[0])
     print(" ")
 
