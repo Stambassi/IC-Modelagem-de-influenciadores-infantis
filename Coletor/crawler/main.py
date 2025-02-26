@@ -5,6 +5,7 @@ from rich.console import Console
 from rich.table import Table
 from rich.markdown import Markdown
 import script
+import analise
 
 console = Console()
 # with open('../../../README.md',encoding="utf-8") as f:
@@ -21,7 +22,7 @@ perguntas = [
     {
         "type": "list",
         "message": "Escolha uma ação",
-        "choices": ["Mostrar Lista de influenciadores pesquisados", "Adicionar novo(s) influenciadore(s)", "Começar a coleta de dados", "Sair"]
+        "choices": ["Mostrar Lista de influenciadores pesquisados", "Adicionar novo(s) influenciadore(s)", "Começar a coleta de dados", "Analisar dados", "Sair"]
     },
     {
         "type": "list",
@@ -165,8 +166,12 @@ while resultado[0] != "Sair":
     elif resultado [0] == "Adicionar novo(s) influenciadore(s)":
         adicionar_influenciador()
     elif resultado [0] == "Começar a coleta de dados":
-        print(">> Coletando")
+        console.print(">> [green]Coletando dados[/]")
         script.main()
+        print(" ")
+    elif resultado[0] == "Analisar dados":
+        console.print(">> [green]Analisando dados[/]")
+        analise.main()
         print(" ")
     resultado = prompt (perguntas[0])
     print(" ")

@@ -4,8 +4,63 @@ from pathlib import Path
 import os
 from rich.console import Console
 from config import config
+import time
+from sklearn.preprocessing import MinMaxScaler, StandardScaler
+import re
 
+def iso8601_to_seconds(duration):
+    """
+    Converte ISO 8601 duracao (e.g., PT10M58S) para segundos.
+    """
+    match = re.match(r'PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?', duration)
+    if not match:
+        return 0
+    hours, minutes, seconds = match.groups()
+    return int(hours or 0) * 3600 + int(minutes or 0) * 60 + int(seconds or 0)
 
+def coletar_informacoes_kmeans(folder_path):
+    video_path = folder_path + "/videos_info.csv"
+    video_analysis_path = folder_path + "/processed_videos.csv"
+    comments_analysis_path = folder_path + "/comments_analysis.csv"
+    threshold_pos = config['treshold'][0]
+    threshold_neg = config['treshold'][2]
+    result = {}
+    if os.path.exists(video_path) and os.path.exists(video_analysis_path) and os.path.exists(comments_analysis_path):
+        video_info = pd.read_csv(video_path)
+        video_analysis = pd.read_csv(video_analysis_path)
+        comments = pd.read_csv(comments_analysis_path)
+
+        result = {
+            'video_id': video_info["video_id"],
+            'video_length': video_info['duration'],
+            'proporcao_analise': video_analysis['roberta-pos']/video_analysis['roberta-neg'],
+            'video_comments': video_info['comment_count'],
+            'comments_authors_total': comments['authors_total'],
+            'comments_roberta_proportion': comments['pos_total_threshold'] / comments['neg_total_threshold'] 
+        }
+    else :
+        print("ERROR")
+    # print("DICT: ")
+    # print(result)
+    # print("DATAFRAME:")
+    # data = pd.DataFrame(result)
+    # print(data['video_length'])
+
+    return pd.DataFrame(result)
+
+def normalizar_kmeans_data(df,folder_path):
+    df['video_length_seconds'] = df['video_length'].apply(iso8601_to_seconds)
+
+    # Normalize video_comments, comments_authors_total, and video_length_seconds
+    scaler = MinMaxScaler()  # Use StandardScaler() for Z-Score Normalization
+    df[['video_comments_norm', 'comments_authors_total_norm', 'video_length_seconds_norm']] = scaler.fit_transform(
+        df[['video_comments', 'comments_authors_total', 'video_length_seconds']]
+    )
+
+    # Display the DataFrame with normalized columns
+    print(df[['video_id', 'video_comments_norm', 'comments_authors_total_norm', 'video_length_seconds_norm']])
+        
+    df.to_csv(folder_path+"/kmeans_data.csv")
 
 def comment_analysis(csv_path):
     # Pegar valores ordenados por data e limpar valores nulos
@@ -31,11 +86,11 @@ def comment_analysis(csv_path):
     comments_sentimental_neg = comments_info['roberta-neg']
     threshold_neg = config['treshold'][2]
     
-
     comments_over_time = comments_info.resample('D', on='published_at').size()
 
     # Definir variavies a serem calculadas e inseridas no resultado da analise
     comments_total = len(comments_info.index)
+    authors_total = comments_info['author'].nunique()
     comments_mean_day = comments_over_time.mean()
     comments_avg_day = comments_over_time.std()
     comments_median_day = comments_over_time.median()
@@ -63,6 +118,7 @@ def comment_analysis(csv_path):
     # Organize variables into a dictionary
     data = {
         'comments_total': [comments_total],
+        'authors_total': [authors_total],
         'comments_mean_day': [comments_mean_day],
         'comments_avg_day': [comments_avg_day],
         'comments_median_day': [comments_median_day],
@@ -141,15 +197,24 @@ def atualizar_video_comentarios_coletados(nmCanal,total_videos, total_comentario
     df.loc[df.nome == nmCanal, 'comentariosColetados'] = total_comentarios
     df.to_csv(youtuberListPath, index=False)
 
-def main():
+def coletar_dados(csv_path, folder_path):
+    result_df = pd.DataFrame(comment_analysis(csv_path))
+    video_analysis_path = f"{folder_path}/comments_analysis.csv"
+    result_df.to_csv(video_analysis_path, index=False)
+    
+    return result_df
+
+def analise_dados_comentarios():
     base_dir = "files"
     console = Console()
-    # comment_analysis("files/AuthenticGames/2020/Janeiro/BALDE DE MADEIRA !! - Minecraft Dinossauros #05/comments_info.csv")
+
     # andar pelos youtubers
     for ytb_folder in os.listdir(base_dir):
         videos_coletados = 0
         comentarios_coletados = 0
         ytb_data = pd.DataFrame()
+        # ytb_kmeans_data = pd.DataFrame()
+
         next_ytb_dir = os.path.join(base_dir, ytb_folder)
         if os.path.isdir(next_ytb_dir):
             # andar pelos anos
@@ -170,30 +235,42 @@ def main():
                                     csv_path = os.path.join(folder_path, 'comments_info.csv')
                                     # Check if the file exists
                                     if os.path.exists(csv_path):
-                                        result_df = pd.DataFrame(comment_analysis(csv_path))
-                                        video_analysis_path = f"{folder_path}/comments_analysis.csv"
-                                        result_df.to_csv(video_analysis_path, index=False)
-                                        console.print(">>>> Analise de video [green]completada[/] -> Salvo em: '"+video_analysis_path+"'")
+                                        result_df = coletar_dados(csv_path=csv_path, folder_path=folder_path)
+                                        console.print(">>>> Analise de video [green]completada[/] -> Video: "+folder)
                                         month_data = pd.concat([month_data, result_df], ignore_index=True)
                                         videos_coletados += 1
                                         comentarios_coletados += result_df.loc[0,'comments_total']
+                                        # ytb_kmeans_data = pd.concat([ytb_kmeans_data,coletar_informacoes_kmeans(folder_path)], ignore_index=True)
 
                             month_csv_path = base_dir +f"/{ytb_folder}/{year_folder}/{month_folder}/{month_folder}_comments_analysis.csv"
                             month_data.to_csv(month_csv_path, index=False)
                             year_data = pd.concat([year_data, month_data],ignore_index=True)
-                            console.print(">>> Analise [cyan]"+month_folder+"[/] [green]completada[/] -> Salvo em: '"+month_csv_path+"'")
+                            console.print(">>> Analise de mes [cyan]"+month_folder+"[/] [green]completada[/]")
 
                     year_csv_path = base_dir +f"/{ytb_folder}/{year_folder}/{year_folder}_comments_analysis.csv"
                     year_data.to_csv(year_csv_path, index=False)
                     ytb_data = pd.concat([ytb_data, year_data],ignore_index=True)
-                    console.print(">> Analise [cyan]"+year_folder+"[/] [green]completada[/] -> Salvo em: '"+year_csv_path+"'")
+                    console.print(">> Analise do ano [cyan]"+year_folder+"[/] [green]completada[/]")
+                    
             
             atualizar_video_comentarios_coletados(ytb_folder, videos_coletados, comentarios_coletados)
+
             ytb_csv_path = f"{base_dir}/{ytb_folder}/{ytb_folder}_comments_analysis.csv"
             ytb_data.to_csv(ytb_csv_path, index=False)
-            console.print("> Analise [cyan]"+ytb_folder+"[/] [green]completada[/] -> Salvo em: '"+ytb_csv_path+"'")
+            console.print("> Analise do youtuber [cyan]"+ytb_folder+"[/] [green]completada[/] -> Salvo em: '"+ytb_csv_path+"'")
+            
             folder_path_graph = f"{base_dir}/{ytb_folder}"
             make_graph_neg_pos_comments(ytb_csv_path,folder_path_graph,ytb_folder)
-            
+
+            # normalizar_kmeans_data(ytb_kmeans_data,folder_path_graph)
+
+def main():
+    start_time = time.time()
+    console = Console()
+    analise_dados_comentarios()
+    execution_time = time.time() - start_time
+    console.print(">>> Tempo de analise de todos os videos foi de [red]"+str(execution_time)+" segundos [/]")
+
+
 if __name__ == "__main__":
     main()
