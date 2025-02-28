@@ -23,7 +23,7 @@ def download_youtube_audio(video_id, output_folder):
     yt_dlp (funciona como linha de comando tambem).
     video_id -- id do video para baixar
     output_folder -- pasta para direcionar a saida do download
-    return files -- caminho relativo para o video baixado
+    return audio -- caminho relativo para o video baixado
     """
 
     print(f"> Baixando audio | video_id({video_id})")
@@ -42,8 +42,8 @@ def download_youtube_audio(video_id, output_folder):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
     console.print("> Download do audio foi um [green]sucesso[/] | video_id("+video_id+")")
-    files = f"{folder}/{video_id}+.mp3"
-    return 
+    audio = f"{folder}/{video_id}.mp3"
+    return audio
     
 
 def transcript_and_delete_audio(audio, model):
@@ -68,7 +68,8 @@ def transcript_and_delete_audio(audio, model):
         
         return transcricao
     except Exception as e:
-        console.log("[red] Erro [/] ao processar o áudio: ", log_locals=False)
+        console.log("[red] Erro [/] ao processar o áudio: ", log_locals=True)
+        print(audio)
         print(e)
         return None
 
@@ -126,7 +127,7 @@ def video_to_text(video_id, output_folder, model, youtuber):
     json_path = f"{output_folder}/video_text.json"
     with open(json_path, mode='w', encoding='utf-8') as file:
         json.dump(transcription_result, file, ensure_ascii=False, indent=4)
-    result_to_csv(transcription_result,output_folder,video_id)
+    # result_to_csv(transcription_result,output_folder,video_id)
 
     data = {'nome': [youtuber], 'video_id': [video_id]}
     df = pd.DataFrame(data)
@@ -251,7 +252,8 @@ def process_all_videos(model):
         process_youtuber_video(model,ytb_folder)
 
 def main():
-    process_all_videos("tiny")
+    # process_youtuber_video("large","AuthenticGames")
+    process_all_videos("medium")
 
 if __name__ == "__main__":
     main()
