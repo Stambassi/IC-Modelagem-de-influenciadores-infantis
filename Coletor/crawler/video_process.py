@@ -250,8 +250,96 @@ def process_all_videos(model):
     for ytb_folder in os.listdir(base_dir):
         process_youtuber_video(model,ytb_folder)
 
+def gerar_tira(tempo, data_path):
+    """
+    Funcao para rzealizar o agrupamento dos segments em grupos de X segundos
+    tempo -- quanto tempo cada tira vai ter
+    data_path -- caminho para arquivo json com resultado da analise do whisper
+    """
+    margem = 10
+    tempo_real = tempo*(1-(margem/100))
+    with open(data_path, 'r') as file:
+        data = json.load(file)
+        total_time = 0
+        
+        tira_atual = ""
+        tiras = []
+        for segment in data["segments"]:
+            total_time += (segment['end'] - segment['start'])
+            tira_atual = tira_atual + segment['text'] 
+            if (total_time >= tempo_real):
+                tiras.append({"text": tira_atual, "time": total_time})
+                tira_atual = ""
+                total_time = 0
+        if len(tira_atual) > 0:
+            tiras.append({"text": tira_atual, "time": total_time})
+    
+        x = 0
+        for i in tiras:
+            print(str(x)+": "+i['text']+" ["+str(i["time"])+"s]\n")
+            x += 1
+
+        console.print("Total de tiras: "+str(len(tiras)))
+
+def gerar_frases(data_path):
+    with open(data_path, 'r') as file:
+        data = json.load(file)        
+        tira_atual = ""
+        tiras = []
+        for segment in data["segments"]:
+            tira_atual = tira_atual + segment['text'] 
+            if(tira_atual[len(tira_atual)-1] == '.'):
+                tiras.append(tira_atual)
+                tira_atual = ""
+        if len(tira_atual) > 0:
+            tiras.append(tira_atual)
+    
+        show_tiras(tiras)
+
+
+        console.print("Total de tiras: "+str(len(tiras)))
+
+def gerar_tira_frase_tempo(tempo, data_path):
+    """
+    Funcao para realizar o agrupamento dos segments em grupos de X segundos, mantendo a coerencia de frases
+    tempo -- quanto tempo cada tira vai ter
+    data_path -- caminho para arquivo json com resultado da analise do whisper
+    """
+    margem = 10
+    tempo_real = tempo*(1-(margem/100))
+    with open(data_path, 'r') as file:
+        data = json.load(file)
+        total_time = 0
+        
+        tira_atual = ""
+        tiras = []
+        for segment in data["segments"]:
+            total_time += (segment['end'] - segment['start'])
+            tira_atual = tira_atual + segment['text'] 
+            if (total_time >= tempo_real):
+                i = tira_atual.rfind(".")
+                tiras.append(tira_atual[0:i+1].strip())
+                tira_atual = tira_atual[i+1:len(tira_atual)]
+                total_time = 0
+        if len(tira_atual) > 0:
+            tiras.append(tira_atual.strip())
+        show_tiras(tiras)
+        console.print("Total de tiras: "+str(len(tiras)))
+def show_tiras(tiras):
+    x = 0
+    for i in tiras:
+        print(str(x)+": "+i+"\n")
+        
+        x += 1
+
 def main():
-    process_all_videos("tiny")
+    #process_all_videos("tiny")
+    console.rule("tira por tempo")
+    gerar_tira(60,"files/OEPkmsJmY2I_text_small.json")
+    console.rule("tira por frase")
+    gerar_frases("files/OEPkmsJmY2I_text_small.json")
+    console.rule("tira por tempo e frase")
+    gerar_tira_frase_tempo(60,"files/OEPkmsJmY2I_text_small.json")
 
 if __name__ == "__main__":
     main()
