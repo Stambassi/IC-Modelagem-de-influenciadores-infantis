@@ -204,7 +204,8 @@ while resultado[0] != "Sair":
     elif resultado[0] == "Gerar speech-to-text de todos os videos":
         modelo = prompt(perguntas[2])
         console.print(">> [green]Gerando speech-to-text[/]")
-        video_process.process_all_videos(modelo)
+        print(f"Modelo escolhido: "+modelo[0])
+        video_process.process_all_videos(modelo[0])
         print(" ")
     elif resultado[0] == "Gerar speech-to-text de apenas um youtuber":
         modelo = prompt(perguntas[2])
@@ -213,7 +214,7 @@ while resultado[0] != "Sair":
         youtuber = prompt(pergunta_youtuber)
         print(youtuber)
         console.print(">> [green]Gerando speech-to-text do "+youtuber[0])
-        video_process.process_youtuber_video(modelo,youtuber[0])
+        video_process.process_youtuber_video(modelo[0],youtuber[0])
         print(" ")
 
     resultado = prompt (perguntas[0])

@@ -23,7 +23,7 @@ def download_youtube_audio(video_id, output_folder):
     yt_dlp (funciona como linha de comando tambem).
     video_id -- id do video para baixar
     output_folder -- pasta para direcionar a saida do download
-    return files -- caminho relativo para o video baixado
+    return audio -- caminho relativo para o video baixado (com .mp3)
     """
 
     print(f"> Baixando audio | video_id({video_id})")
@@ -42,8 +42,8 @@ def download_youtube_audio(video_id, output_folder):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
     console.print("> Download do audio foi um [green]sucesso[/] | video_id("+video_id+")")
-    files = f"{folder}/{video_id}+.mp3"
-    return 
+    audio = f"{folder}/{video_id}.mp3"
+    return audio
     
 
 def transcript_and_delete_audio(audio, model):
@@ -68,7 +68,7 @@ def transcript_and_delete_audio(audio, model):
         
         return transcricao
     except Exception as e:
-        console.log("[red] Erro [/] ao processar o áudio: ", log_locals=False)
+        console.log("[red] Erro [/] ao processar o áudio: ", log_locals=True)
         print(e)
         return None
 
@@ -126,15 +126,16 @@ def video_to_text(video_id, output_folder, model, youtuber):
     json_path = f"{output_folder}/video_text.json"
     with open(json_path, mode='w', encoding='utf-8') as file:
         json.dump(transcription_result, file, ensure_ascii=False, indent=4)
-    result_to_csv(transcription_result,output_folder,video_id)
+    #result_to_csv(transcription_result,output_folder,video_id)
 
-    data = {'nome': [youtuber], 'video_id': [video_id]}
-    df = pd.DataFrame(data)
-    try:
-        with open(csv_transcripted, 'r'):
-            df.to_csv(csv_transcripted, mode='a', header=False, index=False)
-    except FileNotFoundError:
-        df.to_csv(csv_transcripted, mode='w', header=True, index=False)
+    if(transcription_result != None):
+        data = {'nome': [youtuber], 'video_id': [video_id]}
+        df = pd.DataFrame(data)
+        try:
+            with open(csv_transcripted, 'r'):
+                df.to_csv(csv_transcripted, mode='a', header=False, index=False)
+        except FileNotFoundError:
+            df.to_csv(csv_transcripted, mode='w', header=True, index=False)
 
     execution_time = time.time() - start_time
     console.print(">>> Tempo de execução do Video_id ("+video_id+") foi de [red]"+str(execution_time)+" segundos [/] [gray]("+str(execution_time/60)+" minutos)[/]")
@@ -334,6 +335,8 @@ def show_tiras(tiras):
 
 def main():
     #process_all_videos("tiny")
+   # process_video("/home/stambassi/Documents/Curso/IC/IC-Modelagem-de-influenciadores-infantis/Coletor/crawler/files/Kass e KR/2023/Junho/RESTAURANTE de R$1 vs. RESTAURANTE de R$1.000.000.000 no Minecraft!/videos_info.csv"
+    #, "files/Kass e KR/2023/Junho/RESTAURANTE de R$1 vs. RESTAURANTE de R$1.000.000.000 no Minecraft!", "tiny","Kass e KR")
     console.rule("tira por tempo")
     gerar_tira(60,"files/OEPkmsJmY2I_text_small.json")
     console.rule("tira por frase")
