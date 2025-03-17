@@ -174,12 +174,14 @@ def atualizar_video_total_transcritos(youtuber):
                         for folder in os.listdir(next_month_dir):
                             folder_path = os.path.join(next_month_dir, folder)
                             if os.path.isdir(folder_path):
-                                json = os.path.join(folder_path, 'video_text.json')
-                                if os.path.exists(json): # arquivo tem que existir e ter dados
-                                    with open(json, 'r') as file:
+                                json_path = os.path.join(folder_path, 'video_text.json')
+                                if os.path.exists(json_path): # arquivo tem que existir e ter dados
+                                    with open(json_path, 'r') as file:
                                         data = json.load(file)
-                                        if len(data) > 0:
+                                        if data:
                                             videos += 1
+                                        # else:
+                                        #     print("transcrição vazia")
         atualizar_video_transcritos(youtuber,videos)
     return videos
 
