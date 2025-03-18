@@ -107,7 +107,33 @@ def result_to_csv(data,output_folder,id):
 
         print(f"CSV file '{csv_file}' has been created.")
 
-
+def atualizar_csv_videos_processados(youtuber, video_id):
+    nova_linha = {'nome': [youtuber], 'video_id': [video_id]}
+    linha_list = [youtuber,video_id]
+    linha_igual = False
+    try:
+        df = pd.read_csv(csv_transcripted)
+        if df.empty:
+            df = pd.DataFrame(nova_linha)
+            df.to_csv(csv_transcripted, mode='w', header=True, index=False)
+        else:
+            for _, row in df.iterrows():
+                vid_id = row['video_id']
+                print(vid_id +" == "+video_id)
+                if vid_id == video_id:
+                    linha_igual = True
+            if linha_igual:
+                print("Row already exists in the DataFrame.")
+            else:
+                print(linha_list)
+                df.loc[len(df)] = linha_list
+                print("Row inserted successfully.")
+                with open(csv_transcripted, 'r'):
+                    df.to_csv(csv_transcripted, mode='w', header=True, index=False)
+    except FileNotFoundError:
+        df = pd.DataFrame(nova_linha)
+        df.to_csv(csv_transcripted, mode='w', header=True, index=False)
+    
 
 def video_to_text(video_id, output_folder, model, youtuber):
     """
@@ -127,16 +153,8 @@ def video_to_text(video_id, output_folder, model, youtuber):
     with open(json_path, mode='w', encoding='utf-8') as file:
         json.dump(transcription_result, file, ensure_ascii=False, indent=4)
     #result_to_csv(transcription_result,output_folder,video_id)
-
-    if(transcription_result != None):
-        data = {'nome': [youtuber], 'video_id': [video_id]}
-        df = pd.DataFrame(data)
-        try:
-            with open(csv_transcripted, 'r'):
-                df.to_csv(csv_transcripted, mode='a', header=False, index=False)
-        except FileNotFoundError:
-            df.to_csv(csv_transcripted, mode='w', header=True, index=False)
-
+    if transcription_result != None:
+        atualizar_csv_videos_processados(youtuber,video_id)
     execution_time = time.time() - start_time
     console.print(">>> Tempo de execução do Video_id ("+video_id+") foi de [red]"+str(execution_time)+" segundos [/] [gray]("+str(execution_time/60)+" minutos)[/]")
 
@@ -180,6 +198,13 @@ def atualizar_video_total_transcritos(youtuber):
                                         data = json.load(file)
                                         if data:
                                             videos += 1
+                                            data_path = os.path.join(folder_path, 'videos_info.csv')
+                                            try:
+                                                dados_video = pd.read_csv(data_path)
+                                                vid_id = dados_video.at[0,'video_id']
+                                                atualizar_csv_videos_processados(youtuber,vid_id)
+                                            except FileNotFoundError:
+                                                console.log("Error",log_locals=True)
                                         # else:
                                         #     print("transcrição vazia")
         atualizar_video_transcritos(youtuber,videos)
