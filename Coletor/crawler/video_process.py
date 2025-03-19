@@ -328,6 +328,7 @@ def gerar_frases(data_path):
 def start():
     df = pd.read_csv(csv_transcripted)
     df.sort_values('nome')
+    df.to_csv(csv_transcripted, mode='w', header=True, index=False)
 def gerar_tira_frase_tempo(tempo, data_path):
     """
     Funcao para realizar o agrupamento dos segments em grupos de X segundos, mantendo a coerencia de frases
