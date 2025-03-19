@@ -119,15 +119,13 @@ def atualizar_csv_videos_processados(youtuber, video_id):
         else:
             for _, row in df.iterrows():
                 vid_id = row['video_id']
-                print(vid_id +" == "+video_id)
+                #print(vid_id +" == "+video_id)
                 if vid_id == video_id:
                     linha_igual = True
-            if linha_igual:
-                print("Row already exists in the DataFrame.")
-            else:
-                print(linha_list)
+            if not linha_igual:
+                #print(linha_list)
                 df.loc[len(df)] = linha_list
-                print("Row inserted successfully.")
+                #print("Row inserted successfully.")
                 with open(csv_transcripted, 'r'):
                     df.to_csv(csv_transcripted, mode='w', header=True, index=False)
     except FileNotFoundError:
@@ -244,6 +242,7 @@ def process_youtuber_video(model, youtuber):
     model -- qual modelo do whisper a ser utilizado (entrar na documentacao do whisper para ver opcoes)
     youtuber -- nome do canal que vai ter os videos transcritos
     """
+    start()
     base_dir = f"files/{youtuber}"
     videos = 0
     youtuber_data = pd.read_csv(youtuberListPath)
@@ -326,7 +325,9 @@ def gerar_frases(data_path):
 
 
         console.print("Total de tiras: "+str(len(tiras)))
-
+def start():
+    df = pd.read_csv(csv_transcripted)
+    df.sort_values('nome')
 def gerar_tira_frase_tempo(tempo, data_path):
     """
     Funcao para realizar o agrupamento dos segments em grupos de X segundos, mantendo a coerencia de frases

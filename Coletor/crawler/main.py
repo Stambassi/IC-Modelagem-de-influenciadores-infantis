@@ -7,6 +7,8 @@ from rich.markdown import Markdown
 import script
 import analise
 import video_process
+import os
+import csv
 
 console = Console()
 # with open('../../../README.md',encoding="utf-8") as f:
@@ -143,10 +145,52 @@ def gerar_pergunta_youtube():
         if adicionar[0] == "Sim":
             adicionar_influenciador()
 
+def atualizar_lista_influenciadores():
+    try:
+        df = pd.read_csv(csv_path)
+        base_dir = "files"
+        for ytb_folder in os.listdir(base_dir):
+            videos_coletados = 0
+            comentarios_coletados = 0
+            next_ytb_dir = os.path.join(base_dir, ytb_folder)
+            if os.path.isdir(next_ytb_dir):
+                # andar pelos anos
+                for year_folder in os.listdir(next_ytb_dir):
+                    next_year_dir = os.path.join(next_ytb_dir, year_folder)
+                    if os.path.isdir(next_year_dir):
+                        # andar pelos meses
+                        for month_folder in os.listdir(next_year_dir):
+                            next_month_dir = os.path.join(next_year_dir, month_folder)
+                            if os.path.isdir(next_month_dir):
+                                # andar por cada pasta dentro do mes
+                                for folder in os.listdir(next_month_dir):
+                                    folder_path = os.path.join(next_month_dir, folder)
+                                    if os.path.isdir(folder_path):
+                                        # Path to the comments_info.csv file
+                                        comments_path = os.path.join(folder_path, 'comments_analysis.csv')
+                                        # Check if the file exists
+                                        if os.path.exists(comments_path):
+                                            videos_coletados += 1
+                                            result_df = pd.read_csv(comments_path)
+                                            comentarios_coletados += result_df.loc[0,'comments_total']
+            videos_transcritos = video_process.atualizar_video_total_transcritos(ytb_folder)
+    
+            df.loc[df.nome == ytb_folder, 'videosColetados'] = videos_coletados
+            df.loc[df.nome == ytb_folder, 'comentariosColetados'] = comentarios_coletados
+            df.loc[df.nome == ytb_folder, 'videosTranscritos'] = videos_transcritos
+        df.to_csv(csv_path, index=False)
+    except FileNotFoundError as e:
+        header = ['nome',"channel_id","subscribers","ultimoAnoColetado","ultimoMesColetado","videosColetados","comentariosColetados","videosTranscritos"]
+        print(e)
+        with open(csv_path, 'w', newline='') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=header)
+            writer.writeheader()
+    console.print("Lista de youtubers inicializada...\n")
 def mostrar_lista_influenciadores():
     try:
         df = pd.read_csv(csv_path)
-        # print(">> Lista de canais")
+        #print(df)
+        #print(csv_path)
 
         if df.empty:
             prompt (perguntas[1])
@@ -161,22 +205,24 @@ def mostrar_lista_influenciadores():
             tabela.add_column("Videos transcritos", justify="right", style="green")
             total_videos = 0
             total_comentarios = 0
+            total_videos_transcritos = 0
             for _, row in df.iterrows():
                 mes = str(row['ultimoMesColetado'])
                 ano = str(row['ultimoAnoColetado'])
-                videosTranscritos = video_process.atualizar_video_total_transcritos(str(row["nome"]))
+                videos_transcritos = row["videosTranscritos"]
                 tabela.add_row(
                     str(row["nome"]), 
                     str(row["subscribers"]), 
                     str(mes +"/"+ ano),
                     str(row["videosColetados"]),
                     str(row["comentariosColetados"]),
-                    str(videosTranscritos)
+                    str(videos_transcritos)
                 )
                 total_videos += row["videosColetados"]
                 total_comentarios += row["comentariosColetados"]
+                total_videos_transcritos += videos_transcritos
             console.print(tabela)
-            console.print("[bold]Total de vídeos coletados: [green]"+str(total_videos)+"[/]\nTotal de comentários coletados: [cyan]"+str(total_comentarios)+"[/][/]")
+            console.print("[bold]Total de vídeos coletados: [green]"+str(total_videos)+"[/]\nTotal de comentários coletados: [cyan]"+str(total_comentarios)+"[/]\nTotal de videos transcritos: [purple]"+str(total_videos_transcritos)+"[/]")
             print(" ")
     except FileNotFoundError:
         console.print("Lista [red]vazia[/]")
@@ -185,40 +231,45 @@ def mostrar_lista_influenciadores():
         if adicionar[0] == "Sim":
             adicionar_influenciador()
 
-    
-resultado = prompt (perguntas[0])
-print(" ")
-while resultado[0] != "Sair":
-    if resultado[0] == "Mostrar Lista de influenciadores pesquisados":
-        mostrar_lista_influenciadores()
-    elif resultado [0] == "Adicionar novo(s) influenciadore(s)":
-        adicionar_influenciador()
-    elif resultado [0] == "Começar a coleta de dados":
-        console.print(">> [green]Coletando dados[/]")
-        script.main()
-        print(" ")
-    elif resultado[0] == "Analisar dados":
-        console.print(">> [green]Analisando dados[/]")
-        analise.main()
-        print(" ")
-    elif resultado[0] == "Gerar speech-to-text de todos os videos":
-        modelo = prompt(perguntas[2])
-        console.print(">> [green]Gerando speech-to-text[/]")
-        print(f"Modelo escolhido: "+modelo[0])
-        video_process.process_all_videos(modelo[0])
-        print(" ")
-    elif resultado[0] == "Gerar speech-to-text de apenas um youtuber":
-        modelo = prompt(perguntas[2])
-        pergunta_youtuber = gerar_pergunta_youtube()
-        print(" ")
-        youtuber = prompt(pergunta_youtuber)
-        print(youtuber)
-        console.print(">> [green]Gerando speech-to-text do "+youtuber[0])
-        video_process.process_youtuber_video(modelo[0],youtuber[0])
-        print(" ")
-
+def main():
+    atualizar_lista_influenciadores()
     resultado = prompt (perguntas[0])
     print(" ")
+    while resultado[0] != "Sair":
+        if resultado[0] == "Mostrar Lista de influenciadores pesquisados":
+            mostrar_lista_influenciadores()
+        elif resultado [0] == "Adicionar novo(s) influenciadore(s)":
+            adicionar_influenciador()
+        elif resultado [0] == "Começar a coleta de dados":
+            console.print(">> [green]Coletando dados[/]")
+            script.main()
+            print(" ")
+        elif resultado[0] == "Analisar dados":
+            console.print(">> [green]Analisando dados[/]")
+            analise.main()
+            print(" ")
+        elif resultado[0] == "Gerar speech-to-text de todos os videos":
+            modelo = prompt(perguntas[2])
+            console.print(">> [green]Gerando speech-to-text[/]")
+            print(f"Modelo escolhido: "+modelo[0])
+            video_process.process_all_videos(modelo[0])
+            print(" ")
+        elif resultado[0] == "Gerar speech-to-text de apenas um youtuber":
+            modelo = prompt(perguntas[2])
+            pergunta_youtuber = gerar_pergunta_youtube()
+            print(" ")
+            youtuber = prompt(pergunta_youtuber)
+            print(youtuber)
+            console.print(">> [green]Gerando speech-to-text do "+youtuber[0])
+            video_process.process_youtuber_video(modelo[0],youtuber[0])
+            print(" ")
+
+        resultado = prompt (perguntas[0])
+        print(" ")
+
+
+if __name__ == "__main__":
+    main()
 
 
 
