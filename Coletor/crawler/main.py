@@ -168,11 +168,14 @@ def atualizar_lista_influenciadores():
                                     if os.path.isdir(folder_path):
                                         # Path to the comments_info.csv file
                                         comments_path = os.path.join(folder_path, 'comments_analysis.csv')
+                                        video_path = os.path.join(folder_path, 'videos_info.csv')
                                         # Check if the file exists
                                         if os.path.exists(comments_path):
                                             videos_coletados += 1
                                             result_df = pd.read_csv(comments_path)
                                             comentarios_coletados += result_df.loc[0,'comments_total']
+                                        elif os.path.exists(video_path):
+                                            videos_coletados += 1
             videos_transcritos = video_process.atualizar_video_total_transcritos(ytb_folder)
     
             df.loc[df.nome == ytb_folder, 'videosColetados'] = videos_coletados
