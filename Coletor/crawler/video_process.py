@@ -327,7 +327,7 @@ def gerar_frases(data_path):
         console.print("Total de tiras: "+str(len(tiras)))
 def start():
     df = pd.read_csv(csv_transcripted)
-    df.sort_values('nome')
+    df.sort_values('nome',ascending=True, inplace=True)
     df.to_csv(csv_transcripted, mode='w', header=True, index=False)
 def gerar_tira_frase_tempo(tempo, data_path):
     """
