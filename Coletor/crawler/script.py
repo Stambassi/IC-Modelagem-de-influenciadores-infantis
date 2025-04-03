@@ -301,7 +301,7 @@ def get_video_details(video_id):
 
     return details
 
-def get_comments(video_id, video_title, total_comment_count):
+def get_comments(video_id, total_comment_count):
     api_manager = YouTubeAPIManager.get_instance()  # Obtendo a instância do objeto
 
     comments_data = []
@@ -498,7 +498,7 @@ def atualizarUltimaDatadeColeta(nmCanal, mesPublicacaoVideo, anoPublicacaoVideo)
 
             
 # Função para processar um único vídeo
-def process_video(video_id, video_title, processed_videos, nmCanal, video_details, anoPublicacaoVideo, mesPublicacaoVideo):
+def process_video(video_id, processed_videos, nmCanal, video_details, anoPublicacaoVideo, mesPublicacaoVideo):
     global channels_info
     tituloVideo = video_details['title']
     resposta = create_filesVideo_path(nmCanal, anoPublicacaoVideo, mesPublicacaoVideo, tituloVideo, video_id)
@@ -524,10 +524,11 @@ def process_video(video_id, video_title, processed_videos, nmCanal, video_detail
             # channel_details = get_channel_details(video_details['channel_id'])
             # pd.DataFrame([channel_details]).to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/channels_info.csv', mode='a', header=not channels_file_exists, index=False)
             
-            comments = get_comments(video_id, video_title, total_comment_count)
+            comments = get_comments(video_id, total_comment_count)
             comments_df = pd.DataFrame(comments)
             comments_df['channel_id'] = video_details['channel_id']
-            comments_df.to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/comments_info.csv', mode='a', header=not comments_file_exists, index=False)
+            
+            comments_df.to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/comments_info.csv', mode='a', header=not comments_file_exists, index=False, quoting=csv.QUOTE_MINIMAL)
 
 def make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE, channel_id):    
     api_manager = YouTubeAPIManager.get_instance()  # Obtendo a instância do objeto
@@ -779,7 +780,7 @@ def main():
                         console.print(f"[cyan]Título[/]: {video_details['title']}, Quantidade de comentários: [bold green]{video_details['comment_count']}[/]")
                         atualizarUltimaDatadeColeta(nmCanal,mesPublicacaoVideo,anoPublicacaoVideo)
                         if comment_count > 0:
-                            process_video(video_id, "", processed_videos, nmCanal, video_details, anoPublicacaoVideo, mesPublicacaoVideo)
+                            process_video(video_id, processed_videos, nmCanal, video_details, anoPublicacaoVideo, mesPublicacaoVideo)
 
             console.log(f"Coleta concluída para a consulta: {query} entre {start_interval} e {end_interval}")
             console.print(">> Canal analisado foi: [bold green]"+nmCanal+"[/]")
