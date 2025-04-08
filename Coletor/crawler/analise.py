@@ -69,80 +69,111 @@ def comment_analysis(csv_path):
     comments_info = pd.read_csv(csv_path)
 
     # Adicionar o Interarrival Time dos comentarios
-    comments_info['published_at'] = pd.to_datetime(comments_info['published_at'])
-    comments_info = comments_info.sort_values('published_at')
-    comments_info['inter-arrival-time'] = comments_info['published_at'].diff()
-    comments_info['inter-arrival-time-seconds'] = comments_info['inter-arrival-time'].dt.total_seconds()
-    comments_info.to_csv(csv_path, index=False)
-
-    # Limpar os valores nulos da analise de sentimento
-
-    # ATUALIZAR PARA FUTURO MÉTODO DE ANÁLISE DE SENTIMENTO
-
-    # comments_info = comments_info.dropna(subset=['roberta-neg', 'roberta-pos'])
-    # comments_sentimental_pos = comments_info['roberta-pos']
-    # threshold_pos = config['treshold'][0]
+    try: 
+        comments_info['published_at'] = pd.to_datetime(comments_info['published_at'])
     
-    # comments_sentimental_neu = comments_info['roberta-neu']
-    # threshold_neu = config['treshold'][1]
 
-    # comments_sentimental_neg = comments_info['roberta-neg']
-    # threshold_neg = config['treshold'][2]
     
-    comments_over_time = comments_info.resample('D', on='published_at').size()
+        
+        comments_info = comments_info.sort_values('published_at')
+        comments_info['inter-arrival-time'] = comments_info['published_at'].diff()
+        comments_info['inter-arrival-time-seconds'] = comments_info['inter-arrival-time'].dt.total_seconds()
+        comments_info.to_csv(csv_path, index=False)
 
-    # Definir variavies a serem calculadas e inseridas no resultado da analise
-    comments_total = len(comments_info.index)
-    authors_total = comments_info['author'].nunique()
-    comments_mean_day = comments_over_time.mean()
-    comments_avg_day = comments_over_time.std()
-    comments_median_day = comments_over_time.median()
-    comments_max_day = comments_over_time.max()
-    # filtered_rows = comments_sentimental_neg[comments_sentimental_neg > threshold_neg]
-    # neg_total_threshold = len(filtered_rows.index)
-    # neg_mean = comments_sentimental_neg.mean()
-    # neg_avg = comments_sentimental_neg.std()
-    # neg_max = comments_sentimental_neg.max() 
-    # neg_percentage =  (neg_total_threshold / len(comments_sentimental_neg.index)) * 100
-    # filtered_rows = comments_sentimental_pos[comments_sentimental_pos > threshold_pos]
-    # pos_total_threshold = len(filtered_rows.index)
-    # pos_mean = comments_sentimental_pos.mean()
-    # pos_avg = comments_sentimental_pos.std()
-    # pos_max = comments_sentimental_pos.max() 
-    # pos_percentage =  (pos_total_threshold / len(comments_sentimental_pos.index)) * 100
-    # filtered_rows = comments_sentimental_neu[comments_sentimental_neu > threshold_neu]
-    # neu_total_threshold = len(filtered_rows.index)
-    # neu_mean = comments_sentimental_neu.mean()
-    # neu_avg = comments_sentimental_neu.std()
-    # neu_max = comments_sentimental_neu.max() 
-    # neu_percentage =  (neu_total_threshold / len(comments_sentimental_neu.index)) * 100
+        # Limpar os valores nulos da analise de sentimento
+
+        # >>>>>> ATUALIZAR PARA FUTURO MÉTODO DE ANÁLISE DE SENTIMENTO
+
+        # comments_info = comments_info.dropna(subset=['roberta-neg', 'roberta-pos'])
+        # comments_sentimental_pos = comments_info['roberta-pos']
+        # threshold_pos = config['treshold'][0]
+        
+        # comments_sentimental_neu = comments_info['roberta-neu']
+        # threshold_neu = config['treshold'][1]
+
+        # comments_sentimental_neg = comments_info['roberta-neg']
+        # threshold_neg = config['treshold'][2]
+        
+        comments_over_time = comments_info.resample('D', on='published_at').size()
+
+        # Definir variavies a serem calculadas e inseridas no resultado da analise
+        comments_total = len(comments_info.index)
+        authors_total = comments_info['author'].nunique()
+        comments_mean_day = comments_over_time.mean()
+        comments_avg_day = comments_over_time.std()
+        comments_median_day = comments_over_time.median()
+        comments_max_day = comments_over_time.max()
+        # filtered_rows = comments_sentimental_neg[comments_sentimental_neg > threshold_neg]
+        # neg_total_threshold = len(filtered_rows.index)
+        # neg_mean = comments_sentimental_neg.mean()
+        # neg_avg = comments_sentimental_neg.std()
+        # neg_max = comments_sentimental_neg.max() 
+        # neg_percentage =  (neg_total_threshold / len(comments_sentimental_neg.index)) * 100
+        # filtered_rows = comments_sentimental_pos[comments_sentimental_pos > threshold_pos]
+        # pos_total_threshold = len(filtered_rows.index)
+        # pos_mean = comments_sentimental_pos.mean()
+        # pos_avg = comments_sentimental_pos.std()
+        # pos_max = comments_sentimental_pos.max() 
+        # pos_percentage =  (pos_total_threshold / len(comments_sentimental_pos.index)) * 100
+        # filtered_rows = comments_sentimental_neu[comments_sentimental_neu > threshold_neu]
+        # neu_total_threshold = len(filtered_rows.index)
+        # neu_mean = comments_sentimental_neu.mean()
+        # neu_avg = comments_sentimental_neu.std()
+        # neu_max = comments_sentimental_neu.max() 
+        # neu_percentage =  (neu_total_threshold / len(comments_sentimental_neu.index)) * 100
 
 
-    # Organize variables into a dictionary
-    data = {
-        'comments_total': [comments_total],
-        'authors_total': [authors_total],
-        'comments_mean_day': [comments_mean_day],
-        'comments_avg_day': [comments_avg_day],
-        'comments_median_day': [comments_median_day],
-        'comments_max_day': [comments_max_day],
-        # 'neg_total_threshold': [neg_total_threshold],
-        # 'neg_mean': [neg_mean],
-        # 'neg_avg': [neg_avg],
-        # 'neg_max': [neg_max],
-        # 'neg_percentage': [neg_percentage],
-        # 'pos_total_threshold': [pos_total_threshold],
-        # 'pos_mean': [pos_mean],
-        # 'pos_avg': [pos_avg],
-        # 'pos_max': [pos_max],
-        # 'pos_percentage': [pos_percentage],
-        # 'neu_total_threshold': [neu_total_threshold],
-        # 'neu_mean': [neu_mean],
-        # 'neu_avg': [neu_avg],
-        # 'neu_max': [neu_max],
-        # 'neu_percentage': [neu_percentage]
-    }
+        # Organize variables into a dictionary
+        data = {
+            'comments_total': [comments_total],
+            'authors_total': [authors_total],
+            'comments_mean_day': [comments_mean_day],
+            'comments_avg_day': [comments_avg_day],
+            'comments_median_day': [comments_median_day],
+            'comments_max_day': [comments_max_day],
+            # 'neg_total_threshold': [neg_total_threshold],
+            # 'neg_mean': [neg_mean],
+            # 'neg_avg': [neg_avg],
+            # 'neg_max': [neg_max],
+            # 'neg_percentage': [neg_percentage],
+            # 'pos_total_threshold': [pos_total_threshold],
+            # 'pos_mean': [pos_mean],
+            # 'pos_avg': [pos_avg],
+            # 'pos_max': [pos_max],
+            # 'pos_percentage': [pos_percentage],
+            # 'neu_total_threshold': [neu_total_threshold],
+            # 'neu_mean': [neu_mean],
+            # 'neu_avg': [neu_avg],
+            # 'neu_max': [neu_max],
+            # 'neu_percentage': [neu_percentage]
+        }
+    except:
+        data = {
+            'comments_total': [0],
+            'authors_total': [0],
+            'comments_mean_day': [0],
+            'comments_avg_day': [0],
+            'comments_median_day': [0],
+            'comments_max_day': [0],
+            # 'neg_total_threshold': [neg_total_threshold],
+            # 'neg_mean': [neg_mean],
+            # 'neg_avg': [neg_avg],
+            # 'neg_max': [neg_max],
+            # 'neg_percentage': [neg_percentage],
+            # 'pos_total_threshold': [pos_total_threshold],
+            # 'pos_mean': [pos_mean],
+            # 'pos_avg': [pos_avg],
+            # 'pos_max': [pos_max],
+            # 'pos_percentage': [pos_percentage],
+            # 'neu_total_threshold': [neu_total_threshold],
+            # 'neu_mean': [neu_mean],
+            # 'neu_avg': [neu_avg],
+            # 'neu_max': [neu_max],
+            # 'neu_percentage': [neu_percentage]
+        }
     return data
+
+
 
 def make_comment_over_time_graph(csv_path):
     comments_info = pd.read_csv(csv_path)
