@@ -657,20 +657,15 @@ def sentiment_analisys(text):
     }
     #print(scores_dict)
     return scores
-
+    
 def main():
 
    # Configurar com aspas duplas os termos chaves -> testar primeiro....
-    queries = config["queries"]
 
     youtuberListPath = "youtuberslist.csv"
     channel_data  = pd.read_csv(youtuberListPath)
-
-    contadorCanal = 0
-    contadorQuery = 0
-    nmCanal = channel_data['nome'].loc[channel_data.index[contadorCanal]]
-
-    create_files_path(nmCanal) # Cria diretório files para armazenar saidas 
+    queries = config["queries"]
+    youtubers = channel_data['nome']
 
     df_atual_date = pd.read_csv('files/atual_date.csv', header=None)
 
@@ -706,6 +701,10 @@ def main():
     
     connectCheckAPI() # Conecta com a API de status -> Caso não configurou, ignore
 
+
+    # Comeco da coleta de dados, implementação funciona com 3 repeticoes: A maior sobre intervalo de datas, determinado pelo arquivo atual_date
+    # e as datas no config, depois por cada youtuber e por ultimo pelas querys
+
     for start_interval, end_interval in generate_date_intervals(start_date, end_date, interval_type):
         # Atualiza o atual_date.csv para cada iteração do gerador de intervalos
         with open("files/atual_date.csv", "w", newline="") as csvfile:
@@ -718,82 +717,61 @@ def main():
                 "day": end_interval.day
             })
 
-        quantidadeCanaisColetar = len(channel_data.index)
-        quantidadeQuerys = len(queries)
-        contadorCanal = 0
-        contadorQuery = 0
         # Aqui ocorre o loop para a coleta de dados (Realiza uma vez para cada query com um youtuber depois muda o youtuber)     
-        while contadorQuery != quantidadeCanaisColetar:
-            console.rule(f"Youtuber: {contadorCanal+1}/{quantidadeCanaisColetar} ({start_interval} - {end_interval})") 
-            if(contadorQuery >= quantidadeQuerys):
-                console.print("[red]Youtuber não possui mais videos nas especificacoes pesquisadas [/]. Passando para o proximo da lista")
-                contadorCanal += 1
-                print(f">>> Youtuber: {contadorCanal+1}/{quantidadeCanaisColetar}")
-                contadorQuery = 0
-                if(contadorCanal >= quantidadeCanaisColetar):
-                    console.print("[red]Fim da lista de canais[/]")
-                    break
-                else:
-                    nmCanal = channel_data['nome'].loc[channel_data.index[contadorCanal]]
-                    create_files_path(nmCanal)
-            query = queries[contadorQuery]
-            GlobalState.get_instance().set_state("atual_query", query)
-            GlobalState.get_instance().set_state("query_progress", f"{queries.index(query) + 1}/{quantidadeQuerys}")
-        
-            published_after = start_interval.isoformat() + "Z"
-            published_before = end_interval.isoformat() + "Z"
-            video_details_list = []
-            channel_id = channel_data['channel_id'].loc[channel_data.index[contadorCanal]]
-            search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE,channel_id) 
-            videos = search_response.get("items", [])
-            total_videos = len(videos)
-                
-            # console.log("dentro do for",log_locals=True)
-            if total_videos == 0:  # Verifica se search_response foi obtido com sucesso
-                contadorQuery = contadorQuery + 1
-                console.log("[red]Não foi possível obter uma resposta da API.[/] Movendo para a próxima consulta.")
-                continue
+        for youtuber in youtubers:
+
+            console.rule(f"Youtuber: {youtuber} ({start_interval} - {end_interval})")
+            channel_id = channel_data.loc[channel_data['nome'] == youtuber, 'channel_id'].item()
+            create_files_path(youtuber) # Cria diretório files para armazenar saidas
+
+            for query in queries:
+    
+                print(f">>> Query: {query}")
+                GlobalState.get_instance().set_state("atual_query", query)
+                #GlobalState.get_instance().set_state("query_progress", f"{queries.index(query) + 1}/{quantidadeQuerys}")
             
-            for index, item in enumerate(videos, start=1):
+                published_after = start_interval.isoformat() + "Z"
+                published_before = end_interval.isoformat() + "Z"
+                video_details_list = []
+                #print(channel_data)
+                search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE,channel_id) 
+                videos = search_response.get("items", [])
+                total_videos = len(videos)
+                    
+                if total_videos == 0:  # Verifica se search_response foi obtido com sucesso
+                    console.log("[red]Não foi possível obter uma resposta da API.[/] Movendo para a próxima consulta.")
+                    continue
                 
-                VIDEO_TITLE = item['snippet']['title'].lower()
+                for index, item in enumerate(videos, start=1):
+                    
+                    VIDEO_TITLE = item['snippet']['title'].lower()
 
-                key_words = config['key_words']
+                    key_words = config['key_words']
 
-                # Verifica se o título possui as palavras chave
-                if any((word.lower() in VIDEO_TITLE for word in key_words) or len(key_words) == 0):
-                    video_id = item['id']['videoId']
-                    print(f"Processando vídeo {index} de {total_videos}: ID = {video_id}")
-                    if video_id not in processed_videos:
-                        video_details = get_video_details(video_id)
-                        comment_count = video_details['comment_count']
-                        data_publicacao_Video = video_details['published_at']
+                    # Verifica se o título possui as palavras chave
+                    if any((word.lower() in VIDEO_TITLE for word in key_words) or len(key_words) == 0):
+                        video_id = item['id']['videoId']
+                        print(f"Processando vídeo {index} de {total_videos}: ID = {video_id}")
+                        if video_id not in processed_videos:
+                            video_details = get_video_details(video_id)
+                            comment_count = video_details['comment_count']
+                            data_publicacao_Video = video_details['published_at']
+                            
+                            anoPublicacaoVideo = data_publicacao_Video[0:4]
+                            mesPublicacaoVideo = nomeMesAno(data_publicacao_Video[5:7])
+
+                            
+                            #a = input('').split("")[0]
+                            #print(a)
                         
-                        anoPublicacaoVideo = data_publicacao_Video[0:4]
-                        mesPublicacaoVideo = nomeMesAno(data_publicacao_Video[5:7])
+                            console.print(f"[cyan]Título[/]: {video_details['title']}, Quantidade de comentários: [bold green]{video_details['comment_count']}[/]")
+                            atualizarUltimaDatadeColeta(youtuber,mesPublicacaoVideo,anoPublicacaoVideo)
+                            if comment_count > 0:
+                                process_video(video_id, processed_videos, youtuber, video_details, anoPublicacaoVideo, mesPublicacaoVideo)
 
-                        '''
-                        a = input('').split("")[0]
-                        print(a)
-                        '''
-
-                        console.print(f"[cyan]Título[/]: {video_details['title']}, Quantidade de comentários: [bold green]{video_details['comment_count']}[/]")
-                        atualizarUltimaDatadeColeta(nmCanal,mesPublicacaoVideo,anoPublicacaoVideo)
-                        if comment_count > 0:
-                            process_video(video_id, processed_videos, nmCanal, video_details, anoPublicacaoVideo, mesPublicacaoVideo)
-
-            console.log(f"Coleta concluída para a consulta: {query} entre {start_interval} e {end_interval}")
-            console.print(">> Canal analisado foi: [bold green]"+nmCanal+"[/]")
-            contadorQuery = contadorQuery + 1
-
-            if(contadorQuery >= quantidadeQuerys - 1):
-                contadorCanal = contadorCanal + 1 
-                if(contadorCanal >= len(channel_data.index) - 1): 
-                    contadorCanal = 0
-                    contadorQuery = -1 # condicao de parada
-                contadorQuery = 0
-            nmCanal = channel_data['nome'].loc[channel_data.index[contadorCanal]]
-            create_files_path(nmCanal) # Cria diretório files para armazenar saidas
+                console.log(f"Coleta concluída para a consulta: {query} entre {start_interval} e {end_interval}")
+                console.print(">> Canal analisado foi: [bold green]"+youtuber+"[/]")
+                
 
 if __name__ == "__main__":
     main()
