@@ -150,6 +150,7 @@ def video_to_text(video_id, output_folder, model, youtuber):
     json_path = f"{output_folder}/video_text.json"
     with open(json_path, mode='w', encoding='utf-8') as file:
         json.dump(transcription_result, file, ensure_ascii=False, indent=4)
+        console.print("-- Caminho: "+json_path)
     #result_to_csv(transcription_result,output_folder,video_id)
     if transcription_result != None:
         atualizar_csv_videos_processados(youtuber,video_id)
