@@ -5,16 +5,13 @@ from rich.console import Console
 from rich.table import Table
 from rich.markdown import Markdown
 import script
-import analise
+from scripts.analise import analise_completa
+from scripts.reset import reset
 import video_process
 import os
 import csv
 
 console = Console()
-# with open('../../../README.md',encoding="utf-8") as f:
-#     md = Markdown(f.read())
-#     console.print(md)
-#     print("")
 
 console.print("\n==============================================================================================",style="bold white")
 console.print(" Coletor de dados do [bold red]Youtube[/] - [bold white]v1.1[/]\n Authors: João Pedro Torres, Augusto Stambassi Duarte, Lucas Carneiro Nassau Malta",style="bold white")
@@ -27,7 +24,7 @@ perguntas = [
         "message": "Escolha uma ação",
         "choices": ["Mostrar Lista de influenciadores pesquisados", "Adicionar novo(s) influenciadore(s)", 
         "Começar a coleta de dados", "Analisar dados","Gerar speech-to-text de todos os videos",
-        "Gerar speech-to-text de apenas um youtuber","Sair"]
+        "Gerar speech-to-text de apenas um youtuber","Reiniciar data de coleta","Sair"]
     },
     {
         "type": "list",
@@ -189,6 +186,7 @@ def atualizar_lista_influenciadores():
             writer = csv.DictWriter(csvfile, fieldnames=header)
             writer.writeheader()
     console.print("Lista de youtubers inicializada...\n")
+
 def mostrar_lista_influenciadores():
     try:
         df = pd.read_csv(csv_path)
@@ -235,11 +233,11 @@ def mostrar_lista_influenciadores():
             adicionar_influenciador()
 
 def main():
-    atualizar_lista_influenciadores()
     resultado = prompt (perguntas[0])
     print(" ")
     while resultado[0] != "Sair":
         if resultado[0] == "Mostrar Lista de influenciadores pesquisados":
+            atualizar_lista_influenciadores()
             mostrar_lista_influenciadores()
         elif resultado [0] == "Adicionar novo(s) influenciadore(s)":
             adicionar_influenciador()
@@ -249,7 +247,7 @@ def main():
             print(" ")
         elif resultado[0] == "Analisar dados":
             console.print(">> [green]Analisando dados[/]")
-            analise.main()
+            analise_completa()
             print(" ")
         elif resultado[0] == "Gerar speech-to-text de todos os videos":
             modelo = prompt(perguntas[2])
@@ -266,6 +264,10 @@ def main():
             console.print(">> [green]Gerando speech-to-text do "+youtuber[0])
             video_process.process_youtuber_video(modelo[0],youtuber[0])
             print(" ")
+        elif resultado[0] == "Reiniciar data de coleta":
+            data = reset()
+            console.print(">> Dia de coleta reinciado para: "+str(data[2])+"/"+str(data[1])+"/"+str(data[0]))
+            print("")
 
         resultado = prompt (perguntas[0])
         print(" ")

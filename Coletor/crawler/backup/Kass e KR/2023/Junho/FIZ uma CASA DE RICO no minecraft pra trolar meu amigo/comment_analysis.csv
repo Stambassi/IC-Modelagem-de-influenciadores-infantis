@@ -1,0 +1,2 @@
+comments_total,comments_mean_day,comments_avg_day,comments_median_day,comments_max_day,neg_total_threshold,neg_mean,neg_avg,neg_max,neg_percentage,pos_total_threshold,pos_mean,pos_avg,pos_max,pos_percentage,neu_total_threshold,neu_mean,neu_avg,neu_max,neu_percentage
+67,0.12384473197781885,1.0977269468867334,0.0,23,2,0.12088048298853628,0.1456729679552897,0.8816916942596436,2.9850746268656714,17,0.31589383447070174,0.33215740866833954,0.9684869647026062,25.37313432835821,46,0.5632256820186305,0.2858558869777768,0.8867895603179932,68.65671641791045
