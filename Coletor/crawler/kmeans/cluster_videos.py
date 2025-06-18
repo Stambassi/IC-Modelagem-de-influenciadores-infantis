@@ -32,8 +32,6 @@ def plot_elbow_method(features: pd.DataFrame, max_k: int):
     plt.savefig("kmeans/graphs/elbow_method.png", dpi=300, bbox_inches='tight')  # DPI ajusta a resolução
     plt.close()  # Fecha a figura para evitar sobreposição em gráficos futuros
 
-
-
 ''' 
     Função para plotar o gáfico da pontuação de silhueta
     @param features - DataFrame com os dados a serem testados
@@ -59,8 +57,6 @@ def plot_silhouette_scores(features: pd.DataFrame, max_k: int):
     plt.savefig("kmeans/graphs/silhouette_score.png", dpi=300, bbox_inches='tight')  # DPI ajusta a resolução
     plt.close()  # Fecha a figura para evitar sobreposição em gráficos futuros
 
-
-
 ''' 
     Função para plotar o gráfico dos clusters PCA
     @param features - DataFrame com os dados a serem testados
@@ -81,8 +77,6 @@ def plot_pca_clusters(features: pd.DataFrame, labels: np.ndarray):
     plt.savefig("kmeans/graphs/pca_clusters.png", dpi=300, bbox_inches='tight')  # DPI ajusta a resolução
     plt.close()  # Fecha a figura para evitar sobreposição em gráficos futuros
 
-
-
 '''
     Função para plotar o gráfico dos clusters com variáveis originais
     @param features - DataFrame com os dados a serem testados
@@ -99,9 +93,6 @@ def plot_original_clusters(features: pd.DataFrame, labels: np.ndarray):
     # Salvar o gráfico em um arquivo
     plt.savefig("kmeans/graphs/original_clusters.png", dpi=300, bbox_inches='tight')  # DPI ajusta a resolução
     plt.close()  # Fecha a figura para evitar sobreposição em gráficos futuros
-
-
-
 
 ''' 
     Função para calcular Silhouette Score e Inertia do modelo treinado na base de dados
@@ -141,9 +132,6 @@ def caluculate_metrics(features: pd.DataFrame, n: int) -> List[Dict[str, float]]
     # Retornar
     return results
 
-
-
-
 ''''
     Função para selecionar o melhor número de clusters considerando ambos os critérios'
     @param result - Lista com a pontuação de cada cluster
@@ -171,14 +159,13 @@ def find_best_k(results: List[Dict[str, float]]) -> int:
     # Retornar
     return best_k
 
-
-
-
-# Função para tratar e normalizar os dados do DataFrame
-def normalize_data(df: pd.DataFrame, columns: List[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    # Remover as linhas que possuem valores inválidos
-    df = df.dropna(subset=columns)
-
+''''
+    Função para tratar e normalizar os dados do DataFrame
+    @param df - DataFrame a ser normalizado
+    @param columns - Lista de colunas do DataFrame a serem normalizadas
+    @return df_normalized_features - DataFrame normalizado
+'''
+def normalize_data(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
     # Selecionar colunas relevantes para a clusterização
     df_features = df[columns]
 
@@ -186,52 +173,78 @@ def normalize_data(df: pd.DataFrame, columns: List[str]) -> Tuple[pd.DataFrame, 
     scaler = MinMaxScaler()
     df_normalized_features = scaler.fit_transform(df_features)
 
-    # Retornar o DataFrame original sem as linhas inválidas e o DataFrame normalizado
-    return df, df_normalized_features
+    # Retornar o DataFrame normalizado
+    return df_normalized_features
 
-# Função para reduzir os dados do DataFrame, tirando os 10% com mais tempo e os 10% com menos tempo
-def reduce_data(df: pd.DataFrame, columns: List[str]) -> Tuple[pd.DataFrame, pd.DataFrame]:
+''''
+    Função para reduzir os dados do DataFrame, removendo os outliers
+    @param df - DataFrame a ser reduzido
+    @param columns - Lista de colunas do DataFrame a serem reduzidas
+    @return df_reduced_features - DataFrame reduzido
+'''
+def reduce_data(df: pd.DataFrame, columns: List[str]) -> pd.DataFrame:
     # Selecionar colunas relevantes para a redução
     df_features = df[columns]
 
-    # Calcular os limites dos percentis
-    # lower_limit = df_features['duration'].quantile(0.10)  # 10% menor duração
-    upper_limit = df_features['duration'].quantile(0.90)  # 10% maior duração
+    # Calcular os percentis 25%, 50% e 75%
+    Q1 = df_features.quantile(0.25)
+    Q3 = df_features.quantile(0.75)
+
+    # Calcular os limites inferior e superior
+    lower_limit = Q1 - 1.5 * (Q3 - Q1)
+    upper_limit = Q3 + 1.5 * (Q3 - Q1)
+
 
     # Filtrar os dados que estão entre os percentis
-    # df_reduced_features = df_features[(df_features['duration'] > lower_limit) & (df_features['duration'] < upper_limit)]
-    df_reduced_features = df_features[(df_features['duration'] < upper_limit)]
+    df_reduced_features = df_features[(lower_limit < df_features) & (df_features < upper_limit)]
+
+    df_features = df_features.dropna(subset=columns)
 
     # Retornar o DataFrame reduzido
     return df_reduced_features
 
-# Função controladora do algoritmo KMeans
+''''
+    Função controladora do algoritmo KMeans
+    @param n - Número máximo de clusters a serem testados
+    @param columns - Lista de colunas a serem agrupadas
+    @param normalized - True para normalizar, False caso contrário
+    @param reduced - True para remover outliers, False caso contrátio
+    @param plot - True para plotar gráficos e salvar como arquivos de imagem, False caso contrário
+    @param show_videos - True para mostrar exemplos de vídeos de cada cluster no terminal, False caso contrário
+'''
 def kmeans(n: int, columns: List[str], normalized: bool, reduced: bool, fixed: bool, plot: bool, show_videos: bool):
+    # Definir dados
+    df_principal = pd.DataFrame()
+
     # Testar quantidade de tentativas
     if n < 3: n = 3
 
     # Importar base de dados
     df = pd.read_csv('kmeans/kmeans_video.csv')
-        
-    # Testar se é para reduzir os dados
-    if reduced:
-        df = reduce_data(df, columns)
+    df_principal = df
+
+    # Remover as linhas que possuem valores inválidos
+    df_principal = df_principal.dropna(subset=columns)
 
     # Testar se é para normalizar os dados
     if normalized:
-        df, df_normalized = normalize_data(df, columns)
+        df_principal = normalize_data(df_principal, columns)
     else:
-        df_normalized = df[columns]
+        df_principal = df[columns]
+
+    # Testar se é para reduzir os dados
+    if reduced:
+        df_principal = reduce_data(df_principal, columns)
 
     # Testar se é para encontrar o número ideal de clusters
     if fixed:
         best_n = int(input("Digite a quantidade fixa de clusters: "))
     else:
-        best_n = find_best_k( caluculate_metrics(df_normalized, n) )
+        best_n = find_best_k( caluculate_metrics(df_principal, n) )
 
     # Aplicar o KMeans
     kmeans = KMeans(n_clusters=best_n, random_state=0, n_init='auto')
-    kmeans.fit(df_normalized)
+    kmeans.fit(df_principal)
 
     # Adicionar os rótulos de cluster ao DataFrame original
     df['cluster'] = kmeans.labels_
@@ -248,24 +261,24 @@ def kmeans(n: int, columns: List[str], normalized: bool, reduced: bool, fixed: b
 
     # Testar se é para mostrar os gráficos da quantidade de cluster
     if plot:
-        plot_elbow_method(df_normalized, 10)
-        plot_silhouette_scores(df_normalized, 10) 
-        plot_pca_clusters(df_normalized, kmeans.labels_)
+        plot_elbow_method(df_principal, 10)
+        plot_silhouette_scores(df_principal, 10) 
+        plot_pca_clusters(df_principal, kmeans.labels_)
         if len(columns) == 2:
-            plot_original_clusters(df_normalized, kmeans.labels_)
-    
-        # Obter os valores únicos da coluna 'cluster'
-        unique_clusters = df['cluster'].unique()
+            plot_original_clusters(df_principal, kmeans.labels_)
 
-        # Analisar as características principais de cada cluster
-        for cluster in unique_clusters:
-            print(f'\nCluster {cluster}:')
-            cluster_data = df[df['cluster'] == cluster]
-            print(cluster_data.describe().loc[['mean', 'std'], columns])
-            # Exibir alguns exemplos de comentários no cluster
-            if show_videos:
-                print("\nExemplos de vídeos:")
-                print(cluster_data[['video_id', 'duration', 'comment_count']].head(10))
+    # Obter os valores únicos da coluna 'cluster'
+    unique_clusters = df['cluster'].unique()
+
+    # Analisar as características principais de cada cluster
+    for cluster in unique_clusters:
+        print(f'\nCluster {cluster}:')
+        cluster_data = df[df['cluster'] == cluster]
+        print(cluster_data.describe().loc[['mean', 'std'], columns])
+        # Exibir alguns exemplos de comentários no cluster
+        if show_videos:
+            print("\nExemplos de vídeos:")
+            print(cluster_data[['video_id', 'duration', 'comment_count']].head(10))
 
     # Salvar dados em arquivo separado
     df.to_csv("kmeans/kmeans_video_clustered.csv", index=False)
@@ -273,10 +286,10 @@ def kmeans(n: int, columns: List[str], normalized: bool, reduced: bool, fixed: b
 
 if __name__ == "__main__":
     # Definir as colunas de interesse
-    # columns = ['duration', 'comment_count']
+    columns = ['duration', 'comment_count']
     # columns = ['duration', 'comment_count', 'view_count']
     # columns = ['duration', 'comment_count', 'like_count']
-    columns = ['duration', 'comment_count', 'like_count', 'view_count']
+    # columns = ['duration', 'comment_count', 'like_count', 'view_count']
 
     # Chamar a execução
-    kmeans(n=10, columns=columns, normalized=False, reduced=True, fixed=False, plot=True, show_videos=False)
+    kmeans(n=10, columns=columns, normalized=False, reduced=True, fixed=False, plot=False, show_videos=False)
