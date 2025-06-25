@@ -1,6 +1,8 @@
 import os
 import json
 import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 
 from pysentimiento import create_analyzer
 
@@ -28,6 +30,30 @@ def update_data(sentiment_dict, csv_file):
 
 def analisar_toxicidade(texto):
     return analyzer.predict(texto).probas
+
+def gerar_graficos(youtuber_list):
+    values = ['negative', 'neutral', 'positive']
+    for youtuber in youtuber_list:
+        df = pd.read_csv(f'./{youtuber}_sentiment.csv')
+        for value in values:
+            df_value = df[value]
+
+            list_value = df_value.tolist()
+
+            scores = np.array(sorted(list_value))  # Garantir que os dados estejam ordenados
+
+            # Percentis
+            percentis = np.linspace(0, 1, len(scores))
+
+            # Plot
+            plt.plot(percentis, scores, label='ICDF')
+            plt.xlabel("Percentil")
+            plt.ylabel(f"Toxicidade ({value})")
+            plt.title(f"ICDF da Toxicidade de {youtuber}")
+            plt.grid(True)
+            plt.legend()
+            plt.savefig(f"./grafico_{youtuber}_{value}.png", dpi=300, bbox_inches='tight')
+            plt.close()
 
 def encontrar_videos_validos(youtuber_list):
     """
@@ -58,5 +84,6 @@ def encontrar_videos_validos(youtuber_list):
                                                 update_data(analisar_toxicidade(data['text']),csv_file)          
                                                 
 
-teste = ['Kass e KR','meu nome é david','Lokis']
-encontrar_videos_validos(teste)
+lista_youtubers = ['AuthenticGames', 'Kass e KR', 'Jazzghost', 'Lokis']
+encontrar_videos_validos(lista_youtubers)
+gerar_graficos(lista_youtubers)
