@@ -3,7 +3,7 @@ import json
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-
+from kneed import KneeLocator
 from pysentimiento import create_analyzer
 
 analyzer = create_analyzer(task="sentiment", lang="pt")
@@ -45,14 +45,35 @@ def gerar_graficos(youtuber_list):
             # Percentis
             percentis = np.linspace(0, 1, len(scores))
 
+            # Aplicando o algoritmo de joelho
+            if value == 'neutral':
+                knee_locator = KneeLocator(percentis, scores, curve="concave", direction="increasing")
+            else:
+                knee_locator = KneeLocator(percentis, scores, curve="convex", direction="increasing")
+
+            knee_percentil = knee_locator.knee
+            knee_valor = knee_locator.knee_y
+
+            if not os.path.isdir(f'./{youtuber}'):
+                os.mkdir(f'./{youtuber}')
+
             # Plot
             plt.plot(percentis, scores, label='ICDF')
             plt.xlabel("Percentil")
             plt.ylabel(f"Toxicidade ({value})")
             plt.title(f"ICDF da Toxicidade de {youtuber}")
             plt.grid(True)
+
+            # Adiciona o ponto de joelho se existir
+            if knee_percentil is not None and knee_valor is not None:
+                plt.axvline(knee_percentil, color='r', linestyle='--', label=f'Joelho: {knee_valor:.2f}')
+                plt.scatter(knee_percentil, knee_valor, color='red', s=80)
+                print(f"Ponto de joelho encontrado: youtuber={youtuber}, value={value}, toxicidade={knee_valor}")
+            else:
+                print("Nenhum ponto de joelho foi encontrado nos dados.")
+
             plt.legend()
-            plt.savefig(f"./grafico_{youtuber}_{value}.png", dpi=300, bbox_inches='tight')
+            plt.savefig(f"./{youtuber}/grafico_{value}.png", dpi=300, bbox_inches='tight')
             plt.close()
 
 def encontrar_videos_validos(youtuber_list):
@@ -84,6 +105,6 @@ def encontrar_videos_validos(youtuber_list):
                                                 update_data(analisar_toxicidade(data['text']),csv_file)          
                                                 
 
-lista_youtubers =  ['Kass e KR','meu nome é david','Lokis','Julia MineGirl','Luluca Games', 'Papile','Geleia']
-encontrar_videos_validos(lista_youtubers)
+lista_youtubers =  ['Kass e KR','Lokis','Julia MineGirl','Luluca Games', 'Papile']
+# encontrar_videos_validos(lista_youtubers)
 gerar_graficos(lista_youtubers)
