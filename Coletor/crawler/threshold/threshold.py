@@ -84,6 +84,6 @@ def encontrar_videos_validos(youtuber_list):
                                                 update_data(analisar_toxicidade(data['text']),csv_file)          
                                                 
 
-lista_youtubers = ['AuthenticGames', 'Kass e KR', 'Jazzghost', 'Lokis']
+lista_youtubers =  ['Kass e KR','meu nome é david','Lokis','Julia MineGirl','Luluca Games', 'Papile','Geleia']
 encontrar_videos_validos(lista_youtubers)
 gerar_graficos(lista_youtubers)
