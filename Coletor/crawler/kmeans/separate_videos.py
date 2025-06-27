@@ -105,7 +105,7 @@ def findVideoFolder(func, columns: list[str]):
                     func(next_video_dir, dados, columns)
 
     # Converter a lista para DataFrame
-    df = pd.DataFrame(dados, columns=columns)  # Convertendo a lista para DataFrame
+    df = pd.DataFrame(dados, columns=columns)  
 
     df2 = df.drop_duplicates(subset=["video_id"])
 
