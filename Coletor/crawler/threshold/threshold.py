@@ -176,7 +176,7 @@ def gerar_graficos_youtuber(youtubers_list: list[str]) -> None:
                 plt.axvline(percentil_joelho, color='r', linestyle='--', label=f'Derivada: {toxicidade_joelho:.2f}')
                 plt.scatter(percentil_joelho, toxicidade_joelho, color='red', s=40)
             except ValueError:
-                print(f"'{max_derivada}' não existe na lista.")
+                print(f"'Não existe na lista.")
 
             # Plotar o gráfico
             plt.plot(percentis, scores, label='ICDF')
@@ -190,50 +190,11 @@ def gerar_graficos_youtuber(youtubers_list: list[str]) -> None:
             plt.savefig(f"threshold/{youtuber}/grafico_{value}.png", dpi=300, bbox_inches='tight')
             plt.close()
 
-'''
-    Função para gerar os gráficos de distribuição temporal da toxicidade de cada vídeo 
-    @param youtubers_list - Lista de youtubers a serem analisados
-'''
-def gerar_graficos_tiras(youtubers_list: list[str]) -> None:
-    # Percorrer youtubers
-    for youtuber in youtubers_list:
-        base_dir = f"files/{youtuber}"
-        if os.path.isdir(base_dir):
-            print(f">>>>>>>>" + base_dir)
-            # Percorrer os anos
-            for year_folder in os.listdir(base_dir):
-                next_year_dir = os.path.join(base_dir, year_folder)
-                if os.path.isdir(next_year_dir):
-                    # Percorrer os meses
-                    for month_folder in os.listdir(next_year_dir):
-                        next_month_dir = os.path.join(next_year_dir, month_folder)
-                        if os.path.isdir(next_month_dir):
-                            # Percorrer os vídeos
-                            for video_folder in os.listdir(next_month_dir):
-                                next_video_dir = os.path.join(next_month_dir, video_folder)
-                                if os.path.isdir(next_video_dir):                              
-                                    # Tentar abrir o arquivo csv
-                                    try:
-                                        df_tiras = pd.read_csv(f'{next_video_dir}/tiras_video.csv')
-                                        toxicidade = df_tiras['toxicidade']
-                                        indexes = list(range(0, len(toxicidade)))
-                                        plt.plot(indexes, toxicidade, label='Toxicidade no Vídeo')
-                                        plt.xlabel('Tiras')
-                                        plt.ylabel('Toxicidade')
-                                        plt.title('Análise da Oscilação de Toxicidade')
-                                        plt.grid(True)
-                                        plt.legend()
-                                        plt.savefig(f'{next_video_dir}/grafico_toxicidade.png')
-                                        plt.close()
-                                    except Exception as e:
-                                        print(f'Inválido: {next_video_dir}')
-
-
 lista_youtubers =  ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Geleia', 'Jazzghost', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'meu nome é david', 'Papile', 'TazerCraft', 'Tex HS']
 
 #atualizar_geral(lista_youtubers)
 #atualizar_tiras(lista_youtubers)
 
 #gerar_graficos_youtuber(lista_youtubers)
-gerar_graficos_tiras(lista_youtubers)
+#gerar_graficos_tiras(lista_youtubers)
 

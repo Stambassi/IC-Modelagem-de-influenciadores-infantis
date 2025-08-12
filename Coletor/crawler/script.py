@@ -32,7 +32,7 @@ import json
 import subprocess
 import time
 
-from vosk import Model, KaldiRecognizer
+#from vosk import Model, KaldiRecognizer
 
 import os
 import csv

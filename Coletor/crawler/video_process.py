@@ -441,8 +441,8 @@ def main():
     #console.rule("tira por frase")
     #gerar_frases("files/OEPkmsJmY2I_text_small.json")
     #console.rule("tira por tempo e frase")
-    save_tiras()
-    #gerar_tira_frase_tempo(60, "files/AuthenticGames/2023/Novembro/MEU AMIGO visitou MEU MUNDO de MINECRAFT! @spok/video_text.json")
+    #save_tiras()
+    gerar_tira_frase_tempo(60, "files/AuthenticGames/2023/Novembro/MEU AMIGO visitou MEU MUNDO de MINECRAFT! @spok/video_text.json")
 
 
 if __name__ == "__main__":
