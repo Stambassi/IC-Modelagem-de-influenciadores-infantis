@@ -4,6 +4,107 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 
+def count_folders_os_walk(path):
+    """Counts the total number of folders within a given path, including subfolders."""
+    folder_count = 0
+    for root, dirs, files in os.walk(path):
+        folder_count += len(dirs)
+    return folder_count
+
+'''
+    Função para gerar o titas_total.csv para cada youtuber, contendo a informação de todas as tiras de cada vídeo
+    @param youtubers_list - Lista de youtubers a serem analisados
+'''
+def salvar_tiras_total_youtubers(youtubers_list: list[str]) -> None:
+    # Percorrer youtubers
+    for youtuber in youtubers_list:
+        base_dir = f"files/{youtuber}"
+        if os.path.isdir(base_dir):
+            youtuber_data = pd.DataFrame()
+            console.rule(youtuber)
+            # Percorrer os anos
+            for year_folder in os.listdir(base_dir):
+                next_year_dir = os.path.join(base_dir, year_folder)
+                if os.path.isdir(next_year_dir):
+                    # Percorrer os meses
+                    for month_folder in os.listdir(next_year_dir):
+                        next_month_dir = os.path.join(next_year_dir, month_folder)
+                        if os.path.isdir(next_month_dir):
+                            total_month_videos = count_folders_os_walk(next_month_dir)
+                            atual = 1
+                            # Percorrer os vídeos
+                            for video_folder in os.listdir(next_month_dir):
+                                console.print(f"Videos {month_folder}/{year_folder}: {atual}/{total_month_videos} ")
+                                next_video_dir = os.path.join(next_month_dir, video_folder)
+                                if os.path.isdir(next_video_dir):                              
+                                    # Tentar abrir o arquivo csv
+                                    try:
+                                        df_tiras = pd.read_csv(f'{next_video_dir}/tiras_video.csv')
+                                        youtuber_data = pd.concat([youtuber_data, df_tiras],ignore_index=True)
+                                    except Exception as e:
+                                        # print(f'Inválido: {next_video_dir}')
+                                        pass
+                                atual += 1
+            if(not youtuber_data.empty):
+                tiras_total_path = os.path.join(base_dir, 'tiras_total.csv')
+                youtuber_data.to_csv(tiras_total_path, index=False)                     
+
+def gerar_graficos_tiras_media_dp(youtubers_list: list[str]) -> None:
+    all_data = pd.DataFrame()
+    for youtuber in youtubers_list:
+        try:
+            base_dir = f"files/{youtuber}"
+            tiras_total_path = os.path.join(base_dir, 'tiras_total.csv')
+            youtuber_data = pd.read_csv(tiras_total_path)
+            
+            if(not youtuber_data.empty):
+                console.print(f"Gerando dados do [cyan]{youtuber}")
+        
+                construir_grafico_toxicidade_media_dp(youtuber_data,youtuber,limite_index=40)
+
+                all_data = pd.concat([all_data, youtuber_data],ignore_index=True)
+        except Exception as e:
+            console.print(f"{youtuber} não possui csv válido")
+    if (not all_data.empty):
+        console.print(f"Gerando gráfico geral")
+        construir_grafico_toxicidade_media_dp(all_data,"",limite_index=40)
+
+
+
+def construir_grafico_toxicidade_media_dp(youtuber_data,youtuber,limite_index):
+    base_dir = "files"
+    youtuber_tiras_total = youtuber_data.groupby('index')['toxicidade'].mean().reset_index()
+    youtuber_tiras_total.columns = ['index', f'media toxicidade']   
+
+    youtuber_tiras_filtrada = youtuber_tiras_total[youtuber_tiras_total['index'] < limite_index]
+    
+    youtuber_tiras_desvio = youtuber_data.groupby('index')['toxicidade'].std().reset_index()
+    youtuber_tiras_desvio.columns = ['index', f'desvio padrao']   
+
+    youtuber_tiras_filtrada_desvio = youtuber_tiras_desvio[youtuber_tiras_desvio['index'] < limite_index]
+
+    # Gerar gráfico de toxicidade média ao longo do vídeo
+    toxicidade = youtuber_tiras_filtrada['media toxicidade']
+    desvio_padrao = youtuber_tiras_filtrada_desvio['desvio padrao']
+    indexes = list(range(0, len(toxicidade)))
+    plt.plot(indexes, toxicidade, label='Toxicidade no Vídeo')
+    plt.plot(indexes, desvio_padrao, label='Desvio Padrão Toxicidade')
+    plt.xlabel('Tiras')
+    plt.ylabel('Toxicidade')
+    plt.ylim(0.0,1.0)
+    if len(youtuber) > 1:
+        base_dir = f"files/{youtuber}"
+        plt.title(f'Análise da Oscilação de Toxicidade média do {youtuber}')
+    else:
+        plt.title(f'Análise de Oscilação de Toxicidade média')
+    plt.grid(True)
+    plt.legend()
+    plt.savefig(f'{base_dir}/grafico_toxicidade_medio_video.png')
+    plt.close() 
+
+    console.print("Gráfico [green]salvo")
+
+
 '''
     Função para gerar os gráficos da média, do desvio padrão e da mediana de toxicidade de um youtuber
     @param youtuber

@@ -6,9 +6,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 from kneed import KneeLocator
 from scipy.ndimage import gaussian_filter1d
+from rich.console import Console
 
 analyzer = create_analyzer(task="sentiment", lang="pt")
-
+console = Console()
 '''
     Função para atualizar os valores de toxicidade dos vídeos de um youtuber
     @param sentiment_dict - Dicionário com os novos valores de toxicidade da análise de sentimento
@@ -192,8 +193,10 @@ def gerar_graficos_youtuber(youtubers_list: list[str]) -> None:
 
 lista_youtubers =  ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Geleia', 'Jazzghost', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'meu nome é david', 'Papile', 'TazerCraft', 'Tex HS']
 
-#atualizar_geral(lista_youtubers)
-#atualizar_tiras(lista_youtubers)
+# lista_youtubers =  ['AuthenticGames']
+
+# atualizar_geral(lista_youtubers)
+# atualizar_tiras(lista_youtubers)
 
 #gerar_graficos_youtuber(lista_youtubers)
 #gerar_graficos_tiras(lista_youtubers)
