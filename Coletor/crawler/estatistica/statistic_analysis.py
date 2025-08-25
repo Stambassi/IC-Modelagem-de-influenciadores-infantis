@@ -1,5 +1,6 @@
 import math
 import os
+from pathlib import Path
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,7 +9,7 @@ from rich.console import Console
 console = Console()
 
 def count_folders_os_walk(path):
-    """Counts the total number of folders within a given path, including subfolders."""
+    '''Counts the total number of folders within a given path, including subfolders.'''
     folder_count = 0
     for root, dirs, files in os.walk(path):
         folder_count += len(dirs)
@@ -21,7 +22,7 @@ def count_folders_os_walk(path):
 def salvar_tiras_total_youtubers(youtubers_list: list[str]) -> None:
     # Percorrer youtubers
     for youtuber in youtubers_list:
-        base_dir = f"files/{youtuber}"
+        base_dir = f'files/{youtuber}'
         if os.path.isdir(base_dir):
             youtuber_data = pd.DataFrame()
             console.rule(youtuber)
@@ -37,7 +38,7 @@ def salvar_tiras_total_youtubers(youtubers_list: list[str]) -> None:
                             atual = 1
                             # Percorrer os vídeos
                             for video_folder in os.listdir(next_month_dir):
-                                console.print(f"Videos {month_folder}/{year_folder}: {atual}/{total_month_videos} ")
+                                console.print(f'Videos {month_folder}/{year_folder}: {atual}/{total_month_videos} ')
                                 next_video_dir = os.path.join(next_month_dir, video_folder)
                                 if os.path.isdir(next_video_dir):                              
                                     # Tentar abrir o arquivo csv
@@ -45,7 +46,7 @@ def salvar_tiras_total_youtubers(youtubers_list: list[str]) -> None:
                                         df_tiras = pd.read_csv(f'{next_video_dir}/tiras_video.csv')
                                         youtuber_data = pd.concat([youtuber_data, df_tiras],ignore_index=True)
                                     except Exception as e:
-                                        # print(f'Inválido: {next_video_dir}')
+                                        print(f'Inválido (salvar_tiras_total_youtubers): {next_video_dir}')
                                         pass
                                 atual += 1
             if(not youtuber_data.empty):
@@ -56,24 +57,24 @@ def gerar_graficos_tiras_media_dp(youtubers_list: list[str]) -> None:
     all_data = pd.DataFrame()
     for youtuber in youtubers_list:
         try:
-            base_dir = f"files/{youtuber}"
+            base_dir = f'files/{youtuber}'
             tiras_total_path = os.path.join(base_dir, 'tiras_total.csv')
             youtuber_data = pd.read_csv(tiras_total_path)
             
             if(not youtuber_data.empty):
-                console.print(f"Gerando dados do [cyan]{youtuber}")
+                console.print(f'Gerando dados do [cyan]{youtuber}')
         
                 construir_grafico_toxicidade_media_dp(youtuber_data,youtuber,limite_index=40)
 
                 all_data = pd.concat([all_data, youtuber_data],ignore_index=True)
         except Exception as e:
-            console.print(f"{youtuber} não possui csv válido")
+            console.print(f'{youtuber} não possui csv válido')
     if (not all_data.empty):
-        console.print(f"Gerando gráfico geral")
-        construir_grafico_toxicidade_media_dp(all_data,"",limite_index=40)
+        console.print(f'Gerando gráfico geral')
+        construir_grafico_toxicidade_media_dp(all_data,'',limite_index=40)
 
 def construir_grafico_toxicidade_media_dp(youtuber_data,youtuber,limite_index):
-    base_dir = "files"
+    base_dir = 'files'
     youtuber_tiras_total = youtuber_data.groupby('index')['toxicidade'].mean().reset_index()
     youtuber_tiras_total.columns = ['index', f'media toxicidade']   
 
@@ -94,7 +95,7 @@ def construir_grafico_toxicidade_media_dp(youtuber_data,youtuber,limite_index):
     plt.ylabel('Toxicidade')
     plt.ylim(0.0,1.0)
     if len(youtuber) > 1:
-        base_dir = f"files/{youtuber}"
+        base_dir = f'files/{youtuber}'
         plt.title(f'Análise da Oscilação de Toxicidade média do {youtuber}')
     else:
         plt.title(f'Análise de Oscilação de Toxicidade média')
@@ -103,166 +104,128 @@ def construir_grafico_toxicidade_media_dp(youtuber_data,youtuber,limite_index):
     plt.savefig(f'{base_dir}/grafico_toxicidade_medio_video.png')
     plt.close() 
 
-    console.print("Gráfico [green]salvo")
-
-'''
-    Função para gerar os gráficos da média, do desvio padrão e da mediana de toxicidade de um youtuber
-    @param youtuber
-'''
-def estatisticas_youtuber(youtuber: str) -> None:
-    # Definições iniciais
-    base_dir = f"files/{youtuber}"
-    lista_indexes = []
-    index = 1
-    lista_media = []
-    lista_desvio_padrao = []
-    lista_mediana = []
-
-    # Percorrer as pastas
-    if os.path.isdir(base_dir):
-        console.rule(base_dir)
-        # Percorrer os anos
-        for year_folder in os.listdir(base_dir):
-            next_year_dir = os.path.join(base_dir, year_folder)
-            if os.path.isdir(next_year_dir):
-                # Percorrer os meses
-                for month_folder in os.listdir(next_year_dir):
-                    next_month_dir = os.path.join(next_year_dir, month_folder)
-                    if os.path.isdir(next_month_dir):
-                        # Percorrer os vídeos
-                        for video_folder in os.listdir(next_month_dir):
-                            next_video_dir = os.path.join(next_month_dir, video_folder)
-                            if os.path.isdir(next_video_dir):   
-                                # Tentar abrir o arquivo csv
-                                try:
-                                    df_estatisticas = pd.read_csv(f'{next_video_dir}/estatisticas_video.csv')
-                                    lista_indexes.append(index)
-                                    index += 1
-                                    lista_media.append(df_estatisticas['media'].iloc[0])
-                                    lista_desvio_padrao.append(df_estatisticas['desvio_padrao'].iloc[0])
-                                    lista_mediana.append(df_estatisticas['mediana'].iloc[0])
-                                except Exception as e:
-                                    print(f'Inválido: {next_video_dir}')
-
-    # Plotar a média
-    plt.plot(lista_indexes, lista_media, label='Média de Toxicidade', color='green')
-    # Plotar o desvio padrão
-    plt.plot(lista_indexes, lista_desvio_padrao, label='Desvio Padrão de Toxicidade', color='purple')
-    # Plotar a mediana
-    plt.plot(lista_indexes, lista_mediana, label='Mediana de Toxicidade', color='orange')
-    # Definir os ticks do eixo x
-    #plt.xticks(lista_indexes)
-    # Definir os limites do eixo y
-    plt.ylim(0.0, 1.0)
-    # Adicionar rótulos e título
-    plt.xlabel('Vídeos')
-    plt.ylabel('Nível de Toxicidade')
-    plt.title(f'Análise de Toxicidade do {youtuber} (Média, Desvio Padrão e Mediana)')
-    # Adicionar grade
-    plt.grid(True)
-    # Adicionar legenda
-    plt.legend()
-    # Salvar o gráfico consolidado
-    plt.savefig(f'{base_dir}/grafico_estatisticas.png')
-    plt.close()
+    console.print('Gráfico [green]salvo')
 
 '''
     Função para percorrer as pastas de cada vídeo de um youtuber
     @param youtubers_list - Lista de youtubers a serem analisados
     @param function - Função a ser executada na pasta de cada vídeo de um youtuber
 '''
-def percorrer_video(youtubers_list: list[str], function) -> None:
+def percorrer_video(youtubers_list: list[str], function_to_run) -> None:
     # Percorrer youtubers
     for youtuber in youtubers_list:
-        base_dir = f"files/{youtuber}"
-        if os.path.isdir(base_dir):
-            console.print(f">>>" + base_dir)
-            # Percorrer os anos
-            for year_folder in os.listdir(base_dir):
-                next_year_dir = os.path.join(base_dir, year_folder)
-                if os.path.isdir(next_year_dir):
-                    # Percorrer os meses
-                    for month_folder in os.listdir(next_year_dir):
-                        next_month_dir = os.path.join(next_year_dir, month_folder)
-                        if os.path.isdir(next_month_dir):
-                            # Percorrer os vídeos
-                            for video_folder in os.listdir(next_month_dir):
-                                next_video_dir = os.path.join(next_month_dir, video_folder)
-                                if os.path.isdir(next_video_dir):  
-                                    graficos_dir = os.path.join(next_video_dir, 'graficos')
-                                    if not os.path.isdir(graficos_dir):
-                                        os.mkdir(graficos_dir)
-                                    try:
-                                        df_tiras_video = pd.read_csv(f'{next_video_dir}/tiras_video.csv')
-                                        if len(df_tiras_video['toxicidade']) > 2:
-                                            function(next_video_dir)
-                                    except Exception as e:
-                                        console.print(f'Inválido: {e}')
+        # Criar um objeto Path para o diretório base do youtuber
+        base_path = Path(f'files/{youtuber}')
+
+        # Se o diretório do youtuber não existir, pular para o próximo
+        if not base_path.is_dir():
+            continue
+
+        print(f'>>> Processando {youtuber}')
+
+        # Criar a pasta 'graficos' no nível do youtuber, se não existir.
+        (base_path / 'graficos').mkdir(parents=True, exist_ok=True)
+
+        # .rglob('tiras_video.csv') busca recursivamente por este arquivo em todas as subpastas.
+        for tiras_csv_path in base_path.rglob('tiras_video.csv'):            
+            # O diretório do vídeo é a pasta "pai" do arquivo CSV encontrado
+            video_path = tiras_csv_path.parent
+            
+            try:
+                # Criar a pasta 'graficos' dentro da pasta do vídeo, se não existir
+                (video_path / 'graficos').mkdir(parents=True, exist_ok=True)
+                
+                # Ler o arquivo CSV que já foi encontrado
+                df_tiras_video = pd.read_csv(tiras_csv_path)
+
+                # Testar se não é um Short
+                if len(df_tiras_video['toxicidade']) > 2:
+                    function_to_run(str(video_path))
+            
+            except Exception as e:
+                print(f'Inválido (percorrer_video): {e}')
+
+# ---------------- Estatísticas e Gráficos de um vídeo - INÍCIO ----------------
 
 '''
-    Função para gerar os gráficos de distribuição temporal da toxicidade de cada vídeo 
+    Função para salvar as estatísticas e gerar os gráficos de distribuição temporal da toxicidade de cada vídeo 
     @param youtubers_list - Lista de youtubers a serem analisados
 '''
-def gerar_grafico_linha(video_dir: str) -> None:
-    try:
+def toxicidade_video(video_dir: str) -> None:
+    try:        
+        # Encontrar o identificador do vídeo
+        df_video_info = pd.read_csv(f'{video_dir}/videos_info.csv')
+        video_id = df_video_info['video_id'].iloc[0]
+
         # Tentar abrir o arquivo csv
         df_tiras = pd.read_csv(f'{video_dir}/tiras_video.csv')
         lista_toxicidade = df_tiras['toxicidade']
         indexes = list(range(1, len(lista_toxicidade) + 1))
 
-        # Testar se o vídeo possui apenas uma tira
-        if len(lista_toxicidade) == 1:
-            plt.bar(['1'], lista_toxicidade, width=0.5)
-        else:
-            plt.plot(indexes, lista_toxicidade, label='Toxicidade no Vídeo')
-            plt.xticks(indexes)
-            plt.ylim(0.0, 1.0)
-            plt.legend()
-
-        # Configurações em comum
-        plt.xlabel('Tiras')
-        plt.ylabel('Toxicidade')
-        plt.title('Análise da Oscilação de Toxicidade')
-        plt.grid(True)
-        plt.savefig(f'{video_dir}/graficos/grafico_toxicidade.png')
-        plt.close()       
-        
-        # Calcular métricas do vídeo
-        video_id = calcular_metricas_video(video_dir, lista_toxicidade)
-
-        # Gerar gráfico HeatMap do vídeo
         if video_id != None and len(lista_toxicidade) > 1:
+            # Calcular e salvar métricas do vídeo
+            salvar_metricas_video(video_id, video_dir, lista_toxicidade)
+
+            # Gerar gráfico de linhas do vídeo
+            gerar_grafico_linha(video_id, video_dir, indexes, lista_toxicidade) 
+
+            # Gerar gráfico HeatMap do vídeo
             gerar_grafico_heatmap(video_id, video_dir, indexes, lista_toxicidade)
+
+            print(f'Estatísticas e gráficos salvos com sucesso em \'{video_dir}\'!')
     except Exception as e:
-        #console.print(f'Inválido: {video_dir}')
-        pass
+        console.print(f'Inválido (gerar_grafico_linha): {video_dir}')
 
 '''
-    Função para calcular a média, o desvio padrão e a mediana de toxicidade de um vídeo
+    Função para salvar em um csv a média, o desvio padrão, a mediana e o coeficiente de variação de toxicidade de um vídeo
     @param video_dir - Caminho para a pasta do vídeo
     @param lista_toxicidade - Lista da toxicidade de cada tira do vídeo
 '''
-def calcular_metricas_video(video_dir: str, lista_toxicidade: pd.core.series.Series) -> str:
+def salvar_metricas_video(video_id: str, video_dir: str, lista_toxicidade: pd.core.series.Series) -> None:
     try:
         # Calcular métricas
-        df_videos_info = pd.read_csv(f'{video_dir}/videos_info.csv')
-        video_id = df_videos_info['video_id'].iloc[0]
         media = np.mean(lista_toxicidade)
         desvio_padrao = np.std(lista_toxicidade)
         mediana = np.median(lista_toxicidade)
+        coeficiente_variacao = np.inf if media == 0 else desvio_padrao / media
+
         # Salvar métricas como arquivo csv
         estatisticas = {
             'id_video': [video_id],
             'media': [media],
             'desvio_padrao': [desvio_padrao],
-            'mediana': [mediana]
+            'mediana': [mediana],
+            'coeficiente_variacao': [coeficiente_variacao]
         }
         df_estatisticas = pd.DataFrame(estatisticas)
         df_estatisticas.to_csv(f'{video_dir}/estatisticas_video.csv', index=False)
-        return video_id
     except Exception as e:
-        console.print(f'Inválido: {e}')
-        return None
+        console.print(f'Inválido (salvar_metricas_video): {e}')
+
+'''
+    Função para gerar o gráfico de linha da toxicidade de um vídeo
+    @param video_id - Identificador do vídeo analisado
+    @param video_dir - Pasta do youtuber para salvar o gráfico
+    @param indexes - Lista de indexes de 1...N, sendo N a quantidade total de tiras
+    @param lista_toxicidade - Lista da toxicidade de cada tira do vídeo
+'''
+def gerar_grafico_linha(video_id: str, video_dir: str, indexes: list, lista_toxicidade: pd.core.series.Series) -> None:
+   # Testar se o vídeo possui apenas uma tira
+    if len(lista_toxicidade) == 1:
+        plt.bar(['1'], lista_toxicidade, width=0.5)
+    else:
+        plt.plot(indexes, lista_toxicidade, label='Toxicidade no Vídeo')
+        plt.xticks(indexes)
+        plt.ylim(0.0, 1.0)
+        plt.legend()
+
+    # Configurações do gráfico
+    plt.xlabel('Tiras')
+    plt.ylabel('Toxicidade')
+    plt.title(f'Análise da Oscilação de Toxicidade do Vídeo {video_id}')
+    plt.grid(True)
+    plt.savefig(f'{video_dir}/graficos/grafico_toxicidade.png')
+    plt.close()  
 
 '''
     Função para gerar o gráfico de HeatMap da toxicidade de um vídeo
@@ -287,7 +250,7 @@ def gerar_grafico_heatmap(video_id: str, video_dir: str, indexes: list, lista_to
     cbar.set_label('Nível de Toxicidade')
 
     # Personalizar títulos e eixos
-    ax.set_title(f'Heatmap de Toxicidade: {video_id}', fontsize=12)
+    ax.set_title(f'Heatmap de Toxicidade do Vídeo {video_id}', fontsize=12)
     ax.set_xlabel('Segmento de Tempo (minuto)', fontsize=10)
     
     # Configurar os marcadores do eixo X para mostrar os números dos segmentos
@@ -301,66 +264,87 @@ def gerar_grafico_heatmap(video_id: str, video_dir: str, indexes: list, lista_to
     plt.savefig(f'{video_dir}/graficos/grafico_heatmap.png', dpi=150, bbox_inches='tight')
     plt.close(fig)
 
+# ---------------- Estatísticas e Gráficos de um vídeo - FIM ----------------
+
+# ---------------- Gráficos Facet Grid de um youtuber - INÍCIO ----------------
+
 '''
     Função para gerar os gráficos Facet Grid de um youtuber em linhas e em heatmap
     @param youtubers_list - Lista de youtubers a serem analisados
 '''
-def gerar_grafico_facet_grid(youtubers_list: list[str]) -> None:
+def gerar_graficos_facet_grid(youtubers_list: list[str]) -> None:
     # Percorrer youtubers
     for youtuber in youtubers_list:
-        base_dir = f"files/{youtuber}"
-        if os.path.isdir(base_dir):
-            console.print(f">>> " + base_dir)
-            # Criar o Dict com os dados dos vídeos (video_id, lista de toxicidade das tiras)
-            dados_videos = {}
-            # Percorrer os anos
-            for year_folder in os.listdir(base_dir):
-                next_year_dir = os.path.join(base_dir, year_folder)
-                if os.path.isdir(next_year_dir):
-                    # Percorrer os meses
-                    for month_folder in os.listdir(next_year_dir):
-                        next_month_dir = os.path.join(next_year_dir, month_folder)
-                        if os.path.isdir(next_month_dir):
-                            # Percorrer os vídeos
-                            for video_folder in os.listdir(next_month_dir):
-                                next_video_dir = os.path.join(next_month_dir, video_folder)
-                                if os.path.isdir(next_video_dir):  
-                                    try:
-                                        # Encontrar o video_id
-                                        df_videos_info = pd.read_csv(f'{next_video_dir}/videos_info.csv')
-                                        video_id = df_videos_info['video_id'].iloc[0]
+        # Criar caminho base Path para a pasta do youtuber
+        base_path = Path(f'files/{youtuber}')
 
-                                        # Encontrar a toxicidade
-                                        df_tiras = pd.read_csv(f'{next_video_dir}/tiras_video.csv')
-                                        lista_toxicidade = df_tiras['toxicidade']
+        # Se não existir a pasta, continuar para o próximo youtuber
+        if not base_path.is_dir():
+            continue
 
-                                        # Testar se o vídeo não é um Short
-                                        if len(lista_toxicidade) > 2:
-                                            # Adicionar ao Dict
-                                            dados_videos.setdefault(video_id, lista_toxicidade.tolist())
-                                    except Exception as e:
-                                        console.print(f'Inválido: {e}')
+        print(f'>>> Processando youtuber: {youtuber}')
+        
+        # Criar o dicionário para armazenar os dados dos vídeos
+        dados_videos = {}
+
+        # .rglob() é usado para encontrar todos os arquivos 'videos_info.csv'
+        for info_csv_path in base_path.rglob('videos_info.csv'):
+            # A pasta do vídeo é a pasta "pai" do arquivo encontrado
+            video_path = info_csv_path.parent
+            tiras_csv_path = video_path / 'tiras_video.csv'
+
+            try:
+                # Garante que o outro arquivo necessário também exista
+                if not tiras_csv_path.is_file():
+                    continue
+
+                # Encontrar o video_id do primeiro arquivo
+                df_videos_info = pd.read_csv(info_csv_path)
+                video_id = df_videos_info['video_id'].iloc[0]
+
+                # Encontrar a toxicidade do segundo arquivo
+                df_tiras = pd.read_csv(tiras_csv_path)
+                lista_toxicidade = df_tiras['toxicidade']
+
+                # Testar se o vídeo não é um Short
+                if len(lista_toxicidade) > 2:
+                    dados_videos[video_id] = lista_toxicidade.tolist()
+            
+            except Exception as e:
+                print(f'Inválido (gerar_graficos_facet_grid): {e}')
+
+        # Chamar as funções de plotagem
+        if dados_videos:
+            print(f"Dados de {len(dados_videos)} vídeos coletados. Gerando gráficos...")
+            base_dir_str = str(base_path) # Converte Path de volta para string, se necessário
 
             # Gerar o gráfico Facet Grid com linhas
-            gerar_grafico_facet_grid_linhas(base_dir, dados_videos)
+            gerar_grafico_facet_grid_linhas(base_dir_str, dados_videos, youtuber)
 
-            # Gerar o gráfico Facet Grid com heatmap
-            gerar_grafico_facet_grid_heatmap(base_dir, dados_videos)
+            # Gerar o gráfico Facet Grid com heatmap de percentis individuais 
+            gerar_grafico_facet_grid_heatmap_individual(base_dir_str, dados_videos, youtuber)
+
+            # Gerar o gráfico Facet Grid com heatmap de percentis agrupados
+            gerar_grafico_facet_grid_heatmap_agrupado(base_dir_str, dados_videos, youtuber)
+            
+            print(f"Funções de plotagem para {youtuber} foram chamadas com sucesso.")
+        else:
+            print(f"Nenhum vídeo válido (>2 tiras) encontrado para {youtuber}.")
 
 '''
     Função para gerar o gráfico Facet Grid de um youtuber em linhas
     @param base_dir - Pasta para salvar o gráfico
     @param dados_videos - Dicionário com os pares (video_id, lista de toxicidade das tiras do vídeo)
 '''                                   
-def gerar_grafico_facet_grid_linhas(base_dir: str, dados_videos: dict) -> None:
+def gerar_grafico_facet_grid_linhas(base_dir: str, dados_videos: dict, youtuber: str) -> None:
     # Checar se o dicionário ou lista está vazio
     if not dados_videos: 
-        console.print("Nenhum dado de vídeo encontrado para gerar o gráfico. Pulando esta etapa.")
+        console.print('Nenhum dado de vídeo encontrado para gerar o gráfico. Pulando esta etapa.')
         return 
     
     # Configurar a grade do gráfico
     num_videos = len(dados_videos)
-    cols = 3
+    cols = 4
     rows = math.ceil(num_videos / cols)
 
     # Criar a figura e a grade de subplots (`sharey=True` é um atalho para garantir que todos os gráficos na mesma linha compartilhem o eixo Y)
@@ -393,33 +377,82 @@ def gerar_grafico_facet_grid_linhas(base_dir: str, dados_videos: dict) -> None:
         axes[i].set_visible(False)
 
     # Adicionar um título geral para a figura inteira
-    fig.suptitle("Grid de Análise de Toxicidade por Vídeo", fontsize=16, y=0.98)
+    fig.suptitle('Grid de Análise de Toxicidade por Vídeo', fontsize=16, y=0.98)
 
     # Adicionar rótulos comuns para os eixos X e Y
-    fig.supxlabel("Duração do Vídeo (em tiras de 1 minuto)", fontsize=12)
-    fig.supylabel("Nível de Toxicidade", fontsize=12)
+    fig.supxlabel(f'Duração do Vídeo (em tiras de 1 minuto) do {youtuber}', fontsize=12)
+    fig.supylabel('Nível de Toxicidade', fontsize=12)
 
     # Ajustar o layout para evitar sobreposição (`rect` deixa espaço para o suptitle)
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
 
     # Salvar gráfico
-    plt.savefig(f'{base_dir}/linhas_facet_grid.png', dpi=150, bbox_inches='tight')
+    plt.savefig(f'{base_dir}/graficos/linhas_facet_grid.png', dpi=150, bbox_inches='tight')
     plt.close(fig)
 
 '''
-    Função para gerar o gráfico Facet Grid de um youtuber em heatmap
+    Função para gerar o gráfico Facet Grid de um youtuber em heatmap com percentis individuais
+    @param base_dir - Pasta para salvar o gráfico
+    @param youtuber - Nome do youtuber sendo analisado
+'''  
+def gerar_grafico_facet_grid_heatmap_individual(base_dir: str, dados_videos: dict, youtuber: str) -> None:
+    if not dados_videos:
+        print(f'Nenhum dado de percentis normalizados encontrado para {youtuber}.')
+        return
+
+    # Criar o gráfico para visualização
+    print(f"Gerando gráfico com dados de {len(dados_videos)} vídeos...")
+    num_videos = len(dados_videos)
+    cols = 4
+    rows = math.ceil(num_videos / cols)
+    fig, axes = plt.subplots(rows, cols, figsize=(5 * cols, 1.5 * rows), constrained_layout=True)
+    axes = axes.flatten()
+    im = None
+
+    for i, (video_id, coordenadas_percentis) in enumerate(dados_videos.items()):
+        ax = axes[i]
+        dados_heatmap = np.array(coordenadas_percentis).reshape(1, -1)
+        im = ax.imshow(dados_heatmap, cmap='Reds', vmin=0, vmax=1.0, aspect='auto')
+
+        ax.set_title(video_id, fontsize=9)
+        ax.get_yaxis().set_visible(False)
+        ax.set_xticks([0, 25, 50, 75, 100])
+        ax.set_xticklabels(['0%', '25%', '50%', '75%', '100%'], fontsize=8)
+
+    # Limpeza final no gráfico
+    for i in range(num_videos, len(axes)):
+        axes[i].set_visible(False)
+
+    fig.suptitle(f'Heatmap de Toxicidade Normalizada por Vídeo do {youtuber}', fontsize=16)
+    fig.supxlabel('Progresso Percentual da Duração do Vídeo', fontsize=12)
+
+    if im:
+        cbar = fig.colorbar(im, ax=axes.tolist(), shrink=0.8, pad=0.02)
+        cbar.set_label('Nível de Toxicidade (Interpolado)')
+
+    # Salvar o gráfico
+    base_path = Path(base_dir)
+    pasta_graficos = base_path / 'graficos'
+    pasta_graficos.mkdir(parents=True, exist_ok=True)
+    caminho_salvar = pasta_graficos / 'heatmap_facet_grid_percentil_individual.png'
+    plt.savefig(caminho_salvar, dpi=150, bbox_inches='tight')
+    plt.close(fig)
+    print(f"Gráfico Facet Grid de percentis individuais salvo em: {caminho_salvar}")
+
+'''
+    Função para gerar o gráfico Facet Grid de um youtuber em heatmap com percentis agrupados
     @param base_dir - Pasta para salvar o gráfico
     @param dados_videos - Dicionário com os pares (video_id, lista de toxicidade das tiras do vídeo)
 '''  
-def gerar_grafico_facet_grid_heatmap(base_dir: str, dados_videos: dict) -> None:
+def gerar_grafico_facet_grid_heatmap_agrupado(base_dir: str, dados_videos: dict, youtuber: str, num_grupos: int = 20) -> None:
     # Checar se o dicionário ou lista está vazio
     if not dados_videos: 
-        console.print("Nenhum dado de vídeo encontrado para gerar o gráfico. Pulando esta etapa.")
+        console.print('Nenhum dado de vídeo encontrado para gerar o gráfico. Pulando esta etapa.')
         return 
     
-    # Configurar a grade do gráfico
+    # Definir dados de configuração da grade
     num_videos = len(dados_videos)
-    cols = 3
+    cols = 4
     rows = math.ceil(num_videos / cols)
 
     # Criar a figura e a grade de subplots
@@ -435,56 +468,68 @@ def gerar_grafico_facet_grid_heatmap(base_dir: str, dados_videos: dict) -> None:
     for i, (video_id, lista_toxicidade) in enumerate(dados_videos.items()):
         # Selecionar o subplot atual
         ax = axes[i]
-
-        #Remodelar os dados para o formato de uma matriz 2D que o imshow precisa
-        dados_heatmap = np.array(lista_toxicidade).reshape(1, -1)
-
-        # Plotar os dados de toxicidade no subplot
-        im = ax.imshow(dados_heatmap, cmap='Reds', aspect='auto', vmin=0, vmax=1.0)
-        
-        # Definir um título para cada subplot
-        ax.set_title(video_id, fontsize=10)
-
-        # Definir quantidade de tiras
         num_tiras = len(lista_toxicidade)
-        
-        # Se o vídeo for curto, mostrar todos os rótulos
-        if num_tiras <= 20: 
-            posicoes_ticks = np.arange(num_tiras)
-            rotulos_ticks = list(range(1, num_tiras + 1))
-        # Se for longo, mostrar no máximo 10 rótulos bem espaçados
+
+        # Se o vídeo for muito curto para binarizar, apenas mostrar a média geral dele
+        if num_tiras < 5: 
+            # Encontrar a média geral
+            media_geral = np.mean(lista_toxicidade) if lista_toxicidade else 0
+
+            # Criar um 'heatmap' de 1 pixel com a cor da média
+            im = ax.imshow([[media_geral]], cmap='Reds', vmin=0, vmax=1.0, aspect='auto')
+            ax.set_xticks([])
         else:
-            num_rotulos = 10
-            posicoes_ticks = np.linspace(0, num_tiras - 1, num=num_rotulos).astype(int)
-            rotulos_ticks = posicoes_ticks + 1
+            # Criar novo DataFrame para fazer o agrupamento
+            df = pd.DataFrame({'toxicidade': lista_toxicidade})
+            df['percentil'] = (df.index / (num_tiras - 1)) * 100
 
-        # Definir posição dos marcadores
-        ax.set_xticks(posicoes_ticks)
-        ax.set_xticklabels(rotulos_ticks, fontsize=8)
+            # Definir os liites superiores dos grupos. Ex: [0, 5, 10, ..., 100]
+            step = 100 / num_grupos
+            limites_superiores = np.arange(0, 101, step)
+            
+            # Criar os rótulos para cada grupo. Ex: '0-5%', '5-10%'
+            grupos_labels = range(num_grupos) 
 
-        # O eixo Y não é informativo para este tipo de heatmap, então é removido
+            df['grupo_temporal'] = pd.cut(df['percentil'], bins=limites_superiores, labels=grupos_labels, include_lowest=True, right=False)
+            
+            # Calcular a média de toxicidade para cada grupo
+            media_por_grupo = df.groupby('grupo_temporal', observed=True)['toxicidade'].mean()
+            
+            # Reindexar para garantir que todos os bins de 0 a num_grupos-1 existam, preenchendo vazios com 0
+            media_por_grupo = media_por_grupo.reindex(grupos_labels, fill_value=0)
+
+            # Remodelar os dados (1 linha, num_grupos colunas) e plotamos
+            dados_heatmap = np.array(media_por_grupo.values).reshape(1, -1)
+
+            # Plotar dados no gráfico
+            im = ax.imshow(dados_heatmap, cmap='Reds', vmin=0, vmax=1.0, aspect='auto')
+
+            # Rmemover os ticks do eixo X para uma visualização mais limpa
+            ax.set_xticks([])
+
+        # Configurações do subplot individual
+        ax.set_title(video_id, fontsize=9)
         ax.get_yaxis().set_visible(False)
-        
-        # Ajustar os ticks do eixo X para não poluir
-        ax.tick_params(axis='x', labelsize=8)
 
-    # Esconder os eixos dos subplots que não foram usados (se houver)
+    # Limpeza final
     for i in range(num_videos, len(axes)):
         axes[i].set_visible(False)
 
-    # Adiciona um título geral para a figura
-    fig.suptitle("Grid de Heatmaps de Toxicidade por Vídeo", fontsize=16, y=1.02)
-    fig.supxlabel("Duração do Vídeo (em tiras de 1 minuto)", fontsize=12)
+    # Adicionar o título e o subtítulo do grid
+    fig.suptitle(f'Heatmap de Toxicidade por Vídeo (em {num_grupos} Grupos Temporais) do {youtuber}', fontsize=16, y=1.02)
+    fig.supxlabel('Progresso Temporal do Vídeo (de 0% a 100%, agrupado em seções)', fontsize=12)
 
-    #Adicionar UMA ÚNICA barra de cor para a figura inteira
-    # `ax=axes.tolist()`: informa à barra de cor para "roubar" espaço de todos os subplots
-    # `shrink` e `pad` são ajustes finos de posicionamento e tamanho
-    cbar = fig.colorbar(im, ax=axes.tolist(), shrink=0.8, pad=0.02)
-    cbar.set_label("Nível de Toxicidade", fontsize=12)
+    # Adicionar a barra de cor compartilhada, a 'régua' de cores para todos os gráficos
+    if im:
+        cbar = fig.colorbar(im, ax=axes.tolist(), orientation='vertical', shrink=0.8, pad=0.02)
+        cbar.set_label('Toxicidade Média no Grupo')
 
-    # Salvar gráfico
-    plt.savefig(f'{base_dir}/heatmap_facet_grid.png', dpi=150, bbox_inches='tight')
+    plt.savefig(f'{base_dir}/graficos/heatmap_facet_grid_agrupado.png', dpi=150, bbox_inches='tight')
     plt.close(fig)
+
+# ---------------- Gráficos Facet Grid de um youtuber - FIM ----------------
+
+# ---------------- Estatísticas e Gráficos dos percentis de um vídeo - INÍCIO ----------------
 
 '''
     Função para gerar o gráfico de toxicidade dos percentis individuais de cada vídeo
@@ -492,6 +537,10 @@ def gerar_grafico_facet_grid_heatmap(base_dir: str, dados_videos: dict) -> None:
 '''
 def salvar_percentil_individual(video_dir: str) -> None:
     try:
+        # Encontrar identificador do vídeo
+        df_video_info = pd.read_csv(f'{video_dir}/videos_info.csv')
+        video_id = df_video_info['video_id'].iloc[0]
+
         # Encontrar a toxicidade
         df_tiras = pd.read_csv(f'{video_dir}/tiras_video.csv')
         lista_toxicidade = df_tiras['toxicidade']
@@ -534,16 +583,20 @@ def salvar_percentil_individual(video_dir: str) -> None:
         ax.plot(abscissas_originais, coordenadas_originais, 'o--', label=f'Dados Originais ({num_tiras} tiras)',       color='red', alpha=0.7)
 
         # Configurações do gráfico
-        ax.set_title('Análise de Toxicidade por Percentil de Duração do Vídeo', fontsize=16)
+        ax.set_title(f'Análise de Toxicidade por Percentil de Duração do Vídeo {video_id}', fontsize=16)
         ax.set_xlabel('Percentil de Duração do Vídeo (%)', fontsize=12)
         ax.set_ylabel('Nível de Toxicidade', fontsize=12)
         ax.set_xlim(0, 100) # Garante que o eixo X vá de 0 a 100
         ax.grid(True, linestyle='--', alpha=0.6)
         ax.legend()
-        plt.savefig(f'{video_dir}/graficos/grafico_percentis_individuais.png')
-        plt.close()                               
+
+        video_path = Path(video_dir)
+        caminho_salvar = video_path / 'graficos' / 'grafico_percentis_individuais.png'
+        plt.savefig(caminho_salvar, dpi=150)
+        plt.close(fig)     
+        print(f"Gráfico de percentil individual salvo com sucesso em: {caminho_salvar}")                          
     except Exception as e:
-        console.print(f'Inválido: {e}')
+        console.print(f'Inválido (salvar_percentil_individual): {e}')
 
 '''
     Função para gerar o gráfico de toxicidade dos percentis agrupados de cada vídeo
@@ -565,8 +618,9 @@ def salvar_percentil_agrupado(video_dir: str) -> None:
         # Testar se há menos tiras que o número de grupos
         num_grupos = 5
         if num_tiras < num_grupos:
-            num_grupos = num_tiras // 3 + 1
-            if num_grupos == 0: num_grupos = 1
+            num_grupos = num_tiras // 2 + 1 # Ajuste para garantir ao menos 1 tira por grupo em média
+            if num_grupos < 1: num_grupos = 1
+            print(f"Info: Vídeo {video_id} é curto. Usando {num_grupos} grupos em vez de 20.")
 
         # Criar novo DataFrame para fazer o agrupamento
         df_tiras_grupos = pd.DataFrame({'toxicidade': lista_toxicidade})
@@ -609,7 +663,7 @@ def salvar_percentil_agrupado(video_dir: str) -> None:
         ax.bar(x=metricas_por_grupos['grupo_temporal'], 
             height=metricas_por_grupos['mean'], 
             color='skyblue', 
-            label='Toxicidade Média por Bin')
+            label='Toxicidade Média por Grupo')
 
         # Adicionar barras de erro para mostrar a variabilidade (desvio padrão) dentro de cada grupo
         ax.errorbar(x=metricas_por_grupos['grupo_temporal'], 
@@ -617,84 +671,87 @@ def salvar_percentil_agrupado(video_dir: str) -> None:
                     yerr=metricas_por_grupos['std'], 
                     fmt='none', # Não mostra marcador, apenas a barra de erro
                     ecolor='darkred', 
-                    capsize=5, # Tamanho da "tampa" da barra de erro
+                    capsize=5, # Tamanho da 'tampa' da barra de erro
                     label='Desvio Padrão')
 
         # Configurações do Gráfico
         ax.set_title(f'Análise de Toxicidade por Grupos Temporais\nID do Vídeo: {video_id}', fontsize=16)
         ax.set_ylabel('Nível de Toxicidade', fontsize=12)
-        ax.set_xlabel('Percentil de Duração do Vídeo (Agrupado)', fontsize=12)
+        ax.set_xlabel(f'Percentil de Duração do Vídeo {video_id} (Agrupado)', fontsize=12)
         ax.set_ylim(0, 1) # Mantém a escala de 0 a 1
-        plt.xticks(rotation=45, ha='right') # Rotaciona os rótulos do eixo X para não sobrepor
+        plt.xticks(rotation=60, ha='right') # Rotaciona os rótulos do eixo X para não sobrepor
         ax.grid(axis='y', linestyle='--', alpha=0.7)
         ax.legend()        
         plt.tight_layout()
-        plt.savefig(f'{video_dir}/graficos/grafico_percentis_agrupados.png')
-        plt.close()
+
+        video_path = Path(video_dir)
+        caminho_salvar = video_path / 'graficos' / 'grafico_percentis_agrupados.png'
+        plt.savefig(caminho_salvar, dpi=150)
+        plt.close(fig)     
+        print(f"Gráfico de percentil agrupado salvo com sucesso em: {caminho_salvar}")  
     except Exception as e:
-        console.print(f'Inválido: {e}')
+        console.print(f'Inválido (salvar_percentil_agrupado): {e}')
 
 '''
     Função para gerar o gráfico geral de toxicidade dos percentis individuais de cada vídeo
     @param youtubers_list - Lista de youtubers a serem analisados
 '''
 def gerar_grafico_geral_percentil_individual(youtubers_list: list[str]) -> None:
-    # Definir estrutura de dados
+    # Coletar os dados
     matriz_toxicidade = []
-    # Percorrer youtubers
+
     for youtuber in youtubers_list:
-        base_dir = f"files/{youtuber}"
-        if os.path.isdir(base_dir):
-            console.print(f">>>" + base_dir)
-            # Percorrer os anos
-            for year_folder in os.listdir(base_dir):
-                next_year_dir = os.path.join(base_dir, year_folder)
-                if os.path.isdir(next_year_dir):
-                    # Percorrer os meses
-                    for month_folder in os.listdir(next_year_dir):
-                        next_month_dir = os.path.join(next_year_dir, month_folder)
-                        if os.path.isdir(next_month_dir):
-                            # Percorrer os vídeos
-                            for video_folder in os.listdir(next_month_dir):
-                                next_video_dir = os.path.join(next_month_dir, video_folder)
-                                if os.path.isdir(next_video_dir):  
-                                    try:
-                                        df_dados_percentis_normalizados = pd.read_csv(f'{next_video_dir}/dados_percentis_normalizados.csv')
-                                        lista_toxicidade = df_dados_percentis_normalizados['toxicidade_normalizada'].tolist()
-                                        matriz_toxicidade.append(lista_toxicidade)
-                                    except Exception as e:
-                                        console.print(f'Inválido: {e}')
+        base_path = Path(f'files/{youtuber}')
+        
+        if not base_path.is_dir():
+            print(f"Diretório não encontrado para {youtuber}, pulando.")
+            continue
+            
+        print(f'>>> Processando {base_path}')
+        
+        # .rglob() busca o arquivo 'dados_percentis_normalizados.csv' de forma recursiva
+        for csv_path in base_path.rglob('dados_percentis_normalizados.csv'):
+            try:
+                df = pd.read_csv(csv_path)
+                lista_toxicidade = df['toxicidade_normalizada'].tolist()
+                
+                # Verificação de segurança para garantir a integridade da matriz
+                if len(lista_toxicidade) == 101:
+                    matriz_toxicidade.append(lista_toxicidade)
+                else:
+                    print(f"Aviso: Arquivo em {csv_path.parent} não continha 101 pontos e foi ignorado.")
+            
+            except Exception as e:
+                print(f'Inválido ao ler {csv_path}: {e}')
 
-    # Testar se algum valor foi encontrado
+    # Calcular e plotar
     if not matriz_toxicidade:
-        print("Nenhum dado de percentis individuais foi encontrado. Encerrando a função.")
+        print('Nenhum dado de percentis individuais foi encontrado. Encerrando a função (gerar_grafico_geral_percentil_individual).')
         return
-
-    # Calcular a média de cada percentil (coluna)
+    
+    print(f"\nDados de {len(matriz_toxicidade)} vídeos coletados. Calculando métricas e gerando gráfico...")
+    
+    # Calcular a média e o desvio padrão de cada percentil (coluna)
     media_por_percentil = np.mean(matriz_toxicidade, axis=0)
-
-    # Calcular o desvio padrão de cada percentil (coluna)
     desvio_padrao_por_percentil = np.std(matriz_toxicidade, axis=0)
 
     # Criar o gráfico para visualização
     fig, ax = plt.subplots(figsize=(14, 8))
-
-    # Definir o eixo X, que são os percentis de 0 a 100
     percentis = np.arange(101)
 
     # Plotar a linha da média
     ax.plot(percentis, media_por_percentil, label='Toxicidade Média Geral', color='blue', linewidth=2.5)
 
-    # Plotar a área sombreada do desvio padrão (a função fill_between é boa para mostrar variabilidade)
+    # Plotar a área sombreada do desvio padrão
     ax.fill_between(percentis, 
                     media_por_percentil - desvio_padrao_por_percentil, 
                     media_por_percentil + desvio_padrao_por_percentil, 
                     color='blue', 
-                    alpha=0.2, # Deixa a área semi-transparente
+                    alpha=0.2,
                     label='Desvio Padrão')
 
     # Configurações do Gráfico
-    ax.set_title('Tendência Temporal da Toxicidade Média (Todos os Vídeos)', fontsize=18)
+    ax.set_title('Tendência Temporal da Toxicidade Média de Todos os Vídeos', fontsize=18)
     ax.set_xlabel('Percentil de Duração do Vídeo (%)', fontsize=14)
     ax.set_ylabel('Nível de Toxicidade', fontsize=14)
     ax.set_xlim(0, 100)
@@ -704,96 +761,163 @@ def gerar_grafico_geral_percentil_individual(youtubers_list: list[str]) -> None:
     ax.tick_params(labelsize=12)
 
     plt.tight_layout()
-    plt.savefig('files/grafico_geral_percentil_individual.png')
-    plt.close()
+    
+    # Garantir que a pasta 'files' exista antes de salvar
+    os.makedirs('files', exist_ok=True)
+    caminho_salvar = 'files/grafico_geral_percentil_individual.png'
+    plt.savefig(caminho_salvar, dpi=150)
+    plt.close(fig)
+    print(f"Gráfico geral de percentil individual salvo com sucesso em: {caminho_salvar}")
 
 '''
     Função para gerar o gráfico geral de toxicidade dos percentis agrupados de cada vídeo
     @param youtubers_list - Lista de youtubers a serem analisados
 '''
 def gerar_grafico_geral_percentil_agrupado(youtubers_list: list[str]) -> None:
-    # Definir estrutura de dados
+    # Coletar os dados
     lista_dataframes = []
+    print("Iniciando a leitura dos arquivos de estatísticas agrupadas...")
+    
     # Percorrer youtubers
     for youtuber in youtubers_list:
-        base_dir = f"files/{youtuber}"
-        if os.path.isdir(base_dir):
-            console.print(f">>>" + base_dir)
-            # Percorrer os anos
-            for year_folder in os.listdir(base_dir):
-                next_year_dir = os.path.join(base_dir, year_folder)
-                if os.path.isdir(next_year_dir):
-                    # Percorrer os meses
-                    for month_folder in os.listdir(next_year_dir):
-                        next_month_dir = os.path.join(next_year_dir, month_folder)
-                        if os.path.isdir(next_month_dir):
-                            # Percorrer os vídeos
-                            for video_folder in os.listdir(next_month_dir):
-                                next_video_dir = os.path.join(next_month_dir, video_folder)
-                                if os.path.isdir(next_video_dir):  
-                                    try:
-                                        df_estatisticas_percentis_agrupados = pd.read_csv(f'{next_video_dir}/estatisticas_percentis_agrupados.csv')
-                                        lista_dataframes.append(df_estatisticas_percentis_agrupados)
-                                    except Exception as e:
-                                        console.print(f'Inválido: {e}')
+        # Criar caminho base Path para a pasta do youtuber
+        base_path = Path(f'files/{youtuber}')
+
+        # Se não há a pasta do youtuber, continue para o próximo
+        if not base_path.is_dir():
+            continue
+            
+        print(f'>>> Processando {youtuber}')
+        
+        # .rglob() busca o arquivo 'estatisticas_percentis_agrupados.csv' de forma recursiva
+        for csv_path in base_path.rglob('estatisticas_percentis_agrupados.csv'):
+            try:
+                df_estatisticas = pd.read_csv(csv_path)
+                lista_dataframes.append(df_estatisticas)
+            except Exception as e:
+                print(f'Inválido (gerar_grafico_geral_percentil_agrupado): {e}')
 
     # Testar se algum valor foi encontrado
     if not lista_dataframes:
-        print("Nenhum dado de estatísticas agrupadas foi encontrado. Encerrando a função.")
+        print('Nenhum dado de estatísticas agrupadas foi encontrado. Encerrando a função.')
         return
+    
+    print(f"Dados de {len(lista_dataframes)} arquivos carregados. Agregando e gerando gráfico...")
     
     # Concatenar todos os DataFrames de cada vídeo em um único DataFrame mestre
     df_geral = pd.concat(lista_dataframes, ignore_index=True)
 
-    # Para a média ponderada, calcula-se primeiro a soma total da toxicidade (mean * count) por grupo
+    # Calcular da média ponderada
     df_geral['soma_toxicidade'] = df_geral['mean'] * df_geral['count']
-    
-    # Agrupar por grupo temporal e somar a 'soma_toxicidade' e a 'count'
+
+    # Calcular a soma total de cada grupo temporal
     somas_por_grupo = df_geral.groupby('grupo_temporal', observed=True).agg({
-        'soma_toxicidade': 'sum', # toxicidade total do grupo
-        'count': 'sum' # quantidade de tiras total do grupo
+        'soma_toxicidade': 'sum',
+        'count': 'sum'
     })
-    
-    # A média ponderada é a soma total da toxicidade dividida pela contagem total de tiras
+
+    # Calcular a média geral ponderada para cada um dos grupos
     media_geral_ponderada = somas_por_grupo['soma_toxicidade'] / somas_por_grupo['count']
 
-    # Calcular o Desvio Padrão da média dos vídeos (isso mostra a variabilidade ENTRE os vídeos para cada grupo de tempo)
+    # Cálcular o Desvio Padrão da média dos vídeos
     desvio_padrao_geral_das_medias = df_geral.groupby('grupo_temporal', observed=True)['mean'].std()
 
     # Criar o gráfico para visualização
-    fig, ax = plt.subplots(figsize=(14, 8))
-
-    # O eixo X corresponde ao nome dos grupos
+    fig, ax = plt.subplots(figsize=(15, 8))
     grupos_temporais = media_geral_ponderada.index
 
-    # Plotar a linha da média geral ponderada
-    ax.plot(grupos_temporais, media_geral_ponderada, 
-            label='Toxicidade Média Geral (Ponderada)', 
-            color='darkred', 
-            linewidth=2.5,
-            marker='o') # Adiciona um marcador para cada grupo
+    # Plotar as barras com a altura da média
+    ax.bar(x=grupos_temporais, 
+           height=media_geral_ponderada, 
+           color='skyblue', 
+           alpha=0.8,
+           label='Toxicidade Média Ponderada')
 
-    # b) Plotar a área sombreada do desvio padrão
-    ax.fill_between(grupos_temporais, 
-                    media_geral_ponderada - desvio_padrao_geral_das_medias, 
-                    media_geral_ponderada + desvio_padrao_geral_das_medias, 
-                    color='darkred', 
-                    alpha=0.2, 
-                    label='Desvio Padrão (entre vídeos)')
+    # Adicionar as barras de erro para o desvio padrão
+    ax.errorbar(x=grupos_temporais, 
+                y=media_geral_ponderada, 
+                yerr=desvio_padrao_geral_das_medias,
+                fmt='none',
+                ecolor='black', 
+                capsize=5,
+                label='Desvio Padrão (entre vídeos)')
 
     # Configurações do Gráfico
-    ax.set_title('Tendência Temporal da Toxicidade Média (Dados Agrupados)', fontsize=18)
+    ax.set_title('Tendência Temporal da Toxicidade Média de Todos os Vídeos (Dados Agrupados)', fontsize=18)
     ax.set_xlabel('Percentil de Duração do Vídeo (Agrupado)', fontsize=14)
     ax.set_ylabel('Nível de Toxicidade', fontsize=14)
-    ax.set_ylim(0, max(media_geral_ponderada.max() * 1.2, 0.5)) # Ajuste dinâmico do eixo Y
-    ax.grid(True, linestyle='--', alpha=0.6)
-    #plt.xticks(rotation=45, ha='right') # Rotaciona os rótulos do eixo X
+    ax.set_ylim(0, 1)
+    ax.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.xticks(rotation=45, ha='right')
     ax.legend(fontsize=12)
     ax.tick_params(labelsize=12)
 
     plt.tight_layout()
-    plt.savefig('files/grafico_geral_percentil_agrupado.png', dpi=150)
+
+    # Garantir que a pasta 'files' exista antes de salvar
+    os.makedirs('files', exist_ok=True)
+    caminho_salvar = 'files/grafico_geral_percentil_agrupado.png'
+    plt.savefig(caminho_salvar, dpi=150)
     plt.close(fig)
+    print(f"Gráfico geral de barras salvo com sucesso em: {caminho_salvar}")
+
+# ---------------- Estatísticas e Gráficos dos percentis de um vídeo - FIM ----------------
+
+'''
+    Função para organizar o coeficiente de variação dos vídeos de cada youtuber em um gráfico
+    @param youtubers_list: Lisa de youtubers a serem analisados
+'''
+def organizar_coeficiente_variacao(youtubers_list: list[str]) -> None:
+    # Percorrer os youtubers
+    for youtuber in youtubers_list:
+        lista_coeficiente_variacao = []
+        base_dir = f'files/{youtuber}'
+        base_path = Path(base_dir) # Criar um objeto Path para o diretório base
+
+        # Se o diretório do youtuber não existir, pula para o próximo
+        if not base_path.is_dir():
+            continue
+
+        print(f'>>> Coletando dados para {youtuber}')
+        
+        # .rglob('nome_do_arquivo') busca recursivamente em todas as subpastas
+        for csv_path in base_path.rglob('estatisticas_video.csv'):
+            try:
+                df_estatisticas = pd.read_csv(csv_path)
+                # Adicionar o valor à lista, garantindo que a coluna exista
+                if 'coeficiente_variacao' in df_estatisticas.columns:
+                    lista_coeficiente_variacao.append(df_estatisticas['coeficiente_variacao'].iloc[0])
+            except Exception as e:
+                # csv_path.parent é a pasta do vídeo
+                print(f'Inválido ao processar o vídeo em {csv_path.parent}: {e}')
+
+        # Testar se encontrou algum resultado
+        if not lista_coeficiente_variacao:
+            print(f"Nenhum dado de coeficiente de variação encontrado para {youtuber}.")
+            continue # Pula para o próximo youtuber
+        
+        indexes = range(1, len(lista_coeficiente_variacao) + 1)
+
+        fig, ax = plt.subplots(figsize=(12, 7))
+
+        ax.plot(indexes, lista_coeficiente_variacao, label='Coeficiente de Variação', marker='o', linestyle='-')
+        #ax.set_xticks(indexes)
+        ax.set_ylim(0.0, max(lista_coeficiente_variacao) * 1.2)
+        ax.legend()
+        ax.set_xlabel('Vídeos (em ordem de processamento)')
+        ax.set_ylabel('Coeficiente de Variação')
+        ax.set_title(f'Análise do Coeficiente de Variação de Toxicidade dos Vídeos do {youtuber}')
+        ax.grid(True, linestyle='--')
+        
+        # Garantir que a pasta de gráficos exista
+        pasta_graficos = base_path / 'graficos' # Usando pathlib para juntar caminhos
+        pasta_graficos.mkdir(parents=True, exist_ok=True)
+        
+        caminho_salvar = pasta_graficos / 'coeficiente_variacao.png'
+        plt.savefig(caminho_salvar, dpi=150)
+        plt.close(fig)
+        print(f"Gráfico geral de coeficiente de variação salvo com sucesso em: {caminho_salvar}")
+    
 
 if __name__ == '__main__':
     #lista_youtubers =  ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Jazzghost', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'meu nome é david', 'Papile', 'TazerCraft', 'Tex HS']
@@ -801,15 +925,15 @@ if __name__ == '__main__':
     lista_youtubers =  ['AuthenticGames', 'Cadres']
 
     #percorrer_video(lista_youtubers, gerar_grafico_linha)
-    #estatisticas_youtuber('Kass e KR')
 
     # Gráficos do Lucas
-    #percorrer_video(lista_youtubers, gerar_grafico_linha)
-    #gerar_grafico_facet_grid(lista_youtubers)
+    #percorrer_video(lista_youtubers, toxicidade_video)
     #percorrer_video(lista_youtubers, salvar_percentil_individual)
     #percorrer_video(lista_youtubers, salvar_percentil_agrupado)
+    #gerar_graficos_facet_grid(lista_youtubers)
     #gerar_grafico_geral_percentil_individual(lista_youtubers)
-    gerar_grafico_geral_percentil_agrupado(lista_youtubers)
+    #gerar_grafico_geral_percentil_agrupado(lista_youtubers)
+    #organizar_coeficiente_variacao(lista_youtubers)
 
     # Gráficos do Augusto
     #salvar_tiras_total_youtubers(lista_youtubers)
