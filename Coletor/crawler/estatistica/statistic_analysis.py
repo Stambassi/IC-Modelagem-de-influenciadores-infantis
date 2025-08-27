@@ -599,6 +599,73 @@ def salvar_percentil_individual(video_dir: str) -> None:
         console.print(f'Inválido (salvar_percentil_individual): {e}')
 
 '''
+    Função para gerar o gráfico de toxicidade dos decis individuais de cada vídeo
+    @param video_dir - Pasta do vídeo para salvar o gráfico
+'''
+def salvar_decil_individual(video_dir: str) -> None:
+    try:
+        # Encontrar identificador do vídeo
+        df_video_info = pd.read_csv(f'{video_dir}/videos_info.csv')
+        video_id = df_video_info['video_id'].iloc[0]
+
+        # Encontrar a toxicidade
+        df_tiras = pd.read_csv(f'{video_dir}/tiras_video.csv')
+        lista_toxicidade = df_tiras['toxicidade']
+
+        # Encontrar o número de tiras do vídeo
+        num_tiras = len(lista_toxicidade)
+
+        # Definir os valores do eixo Y originais
+        coordenadas_originais = lista_toxicidade
+
+        # Encontrar as posições em percentis das tiras originais (np.linspace cria N pontos igualmente espaçados de 0 a 10)
+        abscissas_originais = np.linspace(0, 10, num=num_tiras)
+
+        # Encontrar as posições dos percetis desejados
+        abscissas_decis = np.arange(11) # Cria um array [0, 1, 2, ..., 11]
+
+        # Interpolar para encontrar valores intermediários (np.interp(onde_queremos_saber, posicoes_originais, valores_originais))
+        coordenadas_decis = np.interp(abscissas_decis, abscissas_originais, coordenadas_originais)
+
+        # Estruturar os dados em um formato tabular com colunas claras
+        dados_para_salvar = {
+            'percentil': abscissas_decis,
+            'toxicidade_normalizada': coordenadas_decis
+        }
+        df_decis = pd.DataFrame(dados_para_salvar)
+
+        # Definir o caminho do arquivo de saída
+        caminho_csv = f'{video_dir}/dados_decis_normalizados.csv'
+
+        # Salvar o DataFrame em um arquivo CSV
+        df_decis.to_csv(caminho_csv, index=False, float_format='%.8f')
+    
+        # Criar o gráfico de visualização
+        fig, ax = plt.subplots(figsize=(12, 7))
+
+        # Plota a curva interpolada, que é suave e tem 11 pontos
+        ax.plot(abscissas_decis, coordenadas_decis, label='Curva de Decis (Interpolada)', color='blue', linewidth=2.5)
+
+        # Plota os pontos de dados originais para vermos como a interpolação se comportou
+        ax.plot(abscissas_originais, coordenadas_originais, 'o--', label=f'Dados Originais ({num_tiras} tiras)', color='red', alpha=0.7)
+
+        # Configurações do gráfico
+        ax.set_title(f'Análise de Toxicidade por Decis de Duração do Vídeo {video_id}', fontsize=16)
+        ax.set_xlabel('Decil de Duração do Vídeo (%)', fontsize=12)
+        ax.set_ylabel('Nível de Toxicidade', fontsize=12)
+        ax.set_xlim(0, 10) # Garante que o eixo X vá de 0 a 10
+        ax.grid(True, linestyle='--', alpha=0.6)
+        ax.legend()
+
+        video_path = Path(video_dir)
+        caminho_salvar = video_path / 'graficos' / 'grafico_decis_individuais.png'
+        plt.savefig(caminho_salvar, dpi=150)
+        plt.close(fig)     
+        print(f"Gráfico de decil individual salvo com sucesso em: {caminho_salvar}")                          
+    except Exception as e:
+        console.print(f'Inválido (salvar_decil_individual): {e}')
+
+'''
     Função para gerar o gráfico de toxicidade dos percentis agrupados de cada vídeo
     @param video_dir - Pasta do vídeo para salvar o gráfico
 '''
@@ -910,7 +977,7 @@ def organizar_coeficiente_variacao(youtubers_list: list[str]) -> None:
         ax.grid(True, linestyle='--')
         
         # Garantir que a pasta de gráficos exista
-        pasta_graficos = base_path / 'graficos' # Usando pathlib para juntar caminhos
+        pasta_graficos = base_path / 'graficos'
         pasta_graficos.mkdir(parents=True, exist_ok=True)
         
         caminho_salvar = pasta_graficos / 'coeficiente_variacao.png'
@@ -929,6 +996,7 @@ if __name__ == '__main__':
     # Gráficos do Lucas
     #percorrer_video(lista_youtubers, toxicidade_video)
     #percorrer_video(lista_youtubers, salvar_percentil_individual)
+    percorrer_video(lista_youtubers, salvar_decil_individual)
     #percorrer_video(lista_youtubers, salvar_percentil_agrupado)
     #gerar_graficos_facet_grid(lista_youtubers)
     #gerar_grafico_geral_percentil_individual(lista_youtubers)
