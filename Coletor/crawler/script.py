@@ -657,7 +657,121 @@ def sentiment_analisys(text):
     }
     #print(scores_dict)
     return scores
+
+def coletar_videos_youtuber(lista_youtuber: list[str]):
+
+   # Configurar com aspas duplas os termos chaves -> testar primeiro....
+    youtuberListPath = "youtuberslist.csv"
+    channel_data  = pd.read_csv(youtuberListPath)
+    queries = config["queries"]
+
+    df_atual_date = pd.read_csv('files/atual_date.csv', header=None)
+
+    GlobalState.get_instance().set_state("status", "working")
+
+    # Captura a data atual de busca do dataframe atual_date (year, month, day)
+    atual_date = {
+        "year": df_atual_date.iloc[0, 0],
+        "month": df_atual_date.iloc[0, 1],
+        "day": df_atual_date.iloc[0, 2],
+    }
+
+    start_date = datetime(config['start_date'][0], config['start_date'][1], config['start_date'][2]) #Data inicial da coleta
+    #end_date = datetime(config['end_date'][0], config['end_date'][1], config['end_date'][2])
+    end_date = datetime(atual_date["year"], atual_date["month"], atual_date["day"]) #Data final 
+    interval_type = "monthly" #Intervalo da busca, se é mensal(monthtly), ou semanal (weekly)
+    REGION_CODE = config['region_code']
+    RELEVANCE_LANGUAGE = config['relevance_language']
+    TOP_COMMENTED = False #Pegar os vídeos mais comentados? Não vale a pena porque está retornando vídeo do tema...
+    number_of_videos_to_process = 0
+    REQUIRE_TITLE_KEYWORDS = False # Forçar o processamento dos vídeos e comentários com determinadas keywords nos títulos...
     
+    processed_videos = set()
+
+    # Tenta carregar vídeos já processados
+    try:
+        with open('files/processed_videos.csv', 'r') as file:
+            processed_videos = {row[0] for row in csv.reader(file)}
+    except FileNotFoundError:
+        pass  # Continua com o conjunto vazio se o arquivo não existir
+
+    api_manager = YouTubeAPIManager.get_instance()  # Obtendo a instância do objeto
+    
+    connectCheckAPI() # Conecta com a API de status -> Caso não configurou, ignore
+
+
+    # Comeco da coleta de dados, implementação funciona com 3 repeticoes: A maior sobre intervalo de datas, determinado pelo arquivo atual_date
+    # e as datas no config, depois por cada youtuber e por ultimo pelas querys
+
+    for start_interval, end_interval in generate_date_intervals(start_date, end_date, interval_type):
+        # Atualiza o atual_date.csv para cada iteração do gerador de intervalos
+        with open("files/atual_date.csv", "w", newline="") as csvfile:
+            fieldnames = ["year", "month", "day"]
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+            writer.writerow({
+                "year": end_interval.year,
+                "month": end_interval.month,
+                "day": end_interval.day
+            })
+
+        # Aqui ocorre o loop para a coleta de dados (Realiza uma vez para cada query com um youtuber 
+        # depois muda o youtuber dentro da lista passada como parametro)     
+        for youtuber in lista_youtuber:
+
+            console.rule(f"Youtuber: {youtuber} ({start_interval} - {end_interval})")
+            channel_id = channel_data.loc[channel_data['nome'] == youtuber, 'channel_id'].item()
+            create_files_path(youtuber) # Cria diretório files para armazenar saidas
+
+            for query in queries:
+    
+                print(f">>> Query: {query}")
+                GlobalState.get_instance().set_state("atual_query", query)
+                #GlobalState.get_instance().set_state("query_progress", f"{queries.index(query) + 1}/{quantidadeQuerys}")
+            
+                published_after = start_interval.isoformat() + "Z"
+                published_before = end_interval.isoformat() + "Z"
+                video_details_list = []
+                #print(channel_data)
+                search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE,channel_id) 
+                videos = search_response.get("items", [])
+                total_videos = len(videos)
+                    
+                if total_videos == 0:  # Verifica se search_response foi obtido com sucesso
+                    console.log("[red]Não foi possível obter uma resposta da API.[/] Movendo para a próxima consulta.")
+                    continue
+                
+                for index, item in enumerate(videos, start=1):
+                    
+                    VIDEO_TITLE = item['snippet']['title'].lower()
+
+                    key_words = config['key_words']
+
+                    # Verifica se o título possui as palavras chave
+                    if any((word.lower() in VIDEO_TITLE for word in key_words) or len(key_words) == 0):
+                        video_id = item['id']['videoId']
+                        print(f"Processando vídeo {index} de {total_videos}: ID = {video_id}")
+                        if video_id not in processed_videos:
+                            video_details = get_video_details(video_id)
+                            comment_count = video_details['comment_count']
+                            data_publicacao_Video = video_details['published_at']
+                            
+                            anoPublicacaoVideo = data_publicacao_Video[0:4]
+                            mesPublicacaoVideo = nomeMesAno(data_publicacao_Video[5:7])
+
+                            
+                            #a = input('').split("")[0]
+                            #print(a)
+                        
+                            console.print(f"[cyan]Título[/]: {video_details['title']}, Quantidade de comentários: [bold green]{video_details['comment_count']}[/]")
+                            atualizarUltimaDatadeColeta(youtuber,mesPublicacaoVideo,anoPublicacaoVideo)
+                            if comment_count > 0:
+                                process_video(video_id, processed_videos, youtuber, video_details, anoPublicacaoVideo, mesPublicacaoVideo)
+
+                console.log(f"Coleta concluída para a consulta: {query} entre {start_interval} e {end_interval}")
+                console.print(">> Canal analisado foi: [bold green]"+youtuber+"[/]")
+                
+
 def main():
 
    # Configurar com aspas duplas os termos chaves -> testar primeiro....

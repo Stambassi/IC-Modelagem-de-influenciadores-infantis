@@ -1,4 +1,5 @@
 from InquirerPy import prompt
+from InquirerPy import inquirer
 import pandas as pd
 from googleapiclient.discovery import build
 from rich.console import Console
@@ -23,8 +24,7 @@ perguntas = [
         "type": "list",
         "message": "Escolha uma ação",
         "choices": ["Mostrar Lista de influenciadores pesquisados", "Adicionar novo(s) influenciadore(s)", 
-        "Começar a coleta de dados", "Analisar dados","Gerar speech-to-text de todos os videos",
-        "Gerar speech-to-text de apenas um youtuber","Reiniciar data de coleta","Sair"]
+        "Coletar dados", "Analisar dados","Transcrever vídeos","Reiniciar data de coleta","Sair"]
     },
     {
         "type": "list",
@@ -35,6 +35,14 @@ perguntas = [
         "type": "list",
         "message": "Qual tamanho do modelo do Whisper?",
         "choices": ["tiny", "base", "small", "medium", "large","turbo"]
+    },{
+        "type": "list",
+        "message": "Coletar dados >> Coletar de todos os youtubers ou escolher alguns?",
+        "choices": ["Todos","Escolher","Voltar"]
+    },{
+        "type": "list",
+        "message": "Transcrever vídeo >> Transcrever de todos os youtubers ou apenas um?",
+        "choices": ["Todos","Escolher","Voltar"]
     }
 ]
 
@@ -124,7 +132,7 @@ def adicionar_influenciador():
     df.to_csv(csv_path, mode='a', index=False, header=header)
     print(" ")
 
-def gerar_pergunta_youtube():
+def gerar_pergunta_youtube(varios=False):
     try:
         df = pd.read_csv(csv_path)
         if df.empty:
@@ -133,7 +141,9 @@ def gerar_pergunta_youtube():
             youtubers = []
             for _, row in df.iterrows():
                 youtubers.append(str(row["nome"]))
-            return [{ "type": "list", "message": "Escolha um youtuber", "choices": youtubers }]
+            if varios:
+                return youtubers
+            return [{ "type": "list", "message": "Escolha um youtuber", "choices": youtubers}]
 
     except FileNotFoundError:
         console.print("Lista [red]vazia[/]")
@@ -241,29 +251,46 @@ def main():
             mostrar_lista_influenciadores()
         elif resultado [0] == "Adicionar novo(s) influenciadore(s)":
             adicionar_influenciador()
-        elif resultado [0] == "Começar a coleta de dados":
-            console.print(">> [green]Coletando dados[/]")
-            script.main()
-            print(" ")
+        elif resultado[0] == "Coletar dados":
+            resultado_escolha = prompt(perguntas[3])
+            if resultado_escolha[0] == "Todos":
+                console.print(">> [green]Coletando dados[/]")
+                script.main()
+                print(" ")
+            elif resultado_escolha[0] == "Escolher":
+                lista_total_youtubers = gerar_pergunta_youtube(varios=True)
+                lista_youtubers = inquirer.checkbox(
+                    message="Marque youtubers desejados (use <espaço> para escolher e <enter> para finalizar escolhas)",
+                    choices=lista_total_youtubers,  
+                    validate=lambda result: len(result) >= 1,
+                    invalid_message="Escolha pelo menos um youtuber",).execute()
+                script.coletar_videos_youtuber(lista_youtubers)
+                print(" ")
+            elif resultado_escolha[0] == "Voltar":
+                print("Voltando...")
         elif resultado[0] == "Analisar dados":
             console.print(">> [green]Analisando dados[/]")
             analise_completa()
             print(" ")
-        elif resultado[0] == "Gerar speech-to-text de todos os videos":
-            modelo = prompt(perguntas[2])
-            console.print(">> [green]Gerando speech-to-text[/]")
-            print(f"Modelo escolhido: "+modelo[0])
-            video_process.process_all_videos(modelo[0])
-            print(" ")
-        elif resultado[0] == "Gerar speech-to-text de apenas um youtuber":
-            modelo = prompt(perguntas[2])
-            pergunta_youtuber = gerar_pergunta_youtube()
-            print(" ")
-            youtuber = prompt(pergunta_youtuber)
-            print(youtuber)
-            console.print(">> [green]Gerando speech-to-text do "+youtuber[0])
-            video_process.process_youtuber_video(modelo[0],youtuber[0])
-            print(" ")
+        elif resultado[0] == "Transcrever vídeos":
+            resultado_escolha = prompt(perguntas[4])
+            if resultado_escolha[0] == "Todos":
+                modelo = prompt(perguntas[2])
+                console.print(">> [green]Transcrevendo vídeos de todos[/]")
+                print(f"Modelo escolhido: "+modelo[0])
+                video_process.process_all_videos(modelo[0])
+                print(" ")
+            elif resultado_escolha[0] == "Escolher":
+                modelo = prompt(perguntas[2])
+                pergunta_youtuber = gerar_pergunta_youtube()
+                print(" ")
+                youtuber = prompt(pergunta_youtuber)
+                print(youtuber)
+                console.print(">> [green]Transcrevendo vídeos do "+youtuber[0])
+                video_process.process_youtuber_video(modelo[0],youtuber[0])
+                print(" ")
+            elif resultado_escolha[0] == "Voltar":
+                print("Voltando...")
         elif resultado[0] == "Reiniciar data de coleta":
             data = reset()
             console.print(">> Dia de coleta reinciado para: "+str(data[2])+"/"+str(data[1])+"/"+str(data[0]))
