@@ -178,7 +178,9 @@ def atualizar_video_total_transcritos(youtuber):
     """
     base_dir = f"files/{youtuber}"
     videos = 0
-    if os.path.isdir(base_dir):
+    df = pd.read_csv(youtuberListPath)
+
+    if os.path.isdir(base_dir) and youtuber in df.values:
         # andar pelos anos
         for year_folder in os.listdir(base_dir):
             next_year_dir = os.path.join(base_dir, year_folder)
@@ -267,7 +269,7 @@ def process_youtuber_video(model, youtuber):
                                     console.print("[bold cyan]>>> Transcrevendo Video:[/] "+youtuber+" ("+folder+")", overflow="ellipsis")
                                     process_video(csv_path,folder_path, model, youtuber)
                                     youtuber_data.loc[youtuber_data.nome == youtuber, 'videosTranscritos'] += 1
-                                    youtuber_data.to_csv(youtuberListPath)
+                                    youtuber_data.to_csv(youtuberListPath, index=False)
 def process_all_videos(model):
     """
     Funcao para realizar o speech-to-text em todos os videos coletados
@@ -435,14 +437,16 @@ def save_tiras():
                     df_tiras.to_csv(f"{next_video_dir}/tiras_video.csv", index_label='index')
 
 
+
+
 def main():
     #console.rule("tira por tempo")
     #gerar_tira(60,"")
     #console.rule("tira por frase")
     #gerar_frases("files/OEPkmsJmY2I_text_small.json")
     #console.rule("tira por tempo e frase")
-    #save_tiras()
-    gerar_tira_frase_tempo(60, "files/AuthenticGames/2023/Novembro/MEU AMIGO visitou MEU MUNDO de MINECRAFT! @spok/video_text.json")
+    save_tiras()
+    #gerar_tira_frase_tempo(60, "files/AuthenticGames/2023/Novembro/MEU AMIGO visitou MEU MUNDO de MINECRAFT! @spok/video_text.json")
 
 
 if __name__ == "__main__":

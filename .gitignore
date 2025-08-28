@@ -3,3 +3,5 @@
 
 # Para ignorar as configurações de máquina
 /Coletor/crawler/.venv
+
+.dvc/

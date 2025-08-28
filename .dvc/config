@@ -1,0 +1,2 @@
+['remote "meu_azure_storage"']
+    url = azure://dados-dvc
