@@ -266,10 +266,13 @@ def process_youtuber_video(model, youtuber):
                             if os.path.isdir(folder_path):
                                 csv_path = os.path.join(folder_path, 'videos_info.csv')
                                 if os.path.exists(csv_path):
-                                    console.print("[bold cyan]>>> Transcrevendo Video:[/] "+youtuber+" ("+folder+")", overflow="ellipsis")
-                                    process_video(csv_path,folder_path, model, youtuber)
-                                    youtuber_data.loc[youtuber_data.nome == youtuber, 'videosTranscritos'] += 1
-                                    youtuber_data.to_csv(youtuberListPath, index=False)
+                                    try:
+                                        console.print("[bold cyan]>>> Transcrevendo Video:[/] "+youtuber+" ("+folder+")", overflow="ellipsis")
+                                        process_video(csv_path,folder_path, model, youtuber)
+                                        youtuber_data.loc[youtuber_data.nome == youtuber, 'videosTranscritos'] += 1
+                                        youtuber_data.to_csv(youtuberListPath, index=False)
+                                    except Exception as e:
+                                        console.log(f"[red]ERRO[/]: {e}",log_locals=True)
 def process_all_videos(model):
     """
     Funcao para realizar o speech-to-text em todos os videos coletados
