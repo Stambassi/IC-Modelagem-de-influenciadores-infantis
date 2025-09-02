@@ -191,12 +191,14 @@ def gerar_graficos_youtuber(youtubers_list: list[str]) -> None:
             plt.savefig(f"threshold/{youtuber}/grafico_{value}.png", dpi=300, bbox_inches='tight')
             plt.close()
 
-lista_youtubers =  ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Geleia', 'Jazzghost', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'meu nome é david', 'Papile', 'TazerCraft', 'Tex HS']
+#lista_youtubers =  ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Geleia', 'Jazzghost', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'meu nome é david', 'Papile', 'TazerCraft', 'Tex HS']
+
+lista_youtubers = ['Robin Hood Gamer', 'Julia MineGirl', 'Tex HS']
 
 # lista_youtubers =  ['AuthenticGames']
 
 # atualizar_geral(lista_youtubers)
-# atualizar_tiras(lista_youtubers)
+atualizar_tiras(lista_youtubers)
 
 #gerar_graficos_youtuber(lista_youtubers)
 #gerar_graficos_tiras(lista_youtubers)

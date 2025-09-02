@@ -1,9 +1,7 @@
 import yt_dlp
 import os
-import wave
 import json
 import csv
-import subprocess
 import time
 
 import whisper 

@@ -224,7 +224,7 @@ def gerar_grafico_linha(video_id: str, video_dir: str, indexes: list, lista_toxi
     plt.ylabel('Toxicidade')
     plt.title(f'Análise da Oscilação de Toxicidade do Vídeo {video_id}')
     plt.grid(True)
-    plt.savefig(f'{video_dir}/graficos/grafico_toxicidade.png')
+    plt.savefig(f'{video_dir}/graficos/grafico_toxicidade.png', dpi=150)
     plt.close()  
 
 '''
@@ -989,16 +989,17 @@ def organizar_coeficiente_variacao(youtubers_list: list[str]) -> None:
 if __name__ == '__main__':
     #lista_youtubers =  ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Jazzghost', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'meu nome é david', 'Papile', 'TazerCraft', 'Tex HS']
 
-    lista_youtubers =  ['AuthenticGames', 'Cadres']
+    #lista_youtubers =  ['AuthenticGames', 'Cadres']
 
-    #percorrer_video(lista_youtubers, gerar_grafico_linha)
+    lista_youtubers = ['Robin Hood Gamer', 'Julia MineGirl', 'Tex HS']
+
 
     # Gráficos do Lucas
     #percorrer_video(lista_youtubers, toxicidade_video)
-    #percorrer_video(lista_youtubers, salvar_percentil_individual)
-    percorrer_video(lista_youtubers, salvar_decil_individual)
-    #percorrer_video(lista_youtubers, salvar_percentil_agrupado)
-    #gerar_graficos_facet_grid(lista_youtubers)
+    percorrer_video(lista_youtubers, salvar_percentil_individual)
+    #percorrer_video(lista_youtubers, salvar_decil_individual)
+    percorrer_video(lista_youtubers, salvar_percentil_agrupado)
+    gerar_graficos_facet_grid(lista_youtubers)
     #gerar_grafico_geral_percentil_individual(lista_youtubers)
     #gerar_grafico_geral_percentil_agrupado(lista_youtubers)
     #organizar_coeficiente_variacao(lista_youtubers)
