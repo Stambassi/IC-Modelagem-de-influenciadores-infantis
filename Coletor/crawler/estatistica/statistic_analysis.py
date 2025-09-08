@@ -995,7 +995,7 @@ if __name__ == '__main__':
 
 
     # Gráficos do Lucas
-    #percorrer_video(lista_youtubers, toxicidade_video)
+    percorrer_video(lista_youtubers, toxicidade_video)
     percorrer_video(lista_youtubers, salvar_percentil_individual)
     #percorrer_video(lista_youtubers, salvar_decil_individual)
     percorrer_video(lista_youtubers, salvar_percentil_agrupado)
