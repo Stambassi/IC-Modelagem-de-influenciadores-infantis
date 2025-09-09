@@ -355,12 +355,12 @@ def analisar_distribuicao_estacionaria_youtubers(youtubers_list: list[str], n: i
     # Definir o caminho para o arquivo de saída
     output_dir = Path('files/transicoes')
 
-    # Garante que o diretório 'files/transicoes' exista
+    # Garantir que o diretório 'files/transicoes' exista
     output_dir.mkdir(exist_ok=True) 
 
     output_path = output_dir / f'distribuicao_estacionaria_geral_{n}.csv'
 
-    # 2. Salva o DataFrame em um arquivo CSV.
+    # Salvar o DataFrame em um arquivo CSV.
     df_resultados.to_csv(output_path, index=True, index_label='youtuber')
 
     console.print(f"\nResultados da distribuição estacionária salvos em: [green]{output_path}[/green]")
@@ -436,19 +436,24 @@ def analisar_tempo_permanencia_youtubers(youtubers_list: list[str], n: int = 4) 
 if __name__ == '__main__':
     lista_youtubers = ['Robin Hood Gamer', 'Julia MineGirl', 'Tex HS']
 
-    gerar_histograma_toxicidade(lista_youtubers)
+    #gerar_histograma_toxicidade(lista_youtubers)
 
+    salvar_transicoes(lista_youtubers, 3)
     #salvar_transicoes(lista_youtubers, 4)
     #salvar_transicoes(lista_youtubers, 5)
 
+    salvar_matriz_transicao_video(lista_youtubers, 3)
     #salvar_matriz_transicao_video(lista_youtubers, 4)
     #salvar_matriz_transicao_video(lista_youtubers, 5)
 
+    salvar_matriz_transicao_youtubers(lista_youtubers, 3)
     #salvar_matriz_transicao_youtubers(lista_youtubers, 4)
     #salvar_matriz_transicao_youtubers(lista_youtubers, 5)
 
+    analisar_distribuicao_estacionaria_youtubers(lista_youtubers, 3)
     #analisar_distribuicao_estacionaria_youtubers(lista_youtubers, 4)
     #analisar_distribuicao_estacionaria_youtubers(lista_youtubers, 5)
 
+    analisar_tempo_permanencia_youtubers(lista_youtubers, 3)
     #analisar_tempo_permanencia_youtubers(lista_youtubers, 4)
     #analisar_tempo_permanencia_youtubers(lista_youtubers, 5)
