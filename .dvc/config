@@ -1,2 +1,4 @@
+[core]
+    remote = meu_azure_storage
 ['remote "meu_azure_storage"']
     url = azure://dados-dvc
