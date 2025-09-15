@@ -150,7 +150,6 @@ def salvar_transicoes(youtubers_list: list[str], n: int = 4) -> None:
             except Exception as e:
                 console.print(f'Inválido (salvar_transicoes): {e}')
 
-
 '''
     Função para criar e persistir a Matriz de Transição da Cadeia de Markov para cada vídeo
     @param youtubers_list - Lista de youtubers a serem analisados

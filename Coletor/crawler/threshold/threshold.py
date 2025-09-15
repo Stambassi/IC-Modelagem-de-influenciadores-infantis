@@ -108,10 +108,27 @@ def atualizar_tiras(youtubers_list: list[str]) -> None:
                                     tiras_path = os.path.join(folder_path, 'tiras_video.csv')
                                     if os.path.exists(tiras_path):
                                         data = pd.read_csv(tiras_path)
+                                        
+                                        positividade = []
+                                        neutralidade = []
                                         toxicidade = []
+                                        grupo = []
+
                                         for texto in data['tiras']:
-                                            toxicidade.append(analisar_toxicidade(texto)['NEG'])
+                                            analise_sentimento = analisar_toxicidade(texto)
+                                            positividade.append(analise_sentimento['POS'])
+                                            neutralidade.append(analise_sentimento['NEU'])
+                                            toxicidade.append(analise_sentimento['NEG'])
+                                            
+                                            chave_max = max(analise_sentimento, key=analise_sentimento.get)
+
+                                            grupo.append(chave_max)
+                                        
+                                        data['positividade'] = positividade
+                                        data['neutralidade'] = neutralidade
                                         data['toxicidade'] = toxicidade
+                                        data['grupo'] = grupo
+                                        
                                         data.to_csv(tiras_path, index=False)
 
 '''
