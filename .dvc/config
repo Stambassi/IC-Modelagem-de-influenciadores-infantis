@@ -1,4 +1,5 @@
 [core]
     remote = meu_azure_storage
+    autostage = true
 ['remote "meu_azure_storage"']
     url = azure://dados-dvc
