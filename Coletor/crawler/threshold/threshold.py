@@ -9,127 +9,7 @@ from scipy.ndimage import gaussian_filter1d
 from rich.console import Console
 
 analyzer = create_analyzer(task="sentiment", lang="pt")
-console = Console()
-'''
-    Função para atualizar os valores de toxicidade dos vídeos de um youtuber
-    @param sentiment_dict - Dicionário com os novos valores de toxicidade da análise de sentimento
-    @param csv_file_path - Arquivo csv do youtuber a ser atualizado
-    @param video_name - Nome do vídeo analisado
-'''
-def update_data(sentiment_dict: dict, csv_file_path: str, video_name: str) -> None:
-    try:
-        # Criar novo dicionário no formato do arquivo csv com os valores novos
-        new_row = {
-            "negative": sentiment_dict["NEG"],
-            "positive": sentiment_dict["POS"],
-            "neutral": sentiment_dict["NEU"],
-            "video_name": video_name
-        }
-        
-        # Crar DataFrame a partir de uma lista [] de dicionários
-        new_df = pd.DataFrame([new_row])
-        
-        # Testar se o caminho do arquivo csv existe
-        if os.path.exists(csv_file_path):
-            existing_df = pd.read_csv(csv_file_path)
-            updated_df = pd.concat([existing_df, new_df], ignore_index=True)
-        else:
-            updated_df = new_df
-        
-        # Atualizar o arquivo csv com o DataFrame atualizado
-        updated_df.to_csv(csv_file_path, index=False)
-    except Exception as e:
-        print(f"Erro: {e}")
-
-'''
-    Função para analisar a toxicidade de determinado texto
-    @param texto - Lista com o trecho a ser analisado pelo modelo
-    @return Dict - Dicionário com as probabilidades NEG, NEU e POS
-'''
-def analisar_toxicidade(texto: str) -> dict:
-    return analyzer.predict(texto).probas
-
-
-'''
-    Função para percorrer as pastas dos youtubers, encontrar os vídeos com transcrição e aplicar a análise de sentimento geral
-    @param youtubers_list - Lista de youtubers a serem analisados
-'''
-def atualizar_geral(youtubers_list: list[str]) -> None:
-    for youtuber in youtubers_list:
-        base_dir = f"files/{youtuber}"
-        csv_file = f"threshold/{youtuber}/sentiment.csv"
-        if os.path.isdir(base_dir):
-            # andar pelos anos
-            print(f">>>>>>>>"+base_dir)
-            for year_folder in os.listdir(base_dir):
-                next_year_dir = os.path.join(base_dir, year_folder)
-                if os.path.isdir(next_year_dir):
-                    # andar pelos meses
-                    for month_folder in os.listdir(next_year_dir):
-                        next_month_dir = os.path.join(next_year_dir, month_folder)
-                        if os.path.isdir(next_month_dir):
-                        # andar pelos videos
-                            for folder in os.listdir(next_month_dir):
-                                folder_path = os.path.join(next_month_dir, folder)
-                                if os.path.isdir(folder_path):
-                                    # Analisar o arquivo json com a transcrição
-                                    json_path = os.path.join(folder_path, 'video_text.json')
-                                    if os.path.exists(json_path): # arquivo tem que existir e ter dados
-                                        with open(json_path, 'r') as file:
-                                            data = json.load(file)
-                                            if data:
-                                                if not os.path.isdir(f'threshold/{youtuber}'):
-                                                    os.mkdir(f'threshold/{youtuber}')
-                                                update_data(analisar_toxicidade(data['text']), csv_file, folder)          
-
-
-'''
-    Função para percorrer as pastas dos youtubers, encontrar os vídeos com transcrição e aplicar a análise de sentimento em cada uma das tiras
-    @param youtubers_list - Lista de youtubers a serem analisados
-'''
-def atualizar_tiras(youtubers_list: list[str]) -> None:
-    for youtuber in youtubers_list:
-        base_dir = f"files/{youtuber}"
-        if os.path.isdir(base_dir):
-            # andar pelos anos
-            print(f">>>>>>>>"+base_dir)
-            for year_folder in os.listdir(base_dir):
-                next_year_dir = os.path.join(base_dir, year_folder)
-                if os.path.isdir(next_year_dir):
-                    # andar pelos meses
-                    for month_folder in os.listdir(next_year_dir):
-                        next_month_dir = os.path.join(next_year_dir, month_folder)
-                        if os.path.isdir(next_month_dir):
-                        # andar pelos videos
-                            for folder in os.listdir(next_month_dir):
-                                folder_path = os.path.join(next_month_dir, folder)
-                                if os.path.isdir(folder_path):
-                                    # Analisar o arquivo csv com as tiras do vídeo
-                                    tiras_path = os.path.join(folder_path, 'tiras_video.csv')
-                                    if os.path.exists(tiras_path):
-                                        data = pd.read_csv(tiras_path)
-                                        
-                                        positividade = []
-                                        neutralidade = []
-                                        toxicidade = []
-                                        grupo = []
-
-                                        for texto in data['tiras']:
-                                            analise_sentimento = analisar_toxicidade(texto)
-                                            positividade.append(analise_sentimento['POS'])
-                                            neutralidade.append(analise_sentimento['NEU'])
-                                            toxicidade.append(analise_sentimento['NEG'])
-                                            
-                                            chave_max = max(analise_sentimento, key=analise_sentimento.get)
-
-                                            grupo.append(chave_max)
-                                        
-                                        data['positividade'] = positividade
-                                        data['neutralidade'] = neutralidade
-                                        data['toxicidade'] = toxicidade
-                                        data['grupo'] = grupo
-                                        
-                                        data.to_csv(tiras_path, index=False)
+console = Console()    
 
 '''
     Função para gerar os gráficos ICDF dos valores de cada youtuber
@@ -208,15 +88,11 @@ def gerar_graficos_youtuber(youtubers_list: list[str]) -> None:
             plt.savefig(f"threshold/{youtuber}/grafico_{value}.png", dpi=300, bbox_inches='tight')
             plt.close()
 
-#lista_youtubers =  ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Geleia', 'Jazzghost', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'meu nome é david', 'Papile', 'TazerCraft', 'Tex HS']
+if __name__ == "__main__":    
+    #lista_youtubers =  ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Geleia', 'Jazzghost', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'meu nome é david', 'Papile', 'TazerCraft', 'Tex HS']
 
-lista_youtubers = ['Robin Hood Gamer', 'Julia MineGirl', 'Tex HS']
+    lista_youtubers = ['Robin Hood Gamer', 'Julia MineGirl', 'Tex HS']
 
-# lista_youtubers =  ['AuthenticGames']
-
-# atualizar_geral(lista_youtubers)
-atualizar_tiras(lista_youtubers)
-
-#gerar_graficos_youtuber(lista_youtubers)
-#gerar_graficos_tiras(lista_youtubers)
+    gerar_graficos_youtuber(lista_youtubers)
+    #gerar_graficos_tiras(lista_youtubers)
 

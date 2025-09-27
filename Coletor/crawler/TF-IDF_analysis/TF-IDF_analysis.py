@@ -164,7 +164,7 @@ def analisar_frequencia(youtubers_list: list[str], preprocessar, n_top_words: in
         df_youtuber = pd.DataFrame(resultados_youtuber)
 
         # Definir o nome da pasta específica para essa análise
-        pasta_analise = 'analise_palavras_chave'
+        pasta_analise = 'frequencia_palavras'
         
         # Montar o caminho completo da pasta de saída
         caminho_saida_pasta = Path('files') / youtuber / pasta_analise
