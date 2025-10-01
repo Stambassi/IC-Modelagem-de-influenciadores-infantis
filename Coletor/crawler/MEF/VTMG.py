@@ -9,9 +9,10 @@ import seaborn as sns
 
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
-
 from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
+from sklearn.neighbors import NearestNeighbors
+from sklearn.cluster import DBSCAN
 
 console = Console()
 
@@ -138,13 +139,28 @@ def salvar_matriz_transicao_sentimento_video(youtubers_list: list[str]) -> None:
                 console.print(f'Inválido (salvar_matriz_transicao_sentimento_video): {e}')
 
 '''
-    Função para criar e persistir a Matriz de Transição de Sentimento agregada para cada youtuber.
+    Função para criar e persistir a Matriz de Transição de Sentimento agregada para cada youtube
     @param youtubers_list - Lista de youtubers a serem analisados.
+    @param metrica - Tipo de cálculo da transição de sentimento. Ex: 'mean', 'standard', 'variation'.
 '''
-def salvar_matriz_transicao_sentimento_youtuber(youtubers_list: list[str]) -> None:
+def salvar_matriz_transicao_sentimento_youtuber(youtubers_list: list[str], metrica: str = 'mean') -> None:
     # Nomes dos estados de sentimento
     estados_sentimento = ['POS', 'NEU', 'NEG']
     
+    # Mapeamento da métrica para a função de agregação do Pandas
+    agg_funcs = {
+        'mean': 'mean',
+        'standard': 'std',
+        'variation': lambda x: x.std() / x.mean() if x.mean() != 0 else 0 # Equação do Coeficiente de Variação
+    }
+
+    # Testar se a métrica é válida
+    if metrica not in agg_funcs:
+        console.print(f"[bold red]Erro: Métrica '{metrica}' é inválida. Use uma de {list(agg_funcs.keys())}.[/bold red]")
+        return
+        
+    agg_func = agg_funcs[metrica]
+
     # Percorrer youtubers
     for youtuber in youtubers_list:
         base_path = Path(f'files/{youtuber}')
@@ -152,60 +168,69 @@ def salvar_matriz_transicao_sentimento_youtuber(youtubers_list: list[str]) -> No
         if not base_path.is_dir():
             continue
 
-        console.print(f'>>> Processando matriz de sentimento agregada para [bold cyan]{youtuber}[/bold cyan]')
+        console.print(f'>>> Processando matriz de sentimento para [bold cyan]{youtuber}[/bold cyan] (Métrica: [bold green]{metrica}[/bold green])')
 
         try:
-            # Encontrar e concatenar todas as transições do youtuber
-            lista_dfs_transicoes = []
+            # Encontrar e concatenar todas as transições do youtuber, adicionando uma identificação do vídeo
+            lista_dfs_transicoes_por_video = []
             for transicoes_csv_path in base_path.rglob('transicoes_sentimento.csv'):
                 df_video = pd.read_csv(transicoes_csv_path)
+
                 if not df_video.empty:
-                    lista_dfs_transicoes.append(df_video)
+                    # Usamos o nome do arquivo pai (diretório do vídeo) como ID
+                    video_path = f'{transicoes_csv_path.parent.parent}/videos_info.csv'
+                    df_video['video_id'] = pd.read_csv(video_path)['video_id'][0] 
+                    lista_dfs_transicoes_por_video.append(df_video)
             
-            if not lista_dfs_transicoes:
+            if not lista_dfs_transicoes_por_video:
                 console.print(f"[yellow]Aviso: Nenhum arquivo de transições de sentimento encontrado para {youtuber}. Pulando.[/yellow]")
                 continue
             
-            df_agregado = pd.concat(lista_dfs_transicoes, ignore_index=True)
+            df_todas_contagens = pd.concat(lista_dfs_transicoes_por_video, ignore_index=True)
 
-            # Agrupar por cada tipo de transição e somar as contagens de todos os vídeos
-            df_soma_total = df_agregado.groupby(['estado', 'proximo_estado'])['contagem'].sum().reset_index()
+            # Calcular as probabilidades para CADA vídeo individualmente
+            
+            # Calcular a soma das transições que saem de cada estado, por vídeo
+            somas_por_estado_video = df_todas_contagens.groupby(['video_id', 'estado'])['contagem'].transform('sum')
+            
+            # Calcular a probabilidade de transição dentro de cada vídeo
+            df_todas_contagens['probabilidade'] = (df_todas_contagens['contagem'] / somas_por_estado_video).fillna(0)
 
-            # Garantir que a matriz final seja sempre 3x3, mesmo que algumas transições ou estados nunca tenham ocorrido no agregado de vídeos do youtuber
+            # Agregar as probabilidades de todos os vídeos usando a métrica escolhida
+
+            # Agrupar por tipo de transição (ex: 'POS' -> 'NEU') e aplicar a função de agregação nas probabilidades calculadas no passo anterior.
+            df_agregado = df_todas_contagens.groupby(['estado', 'proximo_estado'])['probabilidade'].agg(agg_func).reset_index()
+            
+            # Renomear o nome da coluna
+            df_agregado.rename(columns={'probabilidade': metrica}, inplace=True)
+            
+            # Garantir que a matriz final seja sempre 3x3
             tipo_categorico = CategoricalDtype(categories=estados_sentimento, ordered=True)
-            df_soma_total['estado'] = df_soma_total['estado'].astype(tipo_categorico)
-            df_soma_total['proximo_estado'] = df_soma_total['proximo_estado'].astype(tipo_categorico)
-            
-            # Calcular a soma das transições que saem de cada estado
-            # O .transform('sum') cria uma nova coluna onde cada linha tem a soma total do grupo 'estado' ao qual pertence.
-            somas_por_estado = df_soma_total.groupby('estado', observed=False)['contagem'].transform('sum')
+            df_agregado['estado'] = df_agregado['estado'].astype(tipo_categorico)
+            df_agregado['proximo_estado'] = df_agregado['proximo_estado'].astype(tipo_categorico)
 
-            # Calcular a probabilidade de cada transição
-            probabilidade = df_soma_total['contagem'] / somas_por_estado
-
-            # Se a soma for 0 (um estado nunca foi visitado), o resultado da divisão será NaN (Not a Number)
-            # Usa-se fillna(0) para tratar esses casos, definindo a probabilidade como 0.
-            df_soma_total['probabilidade'] = probabilidade.fillna(0)
-            
-            matriz_transicao_youtuber = df_soma_total.pivot(
+            # Pivotar a tabela para criar a matriz de transição
+            matriz_transicao_youtuber = df_agregado.pivot(
                 index='estado', 
                 columns='proximo_estado', 
-                values='probabilidade'
+                values=metrica
             )
             
-            # Garantir que qualquer célula que possa ter ficado como NaN (no caso de um estado nunca ser ponto de partida) seja preenchida com 0.
+            # Preencher possíveis NaNs com 0. Isso pode acontecer se uma transição nunca ocorreu (média/desvio=0) ou se houve pouca variação (desvio=NaN).
             matriz_transicao_youtuber.fillna(0, inplace=True)
             
-            # Salvar na pasta raiz do youtuber para consistência com outras análises agregadas
-            output_path = base_path / 'transicoes' / 'matriz_transicao_sentimento_youtuber.csv'
+            # Salvar na pasta raiz do youtuber
+            output_folder = base_path / 'transicoes'
+            output_folder.mkdir(parents=True, exist_ok=True)
+            output_path = output_folder / f'matriz_transicao_youtuber_{metrica}.csv'
+            
             matriz_transicao_youtuber.to_csv(output_path)
-            console.print(f"Matriz de Transição de youtuber gerada: {output_path}")
+            console.print(f"Matriz de Transição ({metrica}) salva em: {output_path}")
 
         except Exception as e:
             console.print(f'Inválido (salvar_matriz_transicao_sentimento_youtuber): {e}')
-
 '''
-    Função para calculr a distribuição estacionária de uma Cadeia de Markov a partir de sua matriz de transição
+    Função para calcular a distribuição estacionária de uma Cadeia de Markov a partir de sua matriz de transição
     @param matriz_transicao - Matriz de transição n x n, em que as linhas somam 1
     @return distribuicao_estacionaria - Vetor de probabilidades com a distribuição estacionária 'pi' de um youtuber 
 '''
@@ -497,7 +522,7 @@ def visualizar_pca_youtuber(df_vetores: pd.DataFrame, tipo_analise: str, n: int 
     console.print(f"Gráfico PCA salvo em: [green]{output_path}[/green]")
 
 '''
-    Função para encontrar as matrizes de transição de todos os vídeos de um youtubers, achatá-las em um vetor e retornar um DataFrame consolidado
+    Função para encontrar as matrizes de transição de todos os vídeos de um youtuber, achatá-las em um vetor e retornar um DataFrame consolidado
     @param base_path - Caminho para o diretório raiz do youtuber (ex: 'files/Tex HS').
     @param tipo_analise - Flag que representa o tipo da análise a ser feita. Deve ser 'sentimento' ou 'toxicidade'
     @param n - Número de estados (necessário apenas se o tipo_analise for 'toxicidade')
@@ -508,9 +533,9 @@ def criar_vetores_de_caracteristicas_achatados_video(base_path: Path, tipo_anali
 
     # Definir o padrão de busca pelo arquivo da matriz
     if tipo_analise == 'sentimento':
-        search_pattern = '**/transicoes/matriz_transicao_sentimento.csv'
+        search_pattern = f'**/matriz_transicao_sentimento.csv'
     else: # toxicidade
-        search_pattern = f'**/transicoes/matriz_transicao_{n}.csv'
+        search_pattern = f'**/matriz_transicao_{n}.csv'
         
     # Usa .glob() para encontrar todas as matrizes de vídeo individuais
     for matriz_path in base_path.glob(search_pattern):
@@ -532,12 +557,14 @@ def criar_vetores_de_caracteristicas_achatados_video(base_path: Path, tipo_anali
     if not vetores_videos:
         return None
 
+
     # Converter para DataFrame e criar os nomes das colunas
     df_vetores = pd.DataFrame.from_dict(vetores_videos, orient='index')
 
+
     estados = pd.read_csv(list(base_path.glob(search_pattern))[0], index_col=0).index.tolist()
 
-    nomes_colunas = [f'P_{origem}_para_{destino}' for origem in estados for destino in estados]
+    nomes_colunas = [f'{origem}->{destino}' for origem in estados for destino in estados]
 
     df_vetores.columns = nomes_colunas
     
@@ -661,6 +688,7 @@ def plotar_diagnostico_kmeans(df_vetores: pd.DataFrame, max_k: int, youtuber_nam
     axes[1].set_xlabel('Número de Clusters (k)', fontsize=12)
     axes[1].set_ylabel('Score Médio de Silhueta', fontsize=12)
     axes[1].set_title('Análise de Silhueta (Silhouette Analysis)', fontsize=14)
+    #axes[1].set_ylim(0.0, 1.0)
     axes[1].grid(True)
     
     # Salvar o gráfico
@@ -690,10 +718,13 @@ def plotar_diagnostico_kmeans(df_vetores: pd.DataFrame, max_k: int, youtuber_nam
     @param tipo_analise - Flag que representa o tipo da análise a ser feita. Deve ser 'sentimento' ou 'toxicidade'
     @param n - Número de estados (necessário apenas se o tipo_analise for 'toxicidade')
 '''
-def visualizar_clusters_pca(df_vetores: pd.DataFrame, k_otimo: int, youtuber_name: str, tipo_analise: str, n: int = None):
+def visualizar_clusters_kmeans_pca(df_vetores: pd.DataFrame, k_otimo: int, youtuber_name: str, tipo_analise: str, n: int = None) -> None:
     # Testar se o vetor de características é válido
     if df_vetores is None or df_vetores.shape[0] < k_otimo:
         return
+    
+    # Capturar o número total de vídeos analisados
+    n_videos_analisados = df_vetores.shape[0]
 
     # Escalonar os dados com o StandardScaler
     scaler = StandardScaler()
@@ -719,7 +750,7 @@ def visualizar_clusters_pca(df_vetores: pd.DataFrame, k_otimo: int, youtuber_nam
         x='PC1', 
         y='PC2', 
         hue='cluster',  # Colore os pontos com base na coluna 'cluster'
-        palette='viridis', # Paleta de cores
+        palette='bright', # Paleta de cores
         data=df_pca, 
         s=50,
         alpha=0.9,
@@ -729,11 +760,26 @@ def visualizar_clusters_pca(df_vetores: pd.DataFrame, k_otimo: int, youtuber_nam
         
     # Customizar títulos e eixos
     variancia_explicada = pca.explained_variance_ratio_.sum() * 100
-    titulo = f"Clusters de Vídeos (k={k_otimo}) de '{youtuber_name}' ({tipo_analise.title()})"
+    titulo = f"Clusters de Vídeos (k={k_otimo}) de '{youtuber_name}' ({n_videos_analisados} vídeos analisados)"
     ax.set_title(f'{titulo}\nVariância Total Explicada (PCA): {variancia_explicada:.2f}%', fontsize=16, pad=20)
     ax.set_xlabel(f"Componente Principal 1 ({pca.explained_variance_ratio_[0]:.1%})", fontsize=12)
     ax.set_ylabel(f"Componente Principal 2 ({pca.explained_variance_ratio_[1]:.1%})", fontsize=12)
-    ax.legend(title='Cluster')
+
+    #Customizar a legenda para incluir a contagem de vídeos em cada cluster
+    handles, labels = ax.get_legend_handles_labels()
+
+    # Contar quantos vídeos existem em cada cluster
+    contagem_clusters = df_pca['cluster'].value_counts()
+    
+    # Customizar os títulos da legenda
+    new_labels = []
+    for label in labels:
+        cluster_id = int(label)
+        count = contagem_clusters[cluster_id]
+        new_labels.append(f'Cluster {cluster_id} ({count} vídeos)')
+            
+    ax.legend(handles, new_labels, title='Cluster (Nº de Vídeos)', bbox_to_anchor=(1.02, 1), loc='upper left')
+    plt.tight_layout(rect=[0, 0, 0.85, 1]) # Ajustar layout para a legenda não cortar
     
     # Salvar o Gráfico
     output_dir = Path('files') / youtuber_name / 'transicoes'
@@ -758,7 +804,7 @@ def visualizar_clusters_pca(df_vetores: pd.DataFrame, k_otimo: int, youtuber_nam
     @param n - Número de estados (necessário apenas se o tipo_analise for 'toxicidade')
     @param max_k - Número máximo de clusters a serem testados (padrão é 8)
 '''
-def analisar_clusters_de_videos(youtubers_list: list[str], tipo_analise: str, n: int = None, max_k: int = 8):
+def analisar_clusters_de_videos_kmeans(youtubers_list: list[str], tipo_analise: str, n: int = None, max_k: int = 8) -> None:
     console.print(f"\n===== INICIANDO ANÁLISE DE CLUSTERING POR VÍDEO ({tipo_analise.upper()}) =====", style="bold blue")
 
     for youtuber in youtubers_list:
@@ -774,6 +820,7 @@ def analisar_clusters_de_videos(youtubers_list: list[str], tipo_analise: str, n:
 
         # Gerar os gráficos de diagnóstico e encontrar o k ótimo
         k_otimo = plotar_diagnostico_kmeans(df_vetores_videos, max_k, youtuber, tipo_analise, n)
+        #k_otimo = 4
         
         if k_otimo is None:
             continue
@@ -781,7 +828,179 @@ def analisar_clusters_de_videos(youtubers_list: list[str], tipo_analise: str, n:
         console.print(f"O número ideal de clusters para [bold cyan]{youtuber}[/bold cyan] (via Silhueta) é: [bold magenta]{k_otimo}[/bold magenta]")
 
         # Gerar o gráfico PCA com os vídeos coloridos pelos clusters
-        visualizar_clusters_pca(df_vetores_videos, k_otimo, youtuber, tipo_analise, n)
+        visualizar_clusters_kmeans_pca(df_vetores_videos, k_otimo, youtuber, tipo_analise, n)
+
+'''
+    Função para gerar um gráfico k-distance para ajudar a determinar o valor ideal de 'eps' para o DBSCAN
+    @param df_vetores - DataFrame de vetores de catacterísticas
+    @param min_samples - Valor de min_samples que será usado no DBSCAN
+    @param youtuber_name - Nome do youtuber para customização
+    @param tipo_analise - Flag que representa o tipo da análise a ser feita. Deve ser 'sentimento' ou 'toxicidade'
+    @param n - Número de estados (necessário apenas se o tipo_analise for 'toxicidade')
+'''
+def plotar_diagnostico_dbscan(df_vetores: pd.DataFrame, min_samples: int, youtuber_name: str, tipo_analise: str, n: int = None) -> None:
+    # Testar se o vetor de características é válido
+    if df_vetores is None or df_vetores.shape[0] < min_samples:
+        console.print(f"[bold yellow]Aviso: Dados insuficientes para diagnóstico DBSCAN para {youtuber_name}.[/bold yellow]")
+        return
+
+    console.print(f"Gerando gráfico k-distance para [bold cyan]{youtuber_name}[/bold cyan] (com min_samples={min_samples})...")
+
+    # Escalonar os dados como StandardScaler
+    scaler = StandardScaler()
+    dados_escalados = scaler.fit_transform(df_vetores)
+    
+    # Calcular a distância de cada ponto para seus vizinhos mais próximos
+    neighbors = NearestNeighbors(n_neighbors=min_samples)
+    neighbors_fit = neighbors.fit(dados_escalados)
+    distances, indices = neighbors_fit.kneighbors(dados_escalados)
+
+    # Ordenar as distâncias para o k-ésimo vizinho (k = min_samples)
+    k_distances = sorted(distances[:, min_samples - 1])
+
+    # Gerar o gráfico
+    plt.style.use('seaborn-v0_8-whitegrid')
+    fig, ax = plt.subplots(figsize=(12, 7))
+    
+    ax.plot(k_distances)
+    ax.set_title(f'Gráfico K-distance para "{youtuber_name}" (min_samples={min_samples})', fontsize=16)
+    ax.set_xlabel('Índice dos Pontos (ordenado por distância)', fontsize=12)
+    ax.set_ylabel(f'Distância ao {min_samples}º Vizinho Mais Próximo (eps)', fontsize=12)
+    ax.grid(True)
+    
+    # Salvar o gráfico
+    output_dir = Path('files') / youtuber_name / 'transicoes'
+    output_dir.mkdir(exist_ok=True)
+
+    if tipo_analise == 'sentimento':
+        output_filename = f'dbscan_diagnostico_eps_sentimento.png'
+    else:
+        output_filename = f'dbscan_diagnostico_eps_toxicidade_n{n}.png'
+
+    output_path = output_dir / output_filename
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+
+    console.print(f"Gráfico de diagnóstico de 'eps' salvo em: [green]{output_path}[/green]")
+
+'''
+    Função para aplicar o DBSCAN com os parâmetros fornecidos e visualizar os clusters em um gráfico PCA bidimensional
+    @param df_vetores - DataFrame de vetores de catacterísticas
+    @param eps - Parâmetro Epsilon do DBSCAN, que representa a distância máxima entre dois pontos para considerá-los vizinhos
+    @param min_samples - Parâmetro Min Sample do DBSCAN que representa a quantidade mínima de vizinhos para considerar um ponto como central
+    @param youtuber_name - Nome do youtuber para customização
+    @param tipo_analise - Flag que representa o tipo da análise a ser feita. Deve ser 'sentimento' ou 'toxicidade'
+    @param n - Número de estados (necessário apenas se o tipo_analise for 'toxicidade')
+'''
+def visualizar_clusters_dbscan_pca(df_vetores: pd.DataFrame, eps: float, min_samples: int, youtuber_name: str, tipo_analise: str, n: int = None):
+    # Testar se o vetor de características é válido
+    if df_vetores is None or df_vetores.shape[0] < 2:
+        return
+    
+    # Capturar o número total de vídeos analisados
+    n_videos_analisados = df_vetores.shape[0]
+    
+    # Escalonar os dados com o StandardScaler
+    scaler = StandardScaler()
+    dados_escalados = scaler.fit_transform(df_vetores)
+    
+    # Executar o DBSCAN com os parâmetros fornecidos e identificar os clusters resultantes
+    dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+    clusters = dbscan.fit_predict(dados_escalados)
+
+    # Analisar os resultados
+    n_clusters = len(set(clusters)) - (1 if -1 in clusters else 0) # Se há outlieres (representados como -1), subtraí-los da contagem do número de clusters
+    n_outliers = list(clusters).count(-1)
+    console.print(f"Resultado do DBSCAN para [bold cyan]{youtuber_name}[/bold cyan]: Encontrados [bold magenta]{n_clusters}[/bold magenta] clusters e [bold red]{n_outliers}[/bold red] outliers.\n")
+
+    # Aplicar o PCA para visualização
+    pca = PCA(n_components=2)
+    componentes_principais = pca.fit_transform(dados_escalados)
+    df_pca = pd.DataFrame(data=componentes_principais, columns=['PC1', 'PC2'], index=df_vetores.index)
+    df_pca['cluster'] = clusters
+    
+    # Gerar o gráfico
+    plt.style.use('seaborn-v0_8-whitegrid')
+    fig, ax = plt.subplots(figsize=(14, 9))
+    
+    sns.scatterplot(
+        x='PC1', 
+        y='PC2', 
+        hue='cluster',
+        palette='deep', # Usar uma paleta que lide bem com o -1 (outlier)
+        data=df_pca, 
+        s=50,
+        alpha=0.9,
+        ax=ax,
+        legend='full'
+    )
+        
+    # Customizar títulos e eixos
+    variancia_explicada = pca.explained_variance_ratio_.sum() * 100
+    titulo = f"Clusters de Vídeos de '{youtuber_name}' ({n_videos_analisados} vídeos analisados)"
+    subtitulo = f"DBSCAN (eps={eps}, min_samples={min_samples}) | PCA Variância Explicada: {variancia_explicada:.2f}%"
+    ax.set_title(f'{titulo}\n{subtitulo}', fontsize=16, pad=20)
+
+    ax.set_xlabel(f"Componente Principal 1 ({pca.explained_variance_ratio_[0]:.1%})", fontsize=12)
+    ax.set_ylabel(f"Componente Principal 2 ({pca.explained_variance_ratio_[1]:.1%})", fontsize=12)
+
+    #Customizar a legenda para incluir a contagem de vídeos em cada cluster
+    handles, labels = ax.get_legend_handles_labels()
+
+    # Contar quantos vídeos existem em cada cluster
+    contagem_clusters = df_pca['cluster'].value_counts()
+    
+    # Customizar os títulos da legenda
+    new_labels = []
+    for label in labels:
+        cluster_id = int(label)
+        count = contagem_clusters[cluster_id]
+        if cluster_id == -1:
+            new_labels.append(f'Outliers ({count} vídeos)')
+        else:
+            new_labels.append(f'Cluster {cluster_id} ({count} vídeos)')
+            
+    ax.legend(handles, new_labels, title='Cluster (Nº de Vídeos)', bbox_to_anchor=(1.02, 1), loc='upper left')
+    plt.tight_layout(rect=[0, 0, 0.85, 1]) # Ajustar layout para a legenda não cortar
+    
+    # Salvar o gráfico
+    output_dir = Path('files') / youtuber_name / 'transicoes'
+    output_dir.mkdir(exist_ok=True)
+
+    if tipo_analise == 'sentimento':
+        output_filename = f'dbscan_clusters_sentimento_eps{eps}_ms{min_samples}.png'
+    else:
+        output_filename = f'dbscan_clusters_toxicidade_n{n}_eps{eps}_ms{min_samples}.png'
+
+    output_path = output_dir / output_filename
+    plt.savefig(output_path, dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    console.print(f"Gráfico de clusters DBSCAN salvo em: [green]{output_path}[/green]")
+
+'''
+    Função para aplicar o DBSCAN e visualizar os clusters para uma lista de youtubers
+    @param youtubers_list - Lista de youtubers a serem analisados
+    @param tipo_analise - Flag que representa o tipo da análise a ser feita. Deve ser 'sentimento' ou 'toxicidade'
+    @param eps - Parâmetro Epsilon do DBSCAN, que representa a distância máxima entre dois pontos para considerá-los vizinhos
+    @param min_samples - Parâmetro Min Sample do DBSCAN que representa a quantidade mínima de vizinhos para considerar um ponto como central
+    @param n - Número de estados (necessário apenas se o tipo_analise for 'toxicidade')
+'''
+def analisar_clusters_de_videos_dbscan(youtubers_list: list[str], tipo_analise: str, eps: float, min_samples: int, n: int = None):
+    console.print(f"\n===== INICIANDO ANÁLISE DBSCAN POR VÍDEO ({tipo_analise.upper()}) =====", style="bold blue")
+
+    # Percorrer youtubers
+    for youtuber in youtubers_list:
+        base_path = Path(f'files/{youtuber}')
+
+        if not base_path.is_dir():
+            continue
+            
+        df_vetores_videos = criar_vetores_de_caracteristicas_achatados_video(base_path, tipo_analise, n)
+
+        plotar_diagnostico_dbscan(df_vetores_videos, min_samples, youtuber, 'sentimento')
+
+        visualizar_clusters_dbscan_pca(df_vetores_videos, eps, min_samples, youtuber, tipo_analise, n)
 
 if __name__ == '__main__':
     lista_youtubers = ['Robin Hood Gamer', 'Julia MineGirl', 'Tex HS']
@@ -801,4 +1020,20 @@ if __name__ == '__main__':
 
     #analisar_videos_de_youtubers(lista_youtubers, 'sentimento')
 
-    analisar_clusters_de_videos(lista_youtubers, 'sentimento')
+    '''
+    analisar_clusters_de_videos_kmeans(lista_youtubers, 'sentimento')
+
+    min_samples = 5 # Escolha heurística
+    epsilon = 2 # Escolha a partir do 'joelho'    
+    
+    analisar_clusters_de_videos_dbscan(
+        youtubers_list=lista_youtubers,
+        tipo_analise='sentimento',
+        eps=epsilon,
+        min_samples=min_samples
+    )
+    '''
+
+    salvar_matriz_transicao_sentimento_youtuber(lista_youtubers, 'mean')
+    salvar_matriz_transicao_sentimento_youtuber(lista_youtubers, 'standard')
+    salvar_matriz_transicao_sentimento_youtuber(lista_youtubers, 'variation')
