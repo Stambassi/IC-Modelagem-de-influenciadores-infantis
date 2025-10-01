@@ -24,7 +24,7 @@ perguntas = [
         "type": "list",
         "message": "Escolha uma ação",
         "choices": ["Mostrar Lista de influenciadores pesquisados", "Adicionar novo(s) influenciadore(s)", 
-        "Coletar dados", "Analisar dados","Transcrever vídeos","Reiniciar data de coleta","Sair"]
+        "Coletar dados", "Analisar dados","Transcrever vídeos","Baixar vídeos","Reiniciar data de coleta","Sair"]
     },
     {
         "type": "list",
@@ -41,8 +41,12 @@ perguntas = [
         "choices": ["Todos","Escolher","Voltar"]
     },{
         "type": "list",
-        "message": "Transcrever vídeo >> Transcrever de todos os youtubers ou apenas um?",
+        "message": "Todos os youtubers ou apenas um?",
         "choices": ["Todos","Escolher","Voltar"]
+    },{
+        "type": "list",
+        "message": "Transcrever vídeo >> Transcrever com dowload de áudio?",
+        "choices": ["Sim","Não"]
     }
 ]
 
@@ -273,24 +277,62 @@ def main():
             analise_completa()
             print(" ")
         elif resultado[0] == "Transcrever vídeos":
+            download = prompt(perguntas[5])
+            resultado_escolha = prompt(perguntas[4])
+            if download == "Sim":
+                if resultado_escolha[0] == "Todos":
+                    modelo = prompt(perguntas[2])
+                    console.print(">> [green]Transcrevendo vídeos de todos[/]")
+                    print(f"Modelo escolhido: "+modelo[0])
+                    video_process.process_all_videos(modelo[0])
+                    print(" ")
+                elif resultado_escolha[0] == "Escolher":
+                    modelo = prompt(perguntas[2])
+                    pergunta_youtuber = gerar_pergunta_youtube()
+                    print(" ")
+                    youtuber = prompt(pergunta_youtuber)
+                    print(youtuber)
+                    console.print(">> [green]Transcrevendo vídeos do "+youtuber[0])
+                    video_process.process_youtuber_video(modelo[0],youtuber[0])
+                    print(" ")
+                elif resultado_escolha[0] == "Voltar":
+                    print("Voltando...")
+            else:
+                if resultado_escolha[0] == "Todos":
+                    modelo = prompt(perguntas[2])
+                    console.print(">> [green]Transcrevendo vídeos de todos[/]")
+                    print(f"Modelo escolhido: "+modelo[0])
+                    video_process.transcript_all_videos(modelo[0])
+                    print(" ")
+                elif resultado_escolha[0] == "Escolher":
+                    modelo = prompt(perguntas[2])
+                    pergunta_youtuber = gerar_pergunta_youtube()
+                    print(" ")
+                    youtuber = prompt(pergunta_youtuber)
+                    print(youtuber)
+                    console.print(">> [green]Transcrevendo vídeos do "+youtuber[0])
+                    video_process.transcript_videos_youtuber(modelo[0],youtuber[0])
+                    print(" ")
+                elif resultado_escolha[0] == "Voltar":
+                    print("Voltando...")
+
+        elif resultado[0] == "Baixar vídeos":
             resultado_escolha = prompt(perguntas[4])
             if resultado_escolha[0] == "Todos":
-                modelo = prompt(perguntas[2])
-                console.print(">> [green]Transcrevendo vídeos de todos[/]")
-                print(f"Modelo escolhido: "+modelo[0])
-                video_process.process_all_videos(modelo[0])
+                console.print(">> [green]Baixando vídeos de todos[/]")
+                video_process.download_all_videos()
                 print(" ")
             elif resultado_escolha[0] == "Escolher":
-                modelo = prompt(perguntas[2])
                 pergunta_youtuber = gerar_pergunta_youtube()
                 print(" ")
                 youtuber = prompt(pergunta_youtuber)
                 print(youtuber)
-                console.print(">> [green]Transcrevendo vídeos do "+youtuber[0])
-                video_process.process_youtuber_video(modelo[0],youtuber[0])
+                console.print(">> [green]Baixando vídeos do "+youtuber[0])
+                video_process.download_videos_youtuber(youtuber[0])
                 print(" ")
             elif resultado_escolha[0] == "Voltar":
                 print("Voltando...")
+            
         elif resultado[0] == "Reiniciar data de coleta":
             data = reset()
             console.print(">> Dia de coleta reinciado para: "+str(data[2])+"/"+str(data[1])+"/"+str(data[0]))

@@ -25,10 +25,9 @@ def download_youtube_audio(video_id, output_folder):
     """
 
     print(f"> Baixando audio | video_id({video_id})")
-    folder = output_folder
     ydl_opts = {
         'format': 'bestaudio/best',
-        'outtmpl': f'{folder}/%(id)s.%(ext)s',
+        'outtmpl': f'{output_folder}/%(id)s.%(ext)s',
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -40,7 +39,7 @@ def download_youtube_audio(video_id, output_folder):
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
     console.print("> Download do audio foi um [green]sucesso[/] | video_id("+video_id+")")
-    audio = f"{folder}/{video_id}.mp3"
+    audio = f"{output_folder}/{video_id}.mp3"
     return audio
     
 
@@ -131,7 +130,7 @@ def atualizar_csv_videos_processados(youtuber, video_id):
         df.to_csv(csv_transcripted, mode='w', header=True, index=False)
     
 
-def video_to_text(video_id, output_folder, model, youtuber):
+def video_to_text(video_id, output_folder, model, youtuber, local_audio = None):
     """
     Funcao para realizar a transcricao do video e salva-la, assim como criar um csv para armazenar os videos 
     ja analisados
@@ -142,7 +141,8 @@ def video_to_text(video_id, output_folder, model, youtuber):
     """
     start_time = time.time()
 
-    local_audio = download_youtube_audio(video_id, output_folder)
+    if local_audio == None:
+        local_audio = download_youtube_audio(video_id, output_folder)
     
     transcription_result = transcript_and_delete_audio(local_audio, model)
     json_path = f"{output_folder}/video_text.json"
@@ -209,17 +209,8 @@ def atualizar_video_total_transcritos(youtuber):
         atualizar_video_transcritos(youtuber,videos)
     return videos
 
-def process_video(csv, output_folder, model, youtuber):
-    """
-    Funcao para chamar a transcricao do video evitando a reanalise
-    csv -- caminho para o videos_info.csv para coletar o id do youtuber
-    output_folder -- pasta local onde vai ser salvo a transcricao
-    model -- qual modelo do whisper a ser utilizado (entrar na documentacao do whisper para ver opcoes) 
-    youtuber -- nome do canal a ser testado
-    """
+def video_already_transcripted(youtuber, video_id):
     d = pd.read_csv(csv_transcripted)
-    df = pd.read_csv(csv)
-    video_id = df.loc[0]['video_id']
     video_already_transcripted = False
     found_youtuber = False
     for index, row in d.iterrows():
@@ -231,11 +222,32 @@ def process_video(csv, output_folder, model, youtuber):
         # passou por todos os videos do youtuber e nao achou com id igual
         if found_youtuber and row['nome'] != youtuber:
             break
+    return video_already_transcripted
 
-    if video_already_transcripted:
+def process_video(csv, output_folder, model, youtuber, audio = None):
+    """
+    Funcao para chamar a transcricao do video evitando a reanalise
+    csv -- caminho para o videos_info.csv para coletar o id do youtuber
+    output_folder -- pasta local onde vai ser salvo a transcricao
+    model -- qual modelo do whisper a ser utilizado (entrar na documentacao do whisper para ver opcoes) 
+    youtuber -- nome do canal a ser testado
+    """
+    df = pd.read_csv(csv)
+    video_id = df.loc[0]['video_id']
+
+    if video_already_transcripted(youtuber,video_id):
         console.print("[i]Video ja coletado![/] Passando para o proximo...")
     else:
-        video_to_text(video_id, output_folder, model, youtuber)
+        if audio == None: 
+            video_to_text(video_id, output_folder, model, youtuber)
+        else:
+            audio_path = os.path.join(output_folder,audio)
+            if os.path.isfile(audio_path):
+                video_to_text(video_id, output_folder, model, youtuber,local_audio = audio_path)
+            else:
+                print(audio)
+                console.print("[red]Vídeo sem áudio![/] Passando para o proximo...")
+
 
 def process_youtuber_video(model, youtuber):
     """
@@ -437,16 +449,111 @@ def save_tiras():
                     # Salvar a lista gerada em um arquivo .csv
                     df_tiras.to_csv(f"{next_video_dir}/tiras_video.csv", index_label='index')
 
+def download_videos_youtuber(youtuber):
+    """
+    Funcao para baixar todos os videos de um Youtuber
+    youtuber -- nome do canal que vai ter os videos transcritos
+    """
+    start()
+    base_dir = f"files/{youtuber}"
+    videos = 0
+    youtuber_data = pd.read_csv(youtuberListPath)
+    if os.path.isdir(base_dir):
+        console.rule("[bold red]Youtuber: "+youtuber)
+        # andar pelos anos
+        for year_folder in os.listdir(base_dir):
+            next_year_dir = os.path.join(base_dir, year_folder)
+            if os.path.isdir(next_year_dir):
+                # andar pelos meses
+                for month_folder in os.listdir(next_year_dir):
+                    next_month_dir = os.path.join(next_year_dir, month_folder)
+                    if os.path.isdir(next_month_dir):
+                        console.log("[bold cyan]"+youtuber+" ("+month_folder+"/"+year_folder+"): ")
+                    # andar pelos videos
+                        for folder in os.listdir(next_month_dir):
+                            folder_path = os.path.join(next_month_dir, folder)
+                            if os.path.isdir(folder_path):
+                                csv_path = os.path.join(folder_path, 'videos_info.csv')
+                                if os.path.exists(csv_path):
+                                    try:
+                                        df = pd.read_csv(csv_path)
+                                        video_id = df.iloc[0]['video_id']
 
+                                        if not video_already_transcripted(youtuber,video_id):
+                                            console.print("[bold cyan]>>> Baixando Video:[/] "+youtuber+" ("+folder+")", overflow="ellipsis")
+                                            download_youtube_audio(video_id, folder_path)
+                                        else:
+                                            console.print("[bold green]>>> Vídeo já transcrito -- pulando download [/] "+youtuber+" ("+folder+")", overflow="ellipsis")
 
+                                    except Exception as e:
+                                        console.log(f"[red]ERRO[/]: {e}",log_locals=True)
 
+def download_all_videos():
+    """
+    Funcao para realizar o speech-to-text em todos os videos coletados
+    """
+    base_dir = "files"
+    # andar pelos youtubers
+    for ytb_folder in os.listdir(base_dir):
+        download_videos_youtuber(ytb_folder)
+
+def transcript_videos_youtuber(model, youtuber):
+    """
+    Funcao para processar todos os videos de um Youtuber a partir de audios baixados
+    model -- qual modelo do whisper a ser utilizado (entrar na documentacao do whisper para ver opcoes)
+    youtuber -- nome do canal que vai ter os videos transcritos
+    """
+    start()
+    base_dir = f"files/{youtuber}"
+    videos = 0
+    youtuber_data = pd.read_csv(youtuberListPath)
+    if os.path.isdir(base_dir):
+        console.rule("[bold red]Youtuber: "+youtuber)
+        # andar pelos anos
+        for year_folder in os.listdir(base_dir):
+            next_year_dir = os.path.join(base_dir, year_folder)
+            if os.path.isdir(next_year_dir):
+                # andar pelos meses
+                for month_folder in os.listdir(next_year_dir):
+                    next_month_dir = os.path.join(next_year_dir, month_folder)
+                    if os.path.isdir(next_month_dir):
+                        console.log("[bold cyan]"+youtuber+" ("+month_folder+"/"+year_folder+"): ")
+                    # andar pelos videos
+                        for folder in os.listdir(next_month_dir):
+                            folder_path = os.path.join(next_month_dir, folder)
+                            if os.path.isdir(folder_path):
+                                csv_path = os.path.join(folder_path, 'videos_info.csv')
+                                if os.path.exists(csv_path):
+                                    try:
+                                        console.print("[bold cyan]>>> Transcrevendo Video:[/] "+youtuber+" ("+folder+")", overflow="ellipsis")
+                                        df = pd.read_csv(csv_path)
+                                        video_id = df.iloc[0]['video_id']
+                                        audio = f"{video_id}.mp3"
+                                        process_video(csv_path,folder_path, model, youtuber, audio = audio)
+                                        youtuber_data.loc[youtuber_data.nome == youtuber, 'videosTranscritos'] += 1
+                                        youtuber_data.to_csv(youtuberListPath, index=False)
+                                    except Exception as e:
+                                        console.log(f"[red]ERRO[/]: {e}",log_locals=True)
+
+def transcript_all_videos(model):
+    """
+    Funcao para realizar o speech-to-text em todos os videos coletados e com áudios baixado
+    model -- qual modelo do whisper a ser utilizado (entrar na documentacao do whisper para ver opcoes)
+    """
+    base_dir = "files"
+    # andar pelos youtubers
+    for ytb_folder in os.listdir(base_dir):
+        transcript_videos_youtuber(model, ytb_folder)
 def main():
     #console.rule("tira por tempo")
     #gerar_tira(60,"")
     #console.rule("tira por frase")
     #gerar_frases("files/OEPkmsJmY2I_text_small.json")
     #console.rule("tira por tempo e frase")
-    save_tiras()
+    # download_videos_youtuber('AuthenticGames')
+    # transcript_videos_youtuber('tiny','AuthenticGames')
+    download_videos_youtuber('Amy Scarlet')
+    transcript_videos_youtuber('tiny','Amy Scarlet')
     #gerar_tira_frase_tempo(60, "files/AuthenticGames/2023/Novembro/MEU AMIGO visitou MEU MUNDO de MINECRAFT! @spok/video_text.json")
 
 
