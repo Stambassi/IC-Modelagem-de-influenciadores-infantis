@@ -45,7 +45,7 @@ perguntas = [
         "choices": ["Todos","Escolher","Voltar"]
     },{
         "type": "list",
-        "message": "Transcrever vídeo >> Transcrever com dowload de áudio?",
+        "message": "Transcrever vídeo >> Precisa fazer o download do áudio também?",
         "choices": ["Sim","Não"]
     }
 ]
@@ -279,7 +279,7 @@ def main():
         elif resultado[0] == "Transcrever vídeos":
             download = prompt(perguntas[5])
             resultado_escolha = prompt(perguntas[4])
-            if download == "Sim":
+            if download[0] == "Sim":
                 if resultado_escolha[0] == "Todos":
                     modelo = prompt(perguntas[2])
                     console.print(">> [green]Transcrevendo vídeos de todos[/]")
