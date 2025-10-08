@@ -4,8 +4,18 @@ analyzer = create_analyzer(task="sentiment", lang="pt")
 
 resultados = []
 
-resultados.append(analyzer.predict("Vem com a picareta e começa a bater nela assim, ó, com o botão direito, ó. Vai batendo, Iagão").probas)
+resultados.append(analyzer.predict("eita").probas)
 
-resultados.append(analyzer.predict("Você é velha igual minha vó").probas)
+resultados.append(analyzer.predict("eita porra").probas)
+
+resultados.append(analyzer.predict("porra").probas)
+
+resultados.append(analyzer.predict("Eita, que coisa doida").probas)
+
+resultados.append(analyzer.predict("Ahhh, entendi nada").probas)
+
+resultados.append(analyzer.predict("entendi nada").probas)
+
+resultados.append(analyzer.predict("Ahhh").probas)
 
 print(resultados)
