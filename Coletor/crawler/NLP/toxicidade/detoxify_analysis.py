@@ -11,7 +11,7 @@ console = Console()
     @param youtubers_list - Lista de youtubers a serem analisados
     @param model - Modelo do detoxify para análise de toxicidade
 '''
-def processar_toxicidade_youtubers(youtubers_list: list, model) -> None:
+def _processar_tiras_toxicidade(youtubers_list: list, model) -> None:
     for youtuber in youtubers_list:
         console.print(f"[bold blue]>>>>>> Processando YouTuber: {youtuber}[/bold blue]")
         base_path = Path('files') / youtuber
@@ -60,17 +60,28 @@ def processar_toxicidade_youtubers(youtubers_list: list, model) -> None:
             except Exception as e:
                 console.print(f"     [red]Ocorreu um erro inesperado ao processar {input_csv_path}: {e}[/red]")
 
-if __name__ == '__main__':
-    # Lista de youtubers a serem analisados
-    lista_youtubers = ['Julia MineGirl', 'Tex HS', 'Robin Hood Gamer']
-
+'''
+    Função principal (pública) para carregar o modelo e iniciar a análise de toxicidade.
+    Esta é a função que deve ser importada por outros scripts.
+    @param youtubers_list - Lista de youtubers a serem analisados
+'''
+def rodar_analise_toxicidade(youtubers_list: list[str]) -> None:
     console.print("[bold]Carregando o modelo Detoxify (multilingual)...[/bold]")
     console.print("[yellow]Isso pode demorar alguns minutos na primeira execução, pois o modelo será baixado (~500MB).[/yellow]")
     
     # Carregar o modelo uma única vez
     try:
         detoxify_model = Detoxify('multilingual')
-        processar_toxicidade_youtubers(lista_youtubers, detoxify_model)
+        # Chamar a função interna de processamento
+        _processar_tiras_toxicidade(youtubers_list, detoxify_model)
     except Exception as e:
         console.print(f"\n[bold red]Falha ao carregar o modelo Detoxify ou ao executar a análise. Erro: {e}[/bold red]")
         console.print("[yellow]Verifique sua conexão com a internet ou se há algum problema com a instalação do PyTorch/TensorFlow.[/yellow]")
+
+if __name__ == '__main__':
+    # Lista de youtubers a serem analisados
+    lista_youtubers_main = ['Julia MineGirl', 'Tex HS', 'Robin Hood Gamer']
+
+    console.print("[bold green]Executando Análise de Toxicidade (Standalone)[/bold green]")
+    
+    rodar_analise_toxicidade(lista_youtubers_main)

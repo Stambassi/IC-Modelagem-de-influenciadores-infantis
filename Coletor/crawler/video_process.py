@@ -347,107 +347,12 @@ def start():
     df.sort_values('nome',ascending=True, inplace=True)
     df.to_csv(csv_transcripted, mode='w', header=True, index=False)
 
-def gerar_tira_frase_tempo(tempo, data_path):
-    """
-    Funcao para realizar o agrupamento dos segments em grupos de X segundos, mantendo a coerencia de frases
-    tempo -- quanto tempo cada tira vai ter
-    data_path -- caminho para arquivo json com resultado da analise do whisper
-    """
-    margem = 10
-    tempo_real = tempo * (1 - (margem / 100))
-    with open(data_path, 'r') as file:
-        data = json.load(file)
-        total_time = 0
-        
-        tira_atual = ""
-        tiras = []
-        for segment in data["segments"]:
-            total_time += (segment['end'] - segment['start'])
-            tira_atual = tira_atual + segment['text'] 
-            if (total_time >= tempo_real):
-                i = max(tira_atual.rfind("."), tira_atual.rfind("?"), tira_atual.rfind("!"))
-                if i < 0: 
-                    i = len(tira_atual)
-                tiras.append(tira_atual[0:i+1].strip())
-                tira_atual = tira_atual[i+1:len(tira_atual)]
-                total_time = 0
-        if len(tira_atual) > 0:
-            tiras.append(tira_atual.strip())
-        # show_tiras(tiras)
-        # console.print("Total de tiras: "+str(len(tiras)))
-
-        return tiras
-
 def show_tiras(tiras):
     x = 0
     for i in tiras:
         print(str(x)+": "+i+"\n")
         
         x += 1
-
-'''
-    Função para percorrer toda a estrutura de pastas dos arquivos coletados e armazenas as tiras em um arquivo csv
-'''
-def save_tiras():
-    # Definir dados
-    base_dir = "files"
-    dados = []
-
-    # Percorrer youtubers
-    for ytb_folder in os.listdir(base_dir):
-        # Criar caminho 'files/ytb_folder'
-        next_ytb_dir = os.path.join(base_dir, ytb_folder)
-
-        # Testar se a pasta existe
-        if not os.path.isdir(next_ytb_dir):
-            # print(f"Erro! [{next_ytb_dir}] não existe! (1)")
-            continue
-
-        # Percorrer as pastas dos anos (dentro de 'files/ytb_folder')
-        for year_folder in os.listdir(next_ytb_dir):
-            # Criar caminho 'files/ytb_folder/year_folder'
-            next_year_dir = os.path.join(next_ytb_dir, year_folder)
-
-            # Testar se a pasta existe
-            if not os.path.isdir(next_year_dir):
-                # print(f"Erro! [{next_year_dir}] não existe! (2)")
-                continue
-
-            # Percorrer as pastas dos meses (dentro de 'files/ytb_folder/year_folder')
-            for month_folder in os.listdir(next_year_dir):
-                # Criar caminho 'files/ytb_folder/year_folder/month_folder'
-                next_month_dir = os.path.join(next_year_dir, month_folder)
-
-                # Testar se a pasta existe
-                if not os.path.isdir(next_month_dir):
-                    # print(f"Erro! [{next_month_dir}] não existe! (3)")
-                    continue
-
-                # Percorrer as pastas dos vídeos (dentro de 'files/ytb_folder/year_folder/month_folder/video_folder')
-                for video_folder in os.listdir(next_month_dir):
-                    # Criar caminho 'files/ytb_folder/year_folder/month_folder/video_folder'
-                    next_video_dir = os.path.join(next_month_dir, video_folder)
-
-                    # Testar se a pasta existe
-                    if not os.path.isdir(next_video_dir):
-                        # print(f"Erro! [{next_video_dir}] não existe! (4)")
-                        continue
-
-                    # Definir caminho para o arquivo .json com as tiras de cada vídeo
-                    csv_path = os.path.join(next_video_dir, 'video_text.json')
-
-                    # Testar se o arquivo existe
-                    if not os.path.exists(csv_path):
-                        continue
-
-                    # Calcular as tiras de cada vídeo
-                    tiras = gerar_tira_frase_tempo(60, csv_path)
-
-                    # Converter a lista para DataFrame
-                    df_tiras = pd.DataFrame(tiras, columns=['tiras'])  
-
-                    # Salvar a lista gerada em um arquivo .csv
-                    df_tiras.to_csv(f"{next_video_dir}/tiras_video.csv", index_label='index')
 
 def download_videos_youtuber(youtuber):
     """
