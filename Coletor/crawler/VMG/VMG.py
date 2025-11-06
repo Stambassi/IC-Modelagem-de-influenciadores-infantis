@@ -19,12 +19,7 @@ METRICAS_CONFIG = {
         'tipo_estados': 'numerico',
         'n_estados': 3 # Número de 'bins' para dividir o score (ex: 3 estados)
     },
-    'insulto': {
-        'coluna_base': 'insult',
-        'tipo_estados': 'numerico',
-        'n_estados': 2 # Exemplo de análise binária (insulto baixo/alto)
-    },
-    'toxicidade_3_estados': {
+    'toxicidade': {
         'coluna_base': 'toxicity',
         'tipo_estados': 'numerico_categorizado', # Novo tipo de estado
         'limiares': [0.0, 0.30, 0.70, 1.01], # 1.01 para garantir que 1.0 seja incluído
@@ -299,7 +294,7 @@ def salvar_matriz_transicao_youtuber(youtubers_list: list[str], metrica_config: 
     @param config_analise - Dicionário de configurações da métrica (da METRICAS_CONFIG)
     @param nome_analise - O nome identificador desta análise (ex: 'sentimento')
 '''
-def rodar_pipeline_vsmg(youtubers_list: list[str], config_metrica: dict, nome_analise: str):
+def rodar_pipeline_vmg(youtubers_list: list[str], config_metrica: dict, nome_analise: str):
     console.print(f"\n[bold magenta]===== INICIANDO PIPELINE VMG PARA '{nome_analise.upper()}' =====[/bold magenta]")
     
     # Gerar arquivos de contagem de transições (por vídeo)
@@ -319,22 +314,22 @@ if __name__ == '__main__':
     lista_youtubers = ['Robin Hood Gamer', 'Julia MineGirl', 'Tex HS']
 
     # # Executa o pipeline para a métrica 'sentimento'
-    # rodar_pipeline_vsmg(
-    #     lista_youtubers, 
-    #     config_metrica=METRICAS_CONFIG['sentimento'], 
-    #     nome_analise='sentimento'
-    # )
+    rodar_pipeline_vmg(
+        lista_youtubers, 
+        config_metrica=METRICAS_CONFIG['sentimento'], 
+        nome_analise='sentimento'
+    )
     
     # # Executa o pipeline para a métrica 'negatividade' com 3 estados
-    # rodar_pipeline_vsmg(
+    # rodar_pipeline_vmg(
     #     lista_youtubers, 
     #     config_metrica=METRICAS_CONFIG['negatividade'], 
     #     nome_analise='negatividade'
     # )
     
     # Executa o pipeline para 'toxicidade' com 3 estados
-    rodar_pipeline_vsmg(
+    rodar_pipeline_vmg(
         lista_youtubers, 
-        config_metrica=METRICAS_CONFIG['toxicidade_3_estados'], 
-        nome_analise='toxicidade_3_estados' 
+        config_metrica=METRICAS_CONFIG['toxicidade'], 
+        nome_analise='toxicidade' 
     )

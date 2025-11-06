@@ -31,7 +31,7 @@ def gerar_vsmg_flatten_video(df_transicoes: pd.DataFrame, n_estados: int) -> np.
     matriz = df_transicoes.pivot(index='estado', columns='proximo_estado', values='probabilidade')
     
     # Reindexar a matriz para garantir que ela seja N x N.
-    # Se uma transição (ex: 3 -> 1) nunca ocorreu, ela será preenchida com 0.0.
+    # Se uma transição (ex: 3 -> 1) nunca ocorreu, ela será preenchida com 0.0
     matriz = matriz.reindex(index=labels, columns=labels, fill_value=0.0)
     
     # Achatar (flatten) a matriz para um vetor 1D
