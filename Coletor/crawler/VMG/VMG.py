@@ -3,27 +3,40 @@ import pandas as pd
 from pandas.api.types import CategoricalDtype
 import numpy as np
 from rich.console import Console
+import seaborn as sns
+import matplotlib.pyplot as plt
+import networkx as nx
+import matplotlib.patches as mpatches
 
 console = Console()
 
+# Configuração estética global para gráficos (padrão acadêmico)
+plt.rcParams['figure.dpi'] = 300
+plt.rcParams['savefig.dpi'] = 300
+plt.rcParams['font.family'] = 'sans-serif'
+sns.set_context("paper", font_scale=1.2)
 
 # Define as regras para cada tipo de análise (métrica)
 METRICAS_CONFIG = {
     'sentimento': {
-        'coluna_base': 'sentimento_dominante', # Coluna no 'tiras_video.csv' que define o estado
-        'tipo_estados': 'categorico', # 'categorico' (ex: POS, NEU) ou 'numerico' (ex: 0.0-1.0)
-        'estados': ['POS', 'NEU', 'NEG'] # Lista de estados para análises categóricas
+        'coluna_base': 'sentimento_dominante', 
+        'tipo_estados': 'categorico', 
+        'estados': ['POS', 'NEU', 'NEG'],
+        # Cores para o grafo: Verde (POS), Cinza (NEU), Vermelho (NEG)
+        'cores_grafo': {'POS': '#2ecc71', 'NEU': '#95a5a6', 'NEG': '#e74c3c'} 
     },
     'negatividade': {
         'coluna_base': 'negatividade',
         'tipo_estados': 'numerico',
-        'n_estados': 3 # Número de 'bins' para dividir o score (ex: 3 estados)
+        'n_estados': 3 
     },
     'toxicidade': {
         'coluna_base': 'toxicity',
-        'tipo_estados': 'numerico_categorizado', # Novo tipo de estado
-        'limiares': [0.0, 0.30, 0.70, 1.01], # 1.01 para garantir que 1.0 seja incluído
-        'estados': ['NT', 'GZ', 'T'] # Nomes dos estados
+        'tipo_estados': 'numerico_categorizado', 
+        'limiares': [0.0, 0.30, 0.70, 1.01], 
+        'estados': ['NT', 'GZ', 'T'],
+        # Cores para o grafo: Verde (NT), Amarelo (GZ), Vermelho (T)
+        'cores_grafo': {'NT': '#2ecc71', 'GZ': '#f1c40f', 'T': '#e74c3c'} 
     }
 }
 
@@ -289,6 +302,178 @@ def salvar_matriz_transicao_youtuber(youtubers_list: list[str], metrica_config: 
             console.print(f'Inválido (salvar_matriz_transicao_youtuber): {e}')
 
 '''
+    Função para gerar um Heatmap (Mapa de Calor) com qualidade de publicação.
+    Mostra as probabilidades de transição com anotações e escala de cor.
+
+    @param matrix_path - Caminho para o arquivo CSV da matriz VTMG
+    @param output_path - Caminho onde a imagem será salva
+    @param title - Título do gráfico
+'''
+def gerar_heatmap_vmg(matrix_path: Path, output_path: Path, title: str):
+    try:
+        # Carrega a matriz definindo a primeira coluna como índice (Labels dos estados)
+        df_matrix = pd.read_csv(matrix_path, index_col=0)
+        
+        # Cria a figura
+        plt.figure(figsize=(8, 6))
+        
+        # Gera o Heatmap
+        # cmap='Blues' ou 'Reds' são boas opções acadêmicas. 'YlGnBu' é muito usado também.
+        # vmin=0 e vmax=1 garantem que a escala de cor seja sempre absoluta (0% a 100%)
+        ax = sns.heatmap(
+            df_matrix, 
+            annot=True,       # Escreve os números nas células
+            fmt=".2f",        # Formato 2 casas decimais
+            cmap="Blues",      # Mapa de cor (Vermelho é bom para toxicidade)
+            linewidths=.5,    # Linhas separando células
+            linecolor='gray',
+            vmin=0, vmax=1,   # Trava a escala entre 0 e 1
+            cbar_kws={'label': 'Probabilidade de Transição'}
+        )
+        
+        # Ajustes finos de layout
+        ax.set_title(title, pad=20, fontsize=14, fontweight='bold')
+        ax.set_xlabel("Próximo Estado (t+1)", fontsize=12)
+        ax.set_ylabel("Estado Atual (t)", fontsize=12)
+        
+        # Salva com alta resolução e margens ajustadas
+        plt.tight_layout()
+        plt.savefig(output_path, bbox_inches='tight')
+        plt.close()
+        
+    except Exception as e:
+        console.print(f"[red]Erro ao gerar heatmap de {matrix_path.name}: {e}[/red]")
+
+'''
+    Função para gerar um Grafo Dirigido (NetworkX) visualizando as transições.
+    A espessura da seta indica a probabilidade.
+
+    @param matrix_path - Caminho para o arquivo CSV da matriz VTMG
+    @param output_path - Caminho onde a imagem será salva
+    @param config_cores - Dicionário mapeando nome do estado -> cor Hex
+'''
+def gerar_grafo_vmg(matrix_path: Path, output_path: Path, config_cores: dict = None):
+    try:
+        df_matrix = pd.read_csv(matrix_path, index_col=0)
+        
+        # Cria um grafo dirigido
+        G = nx.DiGraph()
+        
+        # Adiciona os nós
+        estados = df_matrix.index.tolist()
+        G.add_nodes_from(estados)
+        
+        # Adiciona as arestas com pesos (probabilidades)
+        for origem in estados:
+            for destino in estados:
+                peso = df_matrix.loc[origem, destino]
+
+                G.add_edge(origem, destino, weight=peso)
+        
+        plt.figure(figsize=(8, 8))
+        
+        # Layout circular é ideal para matrizes pequenas (3x3)
+        pos = nx.circular_layout(G)
+        
+        # Define cores dos nós
+        node_colors = ['lightgray'] * len(G.nodes())
+        if config_cores:
+            node_colors = [config_cores.get(node, 'lightgray') for node in G.nodes()]
+        
+        # Desenha nós
+        nx.draw_networkx_nodes(G, pos, node_size=3000, node_color=node_colors, edgecolors='black')
+        
+        # Desenha labels dos nós
+        nx.draw_networkx_labels(G, pos, font_size=12, font_weight='bold')
+        
+        # Desenha arestas (setas)
+        # Espessura baseada no peso * fator para ficar visível
+        weights = [G[u][v]['weight'] * 4 for u, v in G.edges()]
+        
+        # connectionstyle='arc3, rad=0.1' faz as setas serem curvas
+        # isso permite ver ida e volta (A->B e B->A) sem sobreposição
+        nx.draw_networkx_edges(
+            G, pos, 
+            width=weights, 
+            edge_color='gray', 
+            arrowstyle='-|>', 
+            arrowsize=20,
+            connectionstyle='arc3, rad=0.2' 
+        )
+        
+        # Adiciona labels nas arestas (opcional, pode poluir, mas professores gostam de dados)
+        edge_labels = {(u, v): f"{d['weight']:.2f}" for u, v, d in G.edges(data=True)}
+        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, label_pos=0.3, font_size=8)
+        
+        plt.title("Grafo de Probabilidade de Transição", fontsize=14)
+        plt.axis('off') # Remove eixos cartesianos
+        
+        plt.tight_layout()
+        plt.savefig(output_path, bbox_inches='tight')
+        plt.close()
+        
+    except Exception as e:
+        console.print(f"[red]Erro ao gerar grafo de {matrix_path.name}: {e}[/red]")
+
+'''
+    Função nova que varre recursivamente todos os vídeos de cada youtuber
+    e gera o gráfico individual para cada matriz de vídeo encontrada.
+'''
+def gerar_visualizacoes_individuais_videos(youtubers_list: list[str], nome_analise: str):
+    console.print(f"\n[bold magenta]===== GERANDO HEATMAPS INDIVIDUAIS PARA '{nome_analise.upper()}' =====[/bold magenta]")
+    
+    for youtuber in youtubers_list:
+        base_path = Path(f'files/{youtuber}')
+        if not base_path.is_dir(): continue
+        
+        # Procura por arquivos de matriz VMG dentro das subpastas dos vídeos
+        padrao_busca = f"VMG_{nome_analise}.csv"
+        
+        arquivos_vmg = list(base_path.rglob(padrao_busca))
+        
+        if not arquivos_vmg:
+            console.print(f"     [yellow]Nenhuma matriz individual encontrada para {youtuber}.[/yellow]")
+            continue
+            
+        console.print(f"   Gerando {len(arquivos_vmg)} gráficos para: {youtuber}")
+        
+        for vmg_file in arquivos_vmg:
+            # Identifica o nome da pasta do vídeo para usar no título
+            nome_video = vmg_file.parent.parent.name
+            
+            # Define onde salvar o plot (cria pasta 'plots' dentro da pasta do vídeo)
+            pasta_plot = vmg_file.parent.parent / 'plots'
+            pasta_plot.mkdir(exist_ok=True)
+            
+            output_file = pasta_plot / f'heatmap_{nome_analise}.png'
+            
+            titulo_grafico = f"VTMG (1ª Ordem): {nome_video}\nAnálise: {nome_analise.title()}"
+            
+            gerar_heatmap_vmg(vmg_file, output_file, titulo_grafico)
+
+'''
+    Função para gerar o Heatmap da Matriz Média Agregada do Youtuber
+'''
+def gerar_visualizacoes_agregadas(youtubers_list: list[str], nome_analise: str):
+    console.print(f"\n[bold magenta]===== GERANDO HEATMAPS AGREGADOS PARA '{nome_analise.upper()}' =====[/bold magenta]")
+    
+    for youtuber in youtubers_list:
+        base_path = Path(f'files/{youtuber}/VMG')
+        img_output_folder = Path(f'files/{youtuber}/plots')
+        img_output_folder.mkdir(parents=True, exist_ok=True)
+        
+        matriz_media_path = base_path / f'VMG_{nome_analise}_mean.csv'
+        
+        if matriz_media_path.exists():
+            heatmap_path = img_output_folder / f'heatmap_{nome_analise}_agregado.png'
+            gerar_heatmap_vmg(
+                matriz_media_path, 
+                heatmap_path, 
+                title=f"Matriz de Transição Média: {youtuber}"
+            )
+            console.print(f"   Agregado salvo para: {youtuber}")
+
+'''
     Função principal para orquestrar o pipeline de análise de VMG
     @param youtubers_list - Lista de youtubers a serem analisados
     @param config_analise - Dicionário de configurações da métrica (da METRICAS_CONFIG)
@@ -307,6 +492,12 @@ def rodar_pipeline_vmg(youtubers_list: list[str], config_metrica: dict, nome_ana
     for agg in ['mean', 'standard', 'variation']:
         salvar_matriz_transicao_youtuber(youtubers_list, config_metrica, nome_analise, agg_metrica=agg)
     
+    # Visualizações Individuais (Cada Vídeo)
+    gerar_visualizacoes_individuais_videos(youtubers_list, nome_analise)
+
+    # Visualizações Agregadas (Por Youtuber)
+    gerar_visualizacoes_agregadas(youtubers_list, nome_analise)
+
     console.print(f"\n[bold magenta]===== PIPELINE VSMG PARA '{nome_analise.upper()}' CONCLUÍDO =====[/bold magenta]")
 
 
@@ -314,11 +505,11 @@ if __name__ == '__main__':
     lista_youtubers = ['Robin Hood Gamer', 'Julia MineGirl', 'Tex HS']
 
     # # Executa o pipeline para a métrica 'sentimento'
-    rodar_pipeline_vmg(
-        lista_youtubers, 
-        config_metrica=METRICAS_CONFIG['sentimento'], 
-        nome_analise='sentimento'
-    )
+    # rodar_pipeline_vmg(
+    #     lista_youtubers, 
+    #     config_metrica=METRICAS_CONFIG['sentimento'], 
+    #     nome_analise='sentimento'
+    # )
     
     # # Executa o pipeline para a métrica 'negatividade' com 3 estados
     # rodar_pipeline_vmg(
