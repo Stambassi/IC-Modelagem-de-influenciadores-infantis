@@ -167,7 +167,7 @@ def obter_cor_semantica(padrao_str: str) -> str:
     Gera um gráfico de barras horizontais dos Top N padrões mais frequentes.
     Salva como imagem de alta resolução pronta para slides/artigos.
 '''
-def gerar_grafico_barras_padroes(df: pd.DataFrame, caminho_saida: Path, top_n: int = 15):
+def gerar_grafico_barras_padroes(df: pd.DataFrame, caminho_saida: Path, tipo_sequencia: str, top_n: int = 15):
     if df.empty: return
 
     # Filtra os Top N
@@ -246,7 +246,7 @@ def gerar_grafico_barras_padroes(df: pd.DataFrame, caminho_saida: Path, top_n: i
     @param resultados_minerados - A lista de dicionários retornada por minerar_padroes_frequentes
     @param caminho_saida - O Path onde o relatório final será salvo
 '''
-def formatar_e_salvar_resultados(resultados_minerados: list[dict], caminho_saida: Path) -> None:
+def formatar_e_salvar_resultados(resultados_minerados: list[dict], tipo_sequencia: str, caminho_saida: Path) -> None:
     if not resultados_minerados:
         console.print(f"     [yellow]Nenhum padrão frequente encontrado para salvar em {caminho_saida.name}.[/yellow]")
         return
@@ -273,9 +273,9 @@ def formatar_e_salvar_resultados(resultados_minerados: list[dict], caminho_saida
         console.print(f"[red]Erro ao escrever arquivo CSV: {e}[/red]")
         return
     
-    # 3. Gera Gráfico de Barras (Top 15)
+    # Gera Gráfico de Barras (Top 15)
     caminho_imagem = caminho_saida.parent / f"grafico_{caminho_saida.stem}.png"
-    gerar_grafico_barras_padroes(df_resultados, caminho_imagem, top_n=15)
+    gerar_grafico_barras_padroes(df_resultados, caminho_imagem, tipo_sequencia, top_n=15)
 
     # Mostra prévia dos top 10 padrões no console
     console.print(f"[bold]Top Padrões Encontrados:[/bold]")
