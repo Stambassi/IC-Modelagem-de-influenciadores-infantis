@@ -33,7 +33,7 @@ METRICAS_CONFIG = {
     'toxicidade': {
         'coluna_base': 'toxicity',
         'tipo_estados': 'numerico_categorizado', 
-        'limiares': [0.0, 0.30, 0.70, 1.01], 
+        'limiares': [0.0, 0.20, 0.50, 1.01], 
         'estados': ['NT', 'GZ', 'T'],
         # Cores para o grafo: Verde (NT), Amarelo (GZ), Vermelho (T)
         'cores_grafo': {'NT': '#2ecc71', 'GZ': '#f1c40f', 'T': '#e74c3c'} 
@@ -498,7 +498,7 @@ def rodar_pipeline_vmg(youtubers_list: list[str], config_metrica: dict, nome_ana
         salvar_matriz_transicao_youtuber(youtubers_list, config_metrica, nome_analise, agg_metrica=agg)
     
     # Visualizações Individuais (Cada Vídeo)
-    gerar_visualizacoes_individuais_videos(youtubers_list, nome_analise)
+    #gerar_visualizacoes_individuais_videos(youtubers_list, nome_analise)
 
     # Visualizações Agregadas (Por Youtuber)
     gerar_visualizacoes_agregadas(youtubers_list, nome_analise)
@@ -510,11 +510,11 @@ if __name__ == '__main__':
     lista_youtubers = ['Robin Hood Gamer', 'Julia MineGirl', 'Tex HS']
 
     # # Executa o pipeline para a métrica 'sentimento'
-    rodar_pipeline_vmg(
-        lista_youtubers, 
-        config_metrica=METRICAS_CONFIG['sentimento'], 
-        nome_analise='sentimento'
-    )
+    # rodar_pipeline_vmg(
+    #     lista_youtubers, 
+    #     config_metrica=METRICAS_CONFIG['sentimento'], 
+    #     nome_analise='sentimento'
+    # )
     
     # # Executa o pipeline para a métrica 'negatividade' com 3 estados
     # rodar_pipeline_vmg(
