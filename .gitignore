@@ -1,5 +1,6 @@
 # Para ignorar os arquivos coletados
 /Coletor/crawler/files/*
+/Coletor/crawler/dados/*
 
 # Para ignorar as configurações de máquina
 /Coletor/crawler/.venv

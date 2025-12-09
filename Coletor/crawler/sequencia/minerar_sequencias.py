@@ -456,7 +456,7 @@ def orquestrar_mineracao_sequencias(tipo_analise: str, min_suporte: float = 5.0)
         
         # Salva Relatório PRE
         nome_saida_pre = f"padroes_CAUSA_{caminho_dataset.stem}.csv"
-        formatar_e_salvar_resultados(resultados_pre, caminho_dataset.parent / nome_saida_pre)
+        formatar_e_salvar_resultados(resultados_pre, 'precursora', caminho_dataset.parent / nome_saida_pre)
         
         # Gera Sankey PRE
         sankey_pre_path = pasta_plots / f"sankey_CAUSA_{caminho_dataset.stem}.html"
@@ -480,7 +480,7 @@ def orquestrar_mineracao_sequencias(tipo_analise: str, min_suporte: float = 5.0)
 
         # Salva Relatório POS
         nome_saida_pos = f"padroes_CONSEQUENCIA_{caminho_dataset.stem}.csv"
-        formatar_e_salvar_resultados(resultados_pos, caminho_dataset.parent / nome_saida_pos)
+        formatar_e_salvar_resultados(resultados_pos, 'sucessora', caminho_dataset.parent / nome_saida_pos)
         
         # Gera Sankey POS
         sankey_pos_path = pasta_plots / f"sankey_CONSEQUENCIA_{caminho_dataset.stem}.html"

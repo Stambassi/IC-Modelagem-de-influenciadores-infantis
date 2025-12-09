@@ -23,12 +23,6 @@ RANGE_GZ_LOW = np.arange(0.05, 0.40, 0.05)
 # Limites Superiores (Início de T) a testar: de 0.40 a 0.95
 RANGE_T_HIGH = np.arange(0.40, 1.0, 0.05) 
 
-# Limites Superiores (Início de T) a testar: Níveis de confiança da Exponencial
-NIVEIS_CONFIANCA_TESTE = np.concatenate([
-    np.arange(0.80, 0.99, 0.01),
-    np.arange(0.99, 0.999, 0.001)
-])
-
 '''
     Função para carregar os dados de toxicidade de uma lista de youtubers
     @param youtubers_lista - Lista de youtubers a serem analisados
@@ -264,101 +258,9 @@ def otimizar_dois_thresholds_silhouette_score(youtubers_list: list):
     console.print(f"Heatmap de otimização 2D salvo em: [green]{output_file}[/green]")
 
 
-'''
-    Função orquestradora para otimizar o Nível de Confiança da Distribuição Exponencial
-    baseado na melhor separação de clusters (Silhouette Index)
-    @param youtubers_list - Lista de youtubers a serem analisados
-'''
-def otimizar_confianca_exponencial(youtubers_list: list):
-    console.print("\n[bold magenta]=== Otimização Híbrida: Exponencial + Silhouette ===[/bold magenta]")
-    
-    # Carregar Dados
-    dados = carregar_dados_toxicidade(youtubers_list)
-    if len(dados) == 0:
-        console.print("[red]Nenhum dado encontrado.[/red]")
-        return
-
-    console.print(f"Dados carregados: {len(dados)} amostras.")
-    
-    # Ajusta a distribuição exponencial e encontra o lambda (scale = 1/lambda) que melhor descreve os dados
-    loc, scale = expon.fit(dados, floc=0)
-    console.print(f"Parâmetros Exponencial: Scale (1/lambda) = {scale:.4f}")
-
-    console.print("Testando níveis de confiança...")
-    
-    resultados_confianca = []
-    resultados_threshold = []
-    resultados_silhouette = []
-
-    # Loop de otimização
-    for confianca in NIVEIS_CONFIANCA_TESTE:
-        # Calcula o threshold estatístico para esta confiança
-        # ppf = Percentile Point Function (Inverso da CDF)
-        threshold_calc = expon.ppf(confianca, loc=loc, scale=scale)
-        
-        # Ignora thresholds absurdos (maiores que 1.0 ou menores que GZ)
-        if threshold_calc > 1.0 or threshold_calc <= LIMITE_INFERIOR_GZ:
-            continue
-
-        # Calcula a qualidade da separação com este threshold
-        score = calcular_silhouette_score_1d(dados, threshold_calc)
-        
-        resultados_confianca.append(confianca)
-        resultados_threshold.append(threshold_calc)
-        resultados_silhouette.append(score)
-        
-    if not resultados_silhouette:
-        console.print("[red]Nenhum nível de confiança gerou um threshold válido.[/red]")
-        return
-
-    # Encontrar o Melhor Resultado
-    best_idx = np.argmax(resultados_silhouette)
-    best_conf = resultados_confianca[best_idx]
-    best_thresh = resultados_threshold[best_idx]
-    best_sil = resultados_silhouette[best_idx]
-
-    console.print(f"\n[bold green]RESULTADO DA OTIMIZAÇÃO:[/bold green]")
-    console.print(f"Melhor Nível de Confiança: [bold]{best_conf:.1%}[/bold]")
-    console.print(f"Threshold Resultante (T): [bold]{best_thresh:.4f}[/bold]")
-    console.print(f"Silhouette Index: {best_sil:.4f}")
-
-    # Plotar Gráficos
-    fig, ax1 = plt.subplots(figsize=(10, 6))
-
-    # Eixo Y1 (Esquerda): Silhouette Index
-    color = 'tab:blue'
-    ax1.set_xlabel('Nível de Confiança Estatística (Percentil)')
-    ax1.set_ylabel('Silhouette Index', color=color, fontsize=12)
-    ax1.plot(resultados_confianca, resultados_silhouette, color=color, linewidth=2, label='Silhouette')
-    ax1.tick_params(axis='y', labelcolor=color)
-    ax1.grid(True, linestyle='--', alpha=0.5)
-    
-    # Destaque para o melhor ponto
-    ax1.axvline(best_conf, color='green', linestyle='--', label=f'Melhor: {best_conf:.1%}')
-
-    # Eixo Y2 (Direita): Threshold Resultante
-    ax2 = ax1.twinx()  
-    color = 'tab:red'
-    ax2.set_ylabel('Threshold de Toxicidade Resultante', color=color, fontsize=12)
-    ax2.plot(resultados_confianca, resultados_threshold, color=color, linestyle=':', alpha=0.7, label='Threshold')
-    ax2.tick_params(axis='y', labelcolor=color)
-
-    plt.title(f'Otimização do Nível de Confiança (Exponencial)\nMelhor Threshold: {best_thresh:.3f} (Confiança: {best_conf:.1%})')
-    
-    # Salvar
-    output_path = BASE_FOLDER / 'threshold'
-    output_path.mkdir(parents=True, exist_ok=True)
-    output_file = output_path / 'otimizacao_exponencial_hibrida.png'
-    
-    plt.tight_layout()
-    plt.savefig(output_file, dpi=300)
-    plt.close()
-
-    console.print(f"Gráfico de otimização salvo em: [green]{output_file}[/green]")
 
 if __name__ == "__main__":
     lista_youtubers = ['Julia MineGirl', 'Tex HS', 'Robin Hood Gamer']
     
     #otimizar_threshold_silhouette_score(lista_youtubers)
-    #otimizar_confianca_exponencial(lista_youtubers)
     otimizar_dois_thresholds_silhouette_score(lista_youtubers)
