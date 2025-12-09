@@ -3,18 +3,228 @@ import re
 import os
 import json
 from rich.console import Console
+from pathlib import Path
+import webbrowser
+
 from bertopic import BERTopic
+from umap import UMAP
+import optuna
+from sklearn.decomposition import PCA
+from hdbscan import HDBSCAN
+from sentence_transformers import SentenceTransformer
+
+from sklearn.feature_extraction.text import CountVectorizer
+from bertopic.vectorizers import ClassTfidfTransformer
+from bertopic.representation import KeyBERTInspired
+
+from gensim.corpora import Dictionary
+from gensim.models import CoherenceModel
+
+
+import nltk
+from nltk.corpus import stopwords
+
 import spacy
 
-# from rich.console import Console
-
 console = Console()
-print("Carregando programa...")
-modelagem = BERTopic(language="portuguese")
 
-# Comando para baixar o modelo
-# $ python -m spacy download pt_core_news_md
-nlp = spacy.load("pt_core_news_md")
+custom_sWords = {"aqui","pra","velho","né","tá","mano","ah",
+                 "dela","ju","beleza","jú","julia","olá","tô",
+                 "gente","ta","olha","pá","vi","ai","júlia","será",
+                 "pessoal","galerinha","acho", "vou", "deus"
+                 "daí", "porta","hein","bora","aham","mãe","juma"}
+
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+
+
+# -------------------------------------------------------------------
+# MÉTRICAS
+# -------------------------------------------------------------------
+
+def compute_coherence_and_diversity(topic_model, documents):
+    """
+    Calcula:
+    - Coerência C_v
+    - Diversidade de tópicos
+    """
+    try:
+        topics = topic_model.get_topics()
+
+        # Se não houver tópicos suficientes, retorna score ruim
+        if not topics:
+            return -9999.0, -9999.0
+
+        topic_words = []
+
+        for topic_id in topic_model.get_topics().keys():
+
+            # Ignorar o tópico -1 (outlier)
+            if topic_id == -1:
+                continue
+
+            words = topic_model.get_topic(topic_id)
+
+            # Ignorar tópicos vazios, None ou formato inesperado
+            if not words or not isinstance(words, list):
+                continue
+
+            # Filtra apenas pares (token, score)
+            valid_pairs = [(w, s) for w, s in words if isinstance(w, str)]
+
+            # Se não houver palavras válidas, ignora
+            if len(valid_pairs) == 0:
+                continue
+
+            # Pega as top N palavras
+            tokens = [w for w, _ in valid_pairs[:10]]
+
+            # Ignora tópicos que ficaram com 0 tokens
+            if len(tokens) == 0:
+                continue
+
+            topic_words.append(tokens)
+
+        # Se depois de tudo não houver tópicos válidos, retorna score ruim
+        if len(topic_words) == 0:
+            return -9999.0, -9999.0
+
+
+        # Coerência C_v
+        dictionary = Dictionary(doc.split() for doc in documents)
+        texts = [doc.split() for doc in documents]
+
+        print(topic_words[0])
+
+        cm = CoherenceModel(
+            topics=topic_words,
+            texts=texts,
+            dictionary=dictionary,
+            coherence='c_v'
+        )
+        coherence = cm.get_coherence()
+
+
+        # Diversidade de tópicos
+        all_words = [w for sub in topic_words for w in sub]
+        diversity = len(set(all_words)) / len(all_words)
+
+    except Exception as e:
+        # console.log(e,log_locals=True)
+        print("Erro:", e)
+        return -9999.0,-9999.0
+
+    return coherence, diversity
+
+
+# -------------------------------------------------------------------
+# FUNÇÃO OBJETIVA PARA OTIMIZAR COM OPTUNA
+# -------------------------------------------------------------------
+
+def objective(trial, documents):
+
+    # ---------------------------
+    # Hiperparâmetros do UMAP
+    # ---------------------------
+    n_neighbors = trial.suggest_int("n_neighbors", 5, 50)
+    n_components = trial.suggest_int("n_components", 5, 15)
+    min_dist = trial.suggest_float("min_dist", 0.0, 0.5)
+
+    umap_model = UMAP(
+        n_neighbors=n_neighbors,
+        n_components=n_components,
+        min_dist=min_dist,
+        metric="cosine",
+        random_state=42
+    )
+
+    # ---------------------------
+    # Hiperparâmetros do HDBSCAN
+    # ---------------------------
+    min_cluster_size = trial.suggest_int("min_cluster_size", 2, 20)
+
+    hdbscan_model = HDBSCAN(
+        min_cluster_size=min_cluster_size,
+        metric="euclidean",
+        cluster_selection_method="leaf",
+        prediction_data=True
+    )
+
+    # ---------------------------
+    # Vetorizador
+    # ---------------------------
+    n_docs = len(documents)
+
+    min_df = trial.suggest_float("min_df", 0.0, 0.3)
+    max_df = trial.suggest_float("max_df", 1, 1)
+
+    if max_df < (min_df / n_docs):
+        trial.set_user_attr("skip_reason", "max_df < min_df at corpus level")
+        return -9999.0
+
+    # Stopwords
+    nlp = spacy.load("pt_core_news_md")
+    spacy_sWords = nlp.Defaults.stop_words
+    stop_words = list(spacy_sWords.union(custom_sWords))
+
+    vectorizer_model = CountVectorizer(
+        min_df=min_df,
+        max_df=max_df,
+        stop_words=stop_words
+    )
+
+    embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+
+    # ---------------------------
+    # Criar modelo
+    # ---------------------------
+    topic_model = BERTopic(
+        embedding_model=embedding_model,
+        umap_model=umap_model,
+        hdbscan_model=hdbscan_model,
+        vectorizer_model=vectorizer_model,
+        verbose=False
+    )
+
+    # ---------------------------
+    # Rodar BERTopic
+    # ---------------------------
+    topics, probs = topic_model.fit_transform(documents)
+
+    # ---------------------------
+    # Avaliar qualidade
+    # ---------------------------
+    coherence, diversity = compute_coherence_and_diversity(topic_model, documents)
+
+    final_score = 0.7 * coherence + 0.3 * diversity
+
+        # Log no trial
+    trial.set_user_attr("coherence", coherence)
+    trial.set_user_attr("diversity", diversity)
+
+
+    
+    return final_score
+
+
+# -------------------------------------------------------------------
+# FUNÇÃO PRINCIPAL
+# -------------------------------------------------------------------
+
+def otimizar_BERTopic(documents, n_trials=30):
+
+    study = optuna.create_study(
+        direction="maximize",
+        sampler=optuna.samplers.TPESampler(seed=42)
+    )
+
+    study.optimize(lambda trial: objective(trial, documents), n_trials=n_trials)
+
+    print("\n🎯 Melhor score:", study.best_value)
+    print("📌 Melhores hiperparâmetros:")
+    print(study.best_params)
+
+    return study
 
 
 def lematizar_json_segment(video_data: json) -> list[str]:
@@ -37,6 +247,29 @@ def lematizar_json_segment(video_data: json) -> list[str]:
             texto_limpo.append(" ".join(tokens_segmento))
     return texto_limpo
 
+def lematizar_list(data: list) -> list[str]:
+    # print(data)
+
+    ## filtrar palavras por frequenicia
+    X = vectorizer_model.fit_transform(data)
+    filtered_words = vectorizer_model.get_feature_names_out()
+
+    documento = nlp(" ".join(filtered_words))
+
+    # result = ""
+    # for item in data:
+    #     result += item
+    # documento = nlp(result)
+
+    texto_limpo = []
+    for token in documento:
+        if token.pos_ == "VERB" and token.is_alpha and not (token.is_stop):
+            texto_limpo.append(str.lower(token.lemma_))
+        elif not (token.pos_ == "VERB") and token.is_alpha and not (token.is_stop):
+            texto_limpo.append(str.lower(token.text))
+    
+    return texto_limpo
+
 def lematizar_json(video_data: json) -> list[str]:
     documento = nlp(video_data['text'])
     texto_limpo = []
@@ -47,248 +280,231 @@ def lematizar_json(video_data: json) -> list[str]:
             texto_limpo.append(str.lower(token.text))
     return texto_limpo
 
-def lematizar_json_max(video_data: json, quantidade_max_token) -> list[str]:
-    documento = nlp(video_data['text'])
-    quantidade_max_token = len(documento) if quantidade_max_token > len(documento) else quantidade_max_token
-    # console.print(f"[red] Quantidade máxima de tokens = {quantidade_max_token}")
-    texto_limpo = []
-    for token in documento[:quantidade_max_token]:
-        if token.pos_ == "VERB" and token.is_alpha and not (token.is_stop):
-            texto_limpo.append(str.lower(token.lemma_))
-        elif not (token.pos_ == "VERB") and token.is_alpha and not (token.is_stop):
-            texto_limpo.append(str.lower(token.text))
+def coletar_informacoes_youtuber(video_path) -> str: 
+    try:
+        with open(video_path, 'r') as video_data_json:
+            video_data = json.load(video_data_json)
+            texto_limpo = video_data['text']
+    except:
+        texto_limpo = ""
     return texto_limpo
 
-def gerar_topicos_token_variavel(video_path,lista_medias) -> pd.DataFrame(): 
-    video_data_path = os.path.join(video_path,"video_text.json")
-    topicos = pd.DataFrame()
+def coletar_tirinhas_video(tirinha_csv_path) -> list[str]:
     try:
-        with open(video_data_path, 'r') as video_data_json:
-            video_data = json.load(video_data_json)
-            gerou_topico = False
-            for i in range(5,1000,5):
-                try:
-                    if not gerou_topico:
-                        texto_limpo = lematizar_json_max(video_data,i)
-                        # print(texto_limpo)
-                        modelagem.fit_transform(texto_limpo)
-                        topicos = modelagem.get_topic_info()
-                        console.print(f"Gerou [green]tópicos com {i} tokens")
-                        gerou_topico = True
-                        # mostrar_topico(topicos)
-                        lista_medias.append(i)
-                except Exception as error:
-                    print(error)
-                    gerou_topico = False
-    except Exception as e:
-        print(e)
-    return topicos
+        sequencias_path = tirinha_csv_path.parent / "sequencias" / "sequencia_toxicidade.csv"
+        sequencia = pd.read_csv(sequencias_path, header=None)[0].tolist()
 
-def gerar_topicos(video_path, file_path) -> pd.DataFrame(): 
-    video_data_path = os.path.join(video_path,"video_text.json")
-    topicos = pd.DataFrame()
-    try:
-        with open(video_data_path, 'r') as video_data_json:
-            video_data = json.load(video_data_json)
-            texto_limpo = lematizar_json(video_data)
-            modelagem.fit_transform(texto_limpo)
-            topicos = modelagem.get_topic_info()
-            mostrar_topico(topicos)
-            gravar_topico(topicos,file_path)
+        tiras_csv = pd.read_csv(tirinha_csv_path)
+        tiras = tiras_csv['tiras'].tolist()
+
+        indices_selecionados = set()
+
+        for i, estado in enumerate(sequencia):
+            if estado == "T":
+                inicio = max(0, i - 3)
+                fim = min(len(tiras) - 1, i + 3)
+                for j in range(inicio, fim + 1):
+                    indices_selecionados.add(j)
+
+        tirinhas_coletadas = [tiras[i] for i in sorted(indices_selecionados)]
+
+        return " ".join(tirinhas_coletadas)
 
     except Exception as e:
-        print(e)
-    return topicos
-
-def gravar_topico(topicos,file_path):
-    with open(file_path,'a') as f:
-        for index, row in topicos.iterrows(): 
-            f.write(f"ID: {row['Topic']}\n")
-            f.write(f"Nome: {row['Name']}\n")
-            f.write(f"Contagem: {row['Count']}\n")
-            f.write(f"Conteúdo: {row['Representation']}\n")
-            f.write("##########################\n")
-
-def comparar_lematizacao(video_path) -> pd.DataFrame(): 
-    video_data_path = os.path.join(video_path,"video_text.json")
-    topicos = pd.DataFrame()
-    try:
-        with open(video_data_path, 'r') as video_data_json:
-            video_data = json.load(video_data_json)
-            texto_limpo = lematizar_json(video_data)
-            console.print(f"Lematização texto completo: [cyan]{len(texto_limpo)} elementos")
-            set1 = set(texto_limpo)
-            
-            texto_limpo = lematizar_json_segment(video_data)
-            console.print(f"Lematização texto segmentado: [cyan]{len(texto_limpo)} elementos")
-            set2 = set(texto_limpo)
-
-            diff = set1.symmetric_difference(set2)
-            print("Different elements:", diff)
-
-    except Exception as e:
-        print(e)
-    return topicos
+        console.log(e)
+        return ""
 
 
-def teste_topicos_segmentos(video_path) -> pd.DataFrame(): 
-    video_data_path = os.path.join(video_path,"video_text.json")
-    topicos = pd.DataFrame()
-    try:
-        with open(video_data_path, 'r') as video_data_json:
-            video_data = json.load(video_data_json)
-            texto_limpo = lematizar_json(video_data)
-            console.print(f"Lematização texto completo: [cyan]{len(texto_limpo)} elementos")
-            
-            modelagem.fit_transform(texto_limpo)
-            topicos = modelagem.get_topic_info()
-            print(topicos.head(10))
-
-            info = modelagem.get_document_info(texto_limpo)
-            print(info.columns)
-            print(info)
-
-            lemas_segment = lematizar_json_segment(video_data)
-            console.print(f"Lematização texto segmentado: [cyan]{len(texto_limpo)} elementos")
-            topicos_info = []
-            for sublist in info['Top_n_words']:
-                # print(sublist)
-                for token in sublist.split(" - "):
-                    if len(token) >= 0:
-                        # print(token)
-                        topicos_info.append(token)
-
-            # set_topicos = set([item for sublist in topicos["Representation"] for item in sublist])
-            set_topicos = set(
-                topicos_info    
-            )
-
-            # print(set_topicos)
-
-            print("Elementos dos topicos: ",set_topicos)
-
-            diff = [x for x in lemas_segment if x not in set_topicos]
-            print("Elementos fora dos tópicos:", diff)
-
-    except Exception as e:
-        print(e)
-    return topicos
-
-
-
-
-def mostrar_topico(topicos: pd.DataFrame()):
-    for index, row in topicos.iterrows():        
-            print("##########################")
-            print(f"ID: {row['Topic']}")
-            print(f"Contagem: {row['Count']}")
-            print(f"Conteúdo: {row['Representation']}")
-
-
-def lematizar_json_segment_tempo(video_data: json, lista_tempo) -> list[str]:
-    texto_limpo = []
-    for segment in video_data['segments']:
-        documento = nlp(segment['text'])
-        tokens_segmento = []
-        for token in documento:
-            if token.pos_ == "VERB" and token.is_alpha and not (token.is_stop):
-                tokens_segmento.append(str.lower(token.lemma_))
-            elif not (token.pos_ == "VERB") and token.is_alpha and not (token.is_stop):
-                    tokens_segmento.append(str.lower(token.text))
-        texto_limpo.append(" ".join(tokens_segmento))
+def get_dados_youtuber(youtuber: str, arquivo_tirinha = 'tiras_video.csv'):
+    documento = []
+    base_path = Path(f'files/{youtuber}')
+    for tirinha_csv_path in base_path.rglob(arquivo_tirinha):
+        tiras_youtuber = coletar_tirinhas_video(tirinha_csv_path)
+        if tiras_youtuber != "":
+            documento.append(tiras_youtuber)
+    return documento
     
-
-    # tempo_total = 0
-    # novo_tempo = []
-    # novo_texto = []
-    # tokens_segmento = []
-    # print(lista_tempo)
-    # for index ,tempo in enumerate(lista_tempo):
-    #     tempo_total += tempo
-    #     tokens_segmento.append(texto_limpo[index])
-    #     if tempo_total >= 60.00:
-    #         novo_tempo.append(tempo_total)
-    #         novo_texto.append(" ".join(tokens_segmento))
-    #         tokens_segmento = []
-    #         tempo_total = 0
-    # return novo_texto, novo_tempo
-    return texto_limpo
-
-def gerar_grafico_topico_tempo(video_path):
-    video_data_path = os.path.join(video_path,"video_text.json")
-    topicos = pd.DataFrame()
-    try:
-        with open(video_data_path, 'r') as video_data_json:
-            video_data = json.load(video_data_json)
-            tempos = []
-            for segment in video_data['segments']:
-                # tempos.append(segment['end']-segment['start'])
-                tempos.append(segment['end'])
-
-            texto_limpo = lematizar_json_segment_tempo(video_data, tempos)
-            console.print("Tamanho texto lematizado: [green]",len(texto_limpo))
-            print(texto_limpo)
-            console.print("Tamanho dos timestamps: [green]", len(tempos))
-            print(tempos)
-            modelagem.fit_transform(texto_limpo)
-            topicos_tempo = modelagem.topics_over_time(texto_limpo, tempos)
-
-            grafico = modelagem.visualize_topics_over_time(topicos_tempo)
-            grafico.write_image("bertopic/Grafico_teste.png")
-
-            print(topicos_tempo)
-            print(topicos_tempo['Name'].unique())
-            topicos_tempo.to_csv("bertopic/Teste_topicos.csv")
-            # print(grafico)
-    except Exception as e:
-        print(e)
+def pipeline_BERTopic(youtuber: str):
+    documentos = get_dados_youtuber(youtuber)
     
+    console.rule(f"Documento de tamanho: {len(documentos)}")
+    print(type(documentos))
+    study = otimizar_BERTopic(documentos, n_trials=20)
+    salvar_BERTopic(documentos, study.best_params, youtuber)
 
 
 
-'''
-    Função para percorrer as pastas de cada vídeo de um youtuber
-    @param youtubers_list - Lista de youtubers a serem analisados
-    @param function - Função a ser executada na pasta de cada vídeo de um youtuber
-''' 
-def percorrer_video(youtubers_list: list[str], function) -> None:
-    min_topicos = []
+def salvar_BERTopic(docs, params, youtuber):
+    
+    ## Embedding
+    embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+    # embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+    ## Reduzir dimensionalidade
+    umap_model = UMAP(n_neighbors=params['n_neighbors'], 
+                      n_components=params['n_components'], 
+                      min_dist=params['min_dist'],
+                      metric='euclidean',
+                      random_state=42)
+
+    ## Ajuste no Cluster
+    hdbscan_model = HDBSCAN(min_cluster_size=params['min_cluster_size'], 
+                            metric='euclidean',
+                            cluster_selection_method='leaf',
+                            prediction_data=True)
+
+    ## Tokenizar
+    nlp = spacy.load("pt_core_news_md")
+
+    # nltk.download("stopwords")
+    # stop_words = stopwords.words("portuguese")
+    spacy_sWords = nlp.Defaults.stop_words
+
+    stop_words = list(spacy_sWords.union(custom_sWords))
+
+    vectorizer_model = CountVectorizer(min_df=params['min_df'], 
+                                    #    max_df=study['max_df'],
+                                       stop_words=stop_words)
+    # vectorizer_model = CountVectorizer()
+
+    ## Representação dos topicos
+    ctfidf_model = ClassTfidfTransformer()
+
+    # topic_model = BERTopic(language="portuguese",vectorizer_model = vectorizer_model)
+    # topic_model = BERTopic(language="portuguese")
+
+    topic_model = BERTopic(
+    embedding_model=embedding_model,          
+    umap_model=umap_model,                    
+    hdbscan_model=hdbscan_model,              
+    vectorizer_model=vectorizer_model,        
+    ctfidf_model=ctfidf_model,                
+    )
+    # Comando para baixar o modelo
+    # $ python -m spacy download pt_core_news_md
+    
+    console.rule(f"Gerando Tópicos com {len(docs)} tirinhas")
+    topics, probs = topic_model.fit_transform(docs)
+    topicos = topic_model.get_topic_info()
+    topicos.to_csv(f"bertopic/topicos_{youtuber}.csv", index=False)
+    topic_model.save(f"bertopic/modelo_{youtuber}")
+
+
+
+def gerar_topicos_youtubers(youtubers_list: list[str]) -> None:
+
+    ###### Fine Tuning BERTopic
+    console.print("Ajustando hiperparâmetros do BERTopic...")
+
+    ## Embedding
+    embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+    # embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+
+    ## Reduzir dimensionalidade
+    umap_model = UMAP(n_neighbors=10, n_components=2, min_dist=0.0, metric='euclidean', random_state=42)
+
+    ## Ajuste no Cluster
+    hdbscan_model = HDBSCAN(min_cluster_size=5, metric='euclidean', cluster_selection_method='leaf', prediction_data=True)
+
+    ## Tokenizar
+    nlp = spacy.load("pt_core_news_md")
+
+    # nltk.download("stopwords")
+    # stop_words = stopwords.words("portuguese")
+    spacy_sWords = nlp.Defaults.stop_words
+
+    stop_words = list(spacy_sWords.union(custom_sWords))
+
+    vectorizer_model = CountVectorizer(min_df=2, stop_words=stop_words)
+    # vectorizer_model = CountVectorizer()
+
+    ## Representação dos topicos
+    ctfidf_model = ClassTfidfTransformer()
+
+    # topic_model = BERTopic(language="portuguese",vectorizer_model = vectorizer_model)
+    # topic_model = BERTopic(language="portuguese")
+
+    topic_model = BERTopic(
+    embedding_model=embedding_model,          
+    umap_model=umap_model,                    
+    hdbscan_model=hdbscan_model,              
+    vectorizer_model=vectorizer_model,        
+    ctfidf_model=ctfidf_model,                
+    )
+    # Comando para baixar o modelo
+    # $ python -m spacy download pt_core_news_md
+    
     # Percorrer youtubers
     for youtuber in youtubers_list:
-        youtuber_file_path = "bertopic"
-        youtuber_file_path = os.path.join(youtuber_file_path,f"topicos_{youtuber}.txt")
-        base_dir = f"files/{youtuber}"
-        if os.path.isdir(base_dir):
-            console.rule(youtuber)
-            # Percorrer os anos
-            for year_folder in os.listdir(base_dir):
-                next_year_dir = os.path.join(base_dir, year_folder)
-                if os.path.isdir(next_year_dir):
-                    # Percorrer os meses
-                    for month_folder in os.listdir(next_year_dir):
-                        next_month_dir = os.path.join(next_year_dir, month_folder)
-                        if os.path.isdir(next_month_dir):
-                            # Percorrer os vídeos
-                            for video_folder in os.listdir(next_month_dir):
-                                next_video_dir = os.path.join(next_month_dir, video_folder)
-                                
-                                if os.path.isdir(next_video_dir):
-                                    console.print(f"[green]## {video_folder} ##")
-                                    with open(youtuber_file_path,'a') as f:
-                                        f.write(f"## {video_folder} ##\n")  
-                                    function(next_video_dir,youtuber_file_path)
-    # avg = sum(min_topicos) / len(min_topicos)
-    # console.print(f"Quantidade média de tokens mínimos foi de [green]{avg}")
-#lista_youtubers =  ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Jazzghost', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'meu nome é david', 'Papile', 'TazerCraft', 'Tex HS']
-lista_youtubers =  ['AuthenticGames']
+        documento = get_dados_youtuber(youtuber)
+        # print(tiras_youtuber)
+        console.rule(f"Gerando Tópicos com {len(documento)} tirinhas")
+        topics, probs = topic_model.fit_transform(documento)
+        topicos = topic_model.get_topic_info()
+        topicos.to_csv(f"bertopic/topicos_{youtuber}.csv", index=False)
+        topic_model.save(f"bertopic/modelo_{youtuber}")
+
+def lematizar_palavra(palavra, nlp):
+    doc = nlp(palavra)
+    return doc[0].lemma_
+
+def lematizar_topicos(topic_model):
+    nlp = spacy.load("pt_core_news_lg")
+    new_topics = {}
+
+    for topic_id in topic_model.get_topics().keys():
+        if topic_id == -1:   # tópico outlier do BERTopic
+            continue
+        
+        words = topic_model.get_topic(topic_id)
+        lemmatized = []
+
+        for word, weight in words:
+            lemma = lematizar_palavra(word,nlp)
+            lemmatized.append((lemma, weight))
+
+        new_topics[topic_id] = lemmatized
+
+    # alteramos os tópicos apenas para visualização
+    topic_model.topic_repr = new_topics
 
 
-video_data_path = "files/AuthenticGames/2024/Dezembro/😳 SOBREVIVI em apenas 1 Bloco no Minecraft! (Foi Insano!)"
-# topico = gerar_topicos(video_data_path)
-# mostrar_topico(topico)
-# gerar_grafico_topico(topico)
-gerar_grafico_topico_tempo(video_data_path)
-# teste_topicos_segmentos(video_data_path)
-# percorrer_video(lista_youtubers, comparar_lematizacao)
+def visualizar_bertopic(youtuber):
+    nlp = spacy.load("pt_core_news_lg")
 
-# percorrer_video(lista_youtubers, gerar_topicos)
+    topic_model = BERTopic.load(f"bertopic/modelo_{youtuber}")
+    topicos = pd.read_csv(f"bertopic/topicos_{youtuber}.csv")
+
+    lematizar_topicos(topic_model)
+    print(topicos)
+
+    fig = topic_model.visualize_heatmap()
+    heatmap_path = Path("bertopic/topicos_heatmap.html")
+    fig.write_html(heatmap_path)
+
+    fig = topic_model.visualize_topics()
+    topics_path = Path("bertopic/topicos.html")
+    fig.write_html(topics_path)
+
+    fig = topic_model.visualize_hierarchy()
+    hierarchy_path = Path("bertopic/topicos_hierarquia.html")
+    fig.write_html(hierarchy_path)
+
+    # abrir automaticamente
+    webbrowser.open(heatmap_path.resolve().as_uri())
+    webbrowser.open(topics_path.resolve().as_uri())
+    webbrowser.open(hierarchy_path.resolve().as_uri())
+
+
+
+# lista_youtubers =  ['Amy Scarlet', 'Julia MineGirl', 'Lokis', 'Luluca Games', 'meu nome é david', 'Papile','Tex HS']
+
+# lista_youtubers =  ['AuthenticGames']
+lista_youtubers =  ['Julia MineGirl']
+
+pipeline_BERTopic('Julia MineGirl')
+# visualizar_bertopic("Julia MineGirl")
+
+
+
+    
