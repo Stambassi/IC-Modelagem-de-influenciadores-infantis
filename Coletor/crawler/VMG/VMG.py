@@ -507,7 +507,7 @@ def rodar_pipeline_vmg(youtubers_list: list[str], config_metrica: dict, nome_ana
 
 
 if __name__ == '__main__':
-    lista_youtubers = ['Robin Hood Gamer', 'Julia MineGirl', 'Tex HS']
+    lista_youtubers = ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'Papile', 'Robin Hood Gamer', 'TazerCraft', 'Tex HS']
 
     # # Executa o pipeline para a métrica 'sentimento'
     # rodar_pipeline_vmg(
