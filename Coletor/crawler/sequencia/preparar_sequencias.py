@@ -12,10 +12,21 @@ OUTPUT_ROOT_FOLDER = BASE_DATA_FOLDER / 'sequencias'
 
 # Mapeia cada youtuber para sua categoria principal (Minecraft, Roblox, etc.)
 MAPA_YOUTUBERS_CATEGORIA = {
+    'Amy Scarlet': 'Roblox',
+    'AuthenticGames': 'Minecraft',
+    'Cadres': 'Minecraft',
     'Julia MineGirl': 'Roblox',
-    #'Tex HS': 'Misto',
-    'Robin Hood Gamer': 'Minecraft'
+    'Kass e KR': 'Minecraft',
+    'Lokis': 'Roblox',
+    'Luluca Games': 'Roblox',
+    'Papile': 'Roblox',
+    'Robin Hood Gamer': 'Minecraft',
+    'TazerCraft': 'Minecraft',
+    'Tex HS': 'Misto'
 }
+
+
+#Amy Scarlet', 'AuthenticGames', 'Cadres', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'Papile', 'Robin Hood Gamer', 'TazerCraft, ''Tex HS']
 
 # Configurações de análise (limiares e estados)
 CONFIG_ANALISE = {

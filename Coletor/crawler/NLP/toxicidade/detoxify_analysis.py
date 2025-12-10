@@ -22,7 +22,7 @@ def _processar_tiras_toxicidade(youtubers_list: list, model) -> None:
 
         # Encontrar todos os arquivos de tiras
         for input_csv_path in base_path.rglob('tiras_video.csv'):
-            console.print(f"  -> [bold]Analisando:[/bold] {input_csv_path}")
+            #console.print(f"  -> [bold]Analisando:[/bold] {input_csv_path}")
 
             try:
                 # Carrega o arquivo CSV original
@@ -30,14 +30,14 @@ def _processar_tiras_toxicidade(youtubers_list: list, model) -> None:
 
                 # Checa se a coluna 'toxicity' já existe no arquivo.
                 if 'toxicity' in df_tiras.columns:
-                    console.print(f"     [yellow]Arquivo já contém colunas de toxicidade. Pulando.[/yellow]")
+                    #console.print(f"     [yellow]Arquivo já contém colunas de toxicidade. Pulando.[/yellow]")
                     continue
 
                 # Extrai os textos para análise, garantindo que não sejam nulos
                 textos_para_analise = df_tiras['tiras'].dropna().astype(str).tolist()
 
                 if not textos_para_analise:
-                    console.print("     [yellow]Arquivo não contém texto para análise.[/yellow]")
+                    #console.print("     [yellow]Arquivo não contém texto para análise.[/yellow]")
                     continue
 
                 # Realizar a predição em lote
@@ -45,7 +45,7 @@ def _processar_tiras_toxicidade(youtubers_list: list, model) -> None:
                 resultados = model.predict(textos_para_analise)
                 end_time = time.time()
                 
-                console.print(f"     Análise de {len(textos_para_analise)} tiras concluída em {end_time - start_time:.2f} segundos.")
+                #console.print(f"     Análise de {len(textos_para_analise)} tiras concluída em {end_time - start_time:.2f} segundos.")
 
                 # Converte o dicionário de resultados em um DataFrame
                 df_resultados_toxicidade = pd.DataFrame(resultados)
@@ -80,8 +80,8 @@ def rodar_analise_toxicidade(youtubers_list: list[str]) -> None:
 
 if __name__ == '__main__':
     # Lista de youtubers a serem analisados
-    lista_youtubers_main = ['Julia MineGirl', 'Tex HS', 'Robin Hood Gamer']
+    lista_youtubers = ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'Papile', 'Robin Hood Gamer', 'TazerCraft', 'Tex HS']
 
     console.print("[bold green]Executando Análise de Toxicidade (Standalone)[/bold green]")
     
-    rodar_analise_toxicidade(lista_youtubers_main)
+    rodar_analise_toxicidade(lista_youtubers)
