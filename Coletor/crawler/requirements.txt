@@ -5,6 +5,7 @@ aiohttp==3.12.15
 aiohttp-retry==2.9.1
 aiosignal==1.4.0
 alembic==1.17.2
+alembic==1.17.2
 amqp==5.3.1
 annotated-types==0.7.0
 antlr4-python3-runtime==4.9.3

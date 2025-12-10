@@ -71,6 +71,7 @@ def coletar_tirinhas_video(tirinha_csv_path, filtro=None) -> list[str]:
         return []
 
 def get_dados(arquivo_tirinha = 'tiras_video.csv'):
+    print(YOUTUBER_LIST)
     documento = []
     for youtuber in YOUTUBER_LIST:
         base_path = Path(f'files/{youtuber}')

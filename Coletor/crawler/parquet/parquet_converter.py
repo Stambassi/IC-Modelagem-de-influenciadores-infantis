@@ -303,8 +303,17 @@ def recriar_pastas_do_parquet(nome_youtuber: str, dir_files="files", dir_data="d
                 ano = "SemData"
                 mes = "SemData"
 
-            titulo_safe = limpar_nome_arquivo(str(row['title']))
-            path_video = os.path.join(path_destino_base, ano, mes, titulo_safe)
+            titulo_safe = limpar_nome_arquivo(str(row.get('title', 'SemTitulo')))
+        
+            # Adicionar ID ao nome da pasta para evitar colisão de títulos iguais
+            # Se o título ficar vazio após limpeza, usa apenas o ID
+            if not titulo_safe:
+                nome_pasta = f"[{video_id}]"
+            else:
+                nome_pasta = f"{titulo_safe} [{video_id}]"
+
+            path_video = os.path.join(path_destino_base, ano, mes, nome_pasta)
+
             os.makedirs(path_video, exist_ok=True)
 
             # Recriar videos_info.csv (Metadados simples)
@@ -354,7 +363,7 @@ def recriar_pastas_do_parquet(nome_youtuber: str, dir_files="files", dir_data="d
     console.print(f"[bold green]Decoder finalizado para {nome_youtuber}.[/bold green]\n")
 
 '''
-    Ação DIFF: Compara IDs e status entre Pasta Local e Parquet Remoto.
+    Ação DIFF: Compara IDs e status (Transcrição) entre Pasta Local e Parquet Remoto.
 '''
 def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
     path_parquet = os.path.join(dir_data, f"{nome_youtuber}.parquet")
@@ -362,39 +371,117 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
     
     console.print(Rule(f"Diff: {nome_youtuber}"))
 
-    # Local
+    # Função auxiliar para verificar se existe conteúdo real de forma segura
+    def _tem_conteudo(val):
+        # Checa Nulo/NaN/None
+        if val is None:
+            return False
+        try:
+            if pd.isna(val): return False
+        except: pass # pd.isna pode falhar em estruturas muito complexas, ignora erro
+        
+        # Checa Array Numpy 
+        if isinstance(val, np.ndarray):
+            return val.size > 0
+            
+        # Checa Lista ou Dict
+        if isinstance(val, (list, dict)):
+            return len(val) > 0
+            
+        # Checa String
+        if isinstance(val, str):
+            return bool(val.strip())
+            
+        # Se for número ou outro objeto não nulo, considera que tem conteúdo
+        return True
+
+    # Carregar Local
     df_local = ler_dados_locais(path_files)
     ids_local = set()
-    if not df_local.empty and 'video_id' in df_local.columns:
-        # Remove duplicatas locais para contagem precisa
-        df_local = df_local.drop_duplicates(subset=['video_id'], keep='last')
-        ids_local = set(df_local['video_id']) 
+    transcritos_local_count = 0
     
-    # Remoto
+    if not df_local.empty and 'video_id' in df_local.columns:
+        df_local = df_local.drop_duplicates(subset=['video_id'], keep='last')
+        ids_local = set(df_local['video_id'])
+        # Conta transcritos locais
+        if 'transcript' in df_local.columns:
+            transcritos_local_count = df_local['transcript'].apply(_tem_conteudo).sum()
+    
+    # Carregar Remoto
     ids_remoto = set()
+    transcritos_remoto_count = 0
     df_parquet = pd.DataFrame()
+    
     if os.path.exists(path_parquet):
         try:
             df_parquet = pd.read_parquet(path_parquet)
             if not df_parquet.empty and 'video_id' in df_parquet.columns:
                 df_parquet['video_id'] = df_parquet['video_id'].astype(str).str.strip()
                 ids_remoto = set(df_parquet['video_id'])
+                # Conta transcritos remotos
+                if 'transcript' in df_parquet.columns:
+                    transcritos_remoto_count = df_parquet['transcript'].apply(_tem_conteudo).sum()
         except: pass
 
-    # Operações de Conjunto
+    # Operações de Conjunto (IDs)
     novos_locais = ids_local - ids_remoto
     apenas_remoto = ids_remoto - ids_local
+    em_ambos = ids_local & ids_remoto
 
-    console.print(f"Vídeos Locais: {len(ids_local)} | Vídeos Remotos: {len(ids_remoto)}")
+    # Cálculos de porcentagem
+    total_local = len(ids_local)
+    pct_local = (transcritos_local_count / total_local * 100) if total_local > 0 else 0.0
+    
+    total_remoto = len(ids_remoto)
+    pct_remoto = (transcritos_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
+
+    console.print(f"Vídeos Locais: {total_local} ([cyan]{transcritos_local_count} transcritos - {pct_local:.1f}%[/cyan])")
+    console.print(f"Vídeos Remotos: {total_remoto} ([cyan]{transcritos_remoto_count} transcritos - {pct_remoto:.1f}%[/cyan])")
+    console.print("-" * 40)
     
     if novos_locais:
         console.print(f"[yellow]Novos Locais (Falta Encode):[/yellow] {len(novos_locais)}")
+        console.print(f"  Ex: {list(novos_locais)[:3]}...")
     else:
         console.print("[green]Sincronizado: Nenhum novo local pendente.[/green]")
     
     if apenas_remoto:
         console.print(f"[red]Faltando Local (Necessário Decode):[/red] {len(apenas_remoto)}")
+
+    # Diff de Conteúdo (Transcrição)
+    atualizacao_local = []
+    atualizacao_remota = []
+
+    if em_ambos and not df_local.empty and not df_parquet.empty:
+        df_l_check = df_local[df_local['video_id'].isin(em_ambos)].set_index('video_id')
+        df_r_check = df_parquet[df_parquet['video_id'].isin(em_ambos)].set_index('video_id')
+
+        for vid in em_ambos:
+            # Verifica Local
+            has_local = False
+            if 'transcript' in df_l_check.columns:
+                val = df_l_check.at[vid, 'transcript']
+                has_local = _tem_conteudo(val)
+
+            # Verifica Remoto
+            has_remote = False
+            if 'transcript' in df_r_check.columns:
+                val = df_r_check.at[vid, 'transcript']
+                has_remote = _tem_conteudo(val)
+
+            # Classifica
+            if has_local and not has_remote:
+                atualizacao_local.append(vid)
+            elif has_remote and not has_local:
+                atualizacao_remota.append(vid)
+
+    if atualizacao_local:
+        console.print(f"\n[cyan]Transcrição Nova no Local (Falta Encode):[/cyan] {len(atualizacao_local)}")
+        console.print(f"  Ex: {atualizacao_local[:3]}...")
     
+    if atualizacao_remota:
+        console.print(f"[magenta]Transcrição Nova no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota)}")
+        
     console.print("")
 
 '''

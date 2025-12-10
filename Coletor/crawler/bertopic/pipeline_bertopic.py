@@ -17,27 +17,54 @@ console = Console()
 
 YOUTUBER = 'Julia MineGirl'
 
-custom_sWords = {"aqui","pra","velho","né","tá","mano","ah",
-                 "dela","ju","beleza","jú","julia","olá","tô",
-                 "gente","ta","olha","pá","vi","ai","júlia","será",
-                 "pessoal","galerinha","acho", "vou", 
-                 "daí", "porta","hein","bora","aham","juma"}
+# Lista expandida para contexto de Youtuber Infantil/Gamer
+# Remove verbos de ação genéricos e pedidos de engajamento que poluem tópicos
+custom_sWords = {
+    "aqui", "pra", "velho", "né", "tá", "mano", "ah",
+    "dela", "ju", "beleza", "jú", "julia", "olá", "tô",
+    "gente", "ta", "olha", "pá", "vi", "ai", "júlia", "será",
+    "pessoal", "galerinha", "acho", "vou", "daí", "porta",
+    "hein", "bora", "aham", "juma", "tipo", "então", "assim",
+    "vai", "bom", "agora", "fazer", "coisa", "ver", "tudo",
+    "inscreva", "canal", "like", "vídeo", "video", "sininho",
+    "notificação", "compartilha", "deixa", "gostei", "comenta",
+    "oi", "e aí", "eae", "fala", "galera", "todos", "bem-vindos"
+}
 
+# Intervalos de parâmetros a serem ajustados
 param_ranges = {
-    "n_neighbors": {"type": "int", "low": 5, "high": 50},
+    "n_neighbors": {"type": "int", "low": 15, "high": 60},
+    
     "n_components": {"type": "int", "low": 2, "high": 5},
+    
     "min_dist": {"type": "float", "low": 0.0, "high": 0.5},
-    "min_cluster_size": {"type": "int", "low": 2, "high": 20},
-    "min_samples": {"type": "int", "low": 2, "high": 20},
-    "min_df": {"type": "float", "low": 0.0, "high": 0.1},
+    
+    "min_cluster_size": {"type": "int", "low": 10, "high": 50},
+    
+    "min_samples": {"type": "int", "low": 5, "high": 30},
+    
+    "min_df": {"type": "int", "low": 2, "high": 20},
+    
     "max_df": {"type": "float", "low": 1.0, "high": 1.0},
-    "ngram_range": {"type": "categorical", "choices": [(1,1), (1,2)]},
+    
+    "ngram_range": {"type": "categorical", "choices": [(1,1), (1,2), (1,3)]},
 }
 
 def pipeline_BERTopic(param_ranges):
     documentos = get_dados()
-    study = otimizar_BERTopic(documentos, param_ranges,n_trials=1)
-    salvar_BERTopic(documentos, study.best_params)
+    
+    console.print(f"[bold green]Iniciando otimização com {len(documentos)} documentos...[/bold green]")
+    
+    # Otimiza o BERTopic com o intervalo de parâmetros e as stopwords personalizadas
+    study = otimizar_BERTopic(documentos, param_ranges, stop_words=list(custom_sWords), n_trials=30)
+    
+    # Verifica se o estudo encontrou algo válido antes de salvar
+    if study and study.best_value > -1:
+        console.print(f"[bold blue]Melhor score encontrado:[/bold blue] {study.best_value}")
+        console.print(f"[bold blue]Melhores parâmetros:[/bold blue] {study.best_params}")
+        salvar_BERTopic(documentos, study.best_params, stop_words=list(custom_sWords))
+    else:
+        console.print("[bold red]Falha na otimização. Nenhum trial válido encontrado.[/bold red]")
     
 def editar_parametros():
     global param_ranges
@@ -45,7 +72,7 @@ def editar_parametros():
     print("\n--- Ranges atuais ---")
     for k, v in param_ranges.items():
         if v["type"] != "categorical":
-            print(f"{k}: [{v['low']} , {v['high']}]")
+            print(f"{k}: [{v['low']} , {v['high']}] ({v['type']})")
         else:
             print(f"{k}: {v['choices']}")
     print("----------------------\n")
@@ -93,8 +120,13 @@ def editar_parametros():
             }
         ]
         ans = prompt(q1)
-        param_ranges[param]["low"] = float(ans["low"]) if cfg["type"] == "float" else int(ans["low"])
-        param_ranges[param]["high"] = float(ans["high"]) if cfg["type"] == "float" else int(ans["high"])
+
+        if cfg["type"] == "float":
+            param_ranges[param]["low"] = float(ans["low"])
+            param_ranges[param]["high"] = float(ans["high"])
+        else:
+            param_ranges[param]["low"] = int(float(ans["low"]))
+            param_ranges[param]["high"] = int(float(ans["high"]))
 
     print("\n✔ Parâmetros atualizados!\n")
 
@@ -128,4 +160,3 @@ def main_menu():
 
 if __name__ == "__main__":
     main_menu()
-
