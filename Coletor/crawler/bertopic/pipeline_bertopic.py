@@ -36,7 +36,7 @@ param_ranges = {
 
 def pipeline_BERTopic(param_ranges):
     documentos = get_dados()
-    study = otimizar_BERTopic(documentos, param_ranges,n_trials=1)
+    study = otimizar_BERTopic(documentos, param_ranges,n_trials=20)
     salvar_BERTopic(documentos, study.best_params)
     
 def editar_parametros():

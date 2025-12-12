@@ -4,11 +4,13 @@ import os
 import json
 from rich.console import Console
 from pathlib import Path
+import matplotlib.pyplot as plt
 
 console = Console()
 df = pd.read_csv('youtuberslist.csv')
 df = df[df['videosTranscritos'] != 0]
 YOUTUBER_LIST = df['nome'].tolist()
+THRESHOLD = 0.025
 
 def coletar_informacoes_youtuber(video_path) -> str: 
     try:
@@ -70,6 +72,41 @@ def coletar_tirinhas_video(tirinha_csv_path, filtro=None) -> list[str]:
         console.log(e)
         return []
 
+def calcular_toxicidade_video(sequencias_path):
+    sequencia = pd.read_csv(sequencias_path, header=None)[0].tolist()
+
+    total_sequencias = len(sequencia) - 1
+    total_toxicos = 0
+    for estado in sequencia:
+        if estado == 'T':
+            total_toxicos += 1
+
+    return total_toxicos/total_sequencias
+    
+def gerar_grafico_toxicidade():
+    valores = []
+    for youtuber in YOUTUBER_LIST:
+        base_path = Path(f'files/{youtuber}')
+        for sequencias_path in base_path.rglob("sequencia_toxicidade.csv"):
+            toxicidade = calcular_toxicidade_video(sequencias_path)
+            valores.append(toxicidade)
+
+    valores = sorted(valores)
+
+    print(valores)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(range(len(valores)), valores, marker='.', linestyle='-', markersize=1)
+    plt.title("Curva de Toxicidade por Vídeo")
+    plt.xlabel("Vídeos (ordenados)")
+    plt.ylabel("Toxicidade")
+    plt.grid(True)
+    plt.show()
+
+def filtro_video(threshold, tirinha_csv_path):
+    sequencias_path = tirinha_csv_path.parent / "sequencias" / "sequencia_toxicidade.csv"
+    return calcular_toxicidade_video(sequencias_path) >= threshold
+
 def get_dados(arquivo_tirinha = 'tiras_video.csv'):
     documento = []
     for youtuber in YOUTUBER_LIST:
@@ -81,8 +118,9 @@ def get_dados(arquivo_tirinha = 'tiras_video.csv'):
             #     words_count = len(tiras_youtuber.split())
             #     console.print("Quantidade de palavras: ",words_count)
             tiras_youtuber = coletar_tirinhas_video(tirinha_csv_path)
-            texto_video_completo = " ".join(tiras_youtuber)
-            documento.append(texto_video_completo)
+            if filtro_video(THRESHOLD, tirinha_csv_path):
+                texto_video_completo = " ".join(tiras_youtuber)
+                documento.append(texto_video_completo)
     
     words_count = 0
     for video in documento:
@@ -95,3 +133,4 @@ def get_dados(arquivo_tirinha = 'tiras_video.csv'):
     return documento
 
 
+# gerar_grafico_toxicidade()
