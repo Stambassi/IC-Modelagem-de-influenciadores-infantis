@@ -154,8 +154,8 @@ def gerar_arquivos_sequencia(youtubers_list: list[str], tipo_analise: str):
         console.print(f"  -> Total de vídeos processados: {count_processed}")
 
 if __name__ == "__main__":
-    LISTA_ALVO = ['Julia MineGirl', 'Tex HS', 'Robin Hood Gamer']
+    lista_youtubers = ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'Papile', 'Robin Hood Gamer', 'TazerCraft', 'Tex HS']
 
-    gerar_arquivos_sequencia(LISTA_ALVO, 'toxicidade')
-    #gerar_arquivos_sequencia(LISTA_ALVO, 'sentimento')
-    #gerar_arquivos_sequencia(LISTA_ALVO, 'misto_9_estados')
+    gerar_arquivos_sequencia(lista_youtubers, 'toxicidade')
+    #gerar_arquivos_sequencia(lista_youtubers, 'sentimento')
+    #gerar_arquivos_sequencia(lista_youtubers, 'misto_9_estados')

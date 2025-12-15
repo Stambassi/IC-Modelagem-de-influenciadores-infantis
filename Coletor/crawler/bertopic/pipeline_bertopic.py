@@ -81,7 +81,8 @@ custom_sWords = {
 
     # Domínio de jogos
     "minecraft", "jogo", "games", "baú", "bau", "chão", "teto", 
-    "buraco", "alavanca", "mapa", "bloco",
+    "buraco", "alavanca", "mapa", "bloco", "chao", "prisão",
+    "prisao",
 
     # Interjeições e gírias
     "caramba", "vixe", "eita", "uou", "amigos", "amigo", "cara", 
@@ -188,7 +189,7 @@ def pipeline_BERTopic(grupo_selecionado):
     console.rule(f"[bold magenta]Pipeline BERTopic: {grupo_selecionado}[/bold magenta]")
     
     # Coleta de dados (com ou sem filtro gramatical)
-    documentos = get_dados(grupo_analise=grupo_selecionado, modo_selecao="toxico", usar_filtro_gramatical=True)
+    documentos = get_dados(grupo_analise=grupo_selecionado, modo_selecao="janela", usar_filtro_gramatical=True)
     
     if not documentos:
         console.print("[red]Nenhum documento encontrado para este grupo. Abortando.[/red]")
