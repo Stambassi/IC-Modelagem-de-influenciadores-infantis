@@ -48,6 +48,9 @@ def compute_metrics(topic_model, documents):
     """
     try:
         topic_info = topic_model.get_topic_info()
+
+        print(f"Quantidade de tópicos encontrados: {len(topic_info) - 1}") # -1 para descontar o outlier
+        print(topic_info.head())
         
         # Verificar Ruído (Tópico -1)
         outlier_row = topic_info[topic_info['Topic'] == -1]
@@ -111,6 +114,140 @@ def compute_metrics(topic_model, documents):
 # -------------------------------------------------------------------
 # FUNÇÃO OBJETIVA PARA OTIMIZAR COM OPTUNA
 # -------------------------------------------------------------------
+# -------------------------------------------------------------------
+# FUNÇÃO OBJETIVA PARA OTIMIZAR COM OPTUNA (ATUALIZADA)
+# -------------------------------------------------------------------
+# def make_objective(documents, param_ranges, stop_words):
+
+#     def objective(trial):
+
+#         # ---------------------------
+#         # A. Hiperparâmetros
+#         # ---------------------------
+#         n_neighbors = trial.suggest_int("n_neighbors", param_ranges["n_neighbors"]["low"], param_ranges["n_neighbors"]["high"])
+#         n_components = trial.suggest_int("n_components", param_ranges["n_components"]["low"], param_ranges["n_components"]["high"])
+#         min_dist = trial.suggest_float("min_dist", param_ranges["min_dist"]["low"], param_ranges["min_dist"]["high"])
+        
+#         min_cluster_size = trial.suggest_int("min_cluster_size", param_ranges["min_cluster_size"]["low"], param_ranges["min_cluster_size"]["high"])
+        
+#         # Garante min_samples <= min_cluster_size
+#         high_samples = min(min_cluster_size, param_ranges["min_samples"]["high"])
+#         low_samples = min(param_ranges["min_samples"]["low"], high_samples)
+#         min_samples = trial.suggest_int("min_samples", low_samples, high_samples)
+
+#         # Min_df como inteiro
+#         min_df_val = param_ranges["min_df"]
+#         if min_df_val["type"] == "int":
+#              min_df = trial.suggest_int("min_df", min_df_val["low"], min_df_val["high"])
+#         else:
+#              min_df = trial.suggest_float("min_df", min_df_val["low"], min_df_val["high"])
+
+#         ngram_range = trial.suggest_categorical("ngram_range", param_ranges["ngram_range"]["choices"])
+
+#         # ---------------------------
+#         # B. Construção do Modelo
+#         # ---------------------------
+#         try:
+#             umap_model = UMAP(
+#                 n_neighbors=n_neighbors,
+#                 n_components=n_components,
+#                 min_dist=min_dist,
+#                 metric="cosine",
+#                 random_state=42
+#             )
+
+#             hdbscan_model = HDBSCAN(
+#                 min_cluster_size=min_cluster_size,
+#                 min_samples=min_samples,
+#                 metric="euclidean",
+#                 cluster_selection_method="eom", 
+#                 prediction_data=True
+#             )
+
+#             vectorizer_model = CountVectorizer(
+#                 min_df=min_df,
+#                 max_df=1.0, 
+#                 ngram_range=ngram_range,
+#                 stop_words=stop_words
+#             )
+
+#             embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+#             representation_model = KeyBERTInspired()
+
+#             topic_model = BERTopic(
+#                 embedding_model=embedding_model,
+#                 umap_model=umap_model,
+#                 hdbscan_model=hdbscan_model,
+#                 vectorizer_model=vectorizer_model,
+#                 representation_model=representation_model,
+#                 verbose=False
+#             )
+
+#             # ---------------------------
+#             # C. Treinamento
+#             # ---------------------------
+#             topic_model.fit_transform(documents)
+            
+#         except Exception as e:
+#             # Captura erros de UMAP/HDBSCAN (ex: dataset muito pequeno para n_neighbors)
+#             return -9999.0
+
+#         # ---------------------------
+#         # D. Cálculo de Métricas Base
+#         # ---------------------------
+#         coherence, diversity, noise_ratio = compute_metrics(topic_model, documents)
+        
+#         # Se falhou nas métricas, retorna erro
+#         if coherence == -9999.0:
+#             return -9999.0
+
+#         # Score de Qualidade Pura
+#         quality_score = (0.7 * coherence) + (0.3 * diversity)
+
+#         # ---------------------------
+#         # E. Bônus por Quantidade de Tópicos (NOVA LÓGICA)
+#         # ---------------------------
+#         topic_info = topic_model.get_topic_info()
+#         n_topics = len(topic_info) - 1  # Subtrai o tópico -1 (ruído)
+        
+#         # Fator de recompensa: 0.02 pontos por tópico extra
+#         # Limitado (cap) a 0.20 (equivalente a 10 tópicos). 
+#         # Isso evita que o modelo crie 50 tópicos ruins só para ganhar pontos.
+#         topic_bonus = min(n_topics * 0.02, 0.20)
+        
+#         # Se tiver MENOS de 3 tópicos, aplicamos uma penalidade extra
+#         # para desencorajar fortemente modelos de 2 tópicos
+#         if n_topics < 3:
+#             topic_bonus -= 0.10
+
+#         # ---------------------------
+#         # F. Penalização de Ruído e Score Final
+#         # ---------------------------
+        
+#         # Soma o bônus à qualidade base
+#         score_with_bonus = quality_score + topic_bonus
+        
+#         # Aplica a penalidade de ruído (multiplicativo)
+#         # Se ruído for 0.5 (50%), o score cai pela metade.
+#         if noise_ratio > 0.45:
+#              # Penaliza severamente se passar do limite aceitável
+#              final_score = -1.0 * noise_ratio
+#              trial.set_user_attr("skipped", "high_noise")
+#         else:
+#              # Penaliza proporcionalmente
+#              final_score = score_with_bonus * (1.0 - noise_ratio)
+
+#         # Logs para análise no Optuna
+#         trial.set_user_attr("n_topics", n_topics)
+#         trial.set_user_attr("coherence", coherence)
+#         trial.set_user_attr("diversity", diversity)
+#         trial.set_user_attr("noise_ratio", noise_ratio)
+#         trial.set_user_attr("raw_quality", quality_score)
+
+#         return max(final_score, -1.0) # Garante retorno válido
+
+#     return objective
+
 def make_objective(documents, param_ranges, stop_words):
 
     def objective(trial):
@@ -118,105 +255,124 @@ def make_objective(documents, param_ranges, stop_words):
         # ---------------------------
         # A. Hiperparâmetros
         # ---------------------------
-        
-        # UMAP
         n_neighbors = trial.suggest_int("n_neighbors", param_ranges["n_neighbors"]["low"], param_ranges["n_neighbors"]["high"])
         n_components = trial.suggest_int("n_components", param_ranges["n_components"]["low"], param_ranges["n_components"]["high"])
         min_dist = trial.suggest_float("min_dist", param_ranges["min_dist"]["low"], param_ranges["min_dist"]["high"])
-
-        # HDBSCAN
+        
         min_cluster_size = trial.suggest_int("min_cluster_size", param_ranges["min_cluster_size"]["low"], param_ranges["min_cluster_size"]["high"])
         
-        # Restrição Lógica: min_samples deve ser <= min_cluster_size
-        # Definimos o teto do min_samples dinamicamente
+        # Garante min_samples <= min_cluster_size
         high_samples = min(min_cluster_size, param_ranges["min_samples"]["high"])
-        low_samples = min(param_ranges["min_samples"]["low"], high_samples) # Segurança caso low > high temporariamente
-        
+        low_samples = min(param_ranges["min_samples"]["low"], high_samples)
         min_samples = trial.suggest_int("min_samples", low_samples, high_samples)
 
-        # Vectorizer
-        # MUDANÇA: suggest_int para min_df (limpeza absoluta, não percentual)
+        # Min_df como inteiro
         min_df_val = param_ranges["min_df"]
         if min_df_val["type"] == "int":
              min_df = trial.suggest_int("min_df", min_df_val["low"], min_df_val["high"])
         else:
-             # Fallback caso venha como float do pipeline antigo, mas recomendamos int
              min_df = trial.suggest_float("min_df", min_df_val["low"], min_df_val["high"])
 
         ngram_range = trial.suggest_categorical("ngram_range", param_ranges["ngram_range"]["choices"])
 
-
         # ---------------------------
         # B. Construção do Modelo
         # ---------------------------
-        umap_model = UMAP(
-            n_neighbors=n_neighbors,
-            n_components=n_components,
-            min_dist=min_dist,
-            metric="cosine",
-            random_state=42
-        )
-
-        hdbscan_model = HDBSCAN(
-            min_cluster_size=min_cluster_size,
-            min_samples=min_samples,
-            metric="euclidean",
-            cluster_selection_method="eom", # 'eom' costuma ser melhor que 'leaf' para NLP, mas pode manter leaf
-            prediction_data=True
-        )
-
-        vectorizer_model = CountVectorizer(
-            min_df=min_df,
-            max_df=1.0, # Fixo, pois já tratamos stop words
-            ngram_range=ngram_range,
-            stop_words=stop_words
-        )
-
-        embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-        representation_model = KeyBERTInspired()
-
-        topic_model = BERTopic(
-            embedding_model=embedding_model,
-            umap_model=umap_model,
-            hdbscan_model=hdbscan_model,
-            vectorizer_model=vectorizer_model,
-            representation_model=representation_model,
-            verbose=False
-        )
-
-        # ---------------------------
-        # C. Treinamento e Avaliação
-        # ---------------------------
         try:
+            umap_model = UMAP(
+                n_neighbors=n_neighbors,
+                n_components=n_components,
+                min_dist=min_dist,
+                metric="cosine",
+                random_state=42
+            )
+
+            hdbscan_model = HDBSCAN(
+                min_cluster_size=min_cluster_size,
+                min_samples=min_samples,
+                metric="euclidean",
+                cluster_selection_method="eom", 
+                prediction_data=True
+            )
+
+            vectorizer_model = CountVectorizer(
+                min_df=min_df,
+                max_df=1.0, 
+                ngram_range=ngram_range,
+                stop_words=stop_words,
+                token_pattern=r'(?u)\b\w\w+\b',
+                strip_accents='unicode'
+            )
+
+            embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
+            representation_model = KeyBERTInspired()
+
+            topic_model = BERTopic(
+                embedding_model=embedding_model,
+                umap_model=umap_model,
+                hdbscan_model=hdbscan_model,
+                vectorizer_model=vectorizer_model,
+                representation_model=representation_model,
+                verbose=False
+            )
+
+            # ---------------------------
+            # C. Treinamento
+            # ---------------------------
             topic_model.fit_transform(documents)
+            
         except Exception as e:
-            # Caso o UMAP/HDBSCAN falhe (ex: dataset muito pequeno para os parâmetros)
+            # Captura erros de UMAP/HDBSCAN (ex: dataset muito pequeno para n_neighbors)
             return -9999.0
 
+        # ---------------------------
+        # D. Cálculo de Métricas Base
+        # ---------------------------
         coherence, diversity, noise_ratio = compute_metrics(topic_model, documents)
+        
+        # Se falhou nas métricas, retorna erro
+        if coherence == -9999.0:
+            return -9999.0
+
+        # MUDANÇA AQUI: Usamos APENAS a Coerência como score base de qualidade
+        # Removemos a média ponderada com diversidade.
+        quality_score = coherence
 
         # ---------------------------
-        # D. Penalização (Guardrails)
+        # E. Bônus por Quantidade de Tópicos
         # ---------------------------
-        # Cálculo do Score Base
-        base_score = (0.7 * coherence) + (0.3 * diversity)
+        topic_info = topic_model.get_topic_info()
+        n_topics = len(topic_info) - 1  # Subtrai o tópico -1 (ruído)
         
-        # Penalização Suave por Ruído
-        # Se 50% for ruído, o score cai pela metade.
-        if noise_ratio > 0.0:
-            final_score = base_score * (1.0 - noise_ratio)
+        # Fator de recompensa: 0.02 pontos por tópico extra (Cap em 0.20)
+        topic_bonus = min(n_topics * 0.02, 0.20)
+        
+        # Penalidade extra se tiver menos de 3 tópicos (para evitar underfitting)
+        if n_topics < 3:
+            topic_bonus -= 0.10
+
+        # ---------------------------
+        # F. Penalização de Ruído e Score Final
+        # ---------------------------
+        
+        # Soma o bônus à qualidade base
+        score_with_bonus = quality_score + topic_bonus
+        
+        # Aplica a penalidade de ruído (multiplicativo)
+        if noise_ratio > 0.45:
+             final_score = -1.0 * noise_ratio
+             trial.set_user_attr("skipped", "high_noise")
         else:
-            final_score = base_score
+             final_score = score_with_bonus * (1.0 - noise_ratio)
 
-        # Logs para o Optuna
+        # Logs para análise no Optuna
+        trial.set_user_attr("n_topics", n_topics)
         trial.set_user_attr("coherence", coherence)
-        trial.set_user_attr("diversity", diversity)
+        trial.set_user_attr("diversity", diversity) # Mantemos no log apenas para curiosidade
         trial.set_user_attr("noise_ratio", noise_ratio)
-        trial.set_user_attr("n_topics", len(topic_model.get_topic_info()) - 1)
-        
-        # Se o score for muito baixo devido à penalidade, ainda retornamos ele
-        # para o Optuna aprender o caminho, em vez de retornar erro.
-        return max(final_score, 0.0)
+        trial.set_user_attr("raw_quality", quality_score)
+
+        return max(final_score, -1.0) 
 
     return objective
 
@@ -246,14 +402,23 @@ def otimizar_BERTopic(documents, param_ranges, stop_words, n_trials=30):
     return study
 
 
-def salvar_BERTopic(docs, params, stop_words, nome_arquivo_extra=""):
+'''
+    Reconstrói o modelo com os melhores parâmetros, treina e salva 
+    os artefatos (Modelo, CSV e Gráficos) em uma pasta específica do grupo.
+'''
+def salvar_BERTopic(docs, params, stop_words, nome_grupo="Geral"):
     
-    console.rule("Salvando Melhor Modelo")
+    console.rule(f"Salvando Melhor Modelo para: {nome_grupo}")
+
+    # Definição da pasta de saída
+    # Ex: bertopic/Minecraft/ ou bertopic/Geral/
+    output_dir = os.path.join("bertopic", nome_grupo)
+    os.makedirs(output_dir, exist_ok=True)
 
     if isinstance(stop_words, set):
         stop_words = list(stop_words)
 
-    # Reconstrução exata do pipeline com os melhores parâmetros
+    # Reconstrução do Pipeline
     embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
 
     umap_model = UMAP(
@@ -268,11 +433,11 @@ def salvar_BERTopic(docs, params, stop_words, nome_arquivo_extra=""):
         min_cluster_size=params['min_cluster_size'], 
         min_samples=params['min_samples'],
         metric='euclidean',
-        cluster_selection_method='eom', # Consistente com a otimização
+        cluster_selection_method='eom', 
         prediction_data=True
     )
 
-    # Conversão segura de tipos para o Vectorizer
+    # Conversão segura de tipos
     min_df = int(params['min_df']) if isinstance(params['min_df'], float) and params['min_df'] > 1 else params['min_df']
     
     vectorizer_model = CountVectorizer(
@@ -291,17 +456,49 @@ def salvar_BERTopic(docs, params, stop_words, nome_arquivo_extra=""):
         hdbscan_model=hdbscan_model,              
         vectorizer_model=vectorizer_model,        
         ctfidf_model=ctfidf_model,
-        representation_model=representation_model
+        representation_model=representation_model,
+        nr_topics='auto'
     )
     
+    # Treinamento Final
+    console.print(f"Treinando modelo final com {len(docs)} documentos...")
     topic_model.fit_transform(docs)
     
-    # Salvar outputs
-    os.makedirs("bertopic", exist_ok=True)
+    # Salvando Arquivos
     
+    # Salvar CSV de informações
     topicos = topic_model.get_topic_info()
-    topicos.to_csv(f"bertopic/topicos_{nome_arquivo_extra}.csv", index=False)
+    csv_path = os.path.join(output_dir, "topicos_info.csv")
+    topicos.to_csv(csv_path, index=False)
     
-    topic_model.save(f"bertopic/modelo_{nome_arquivo_extra}", serialization="safetensors")
+    # Salvar o Modelo (formato safetensors é mais seguro e rápido)
+    model_path = os.path.join(output_dir, "modelo_final")
+    topic_model.save(model_path, serialization="safetensors")
     
-    console.print("[bold green]Modelo salvo com sucesso na pasta /bertopic![/bold green]")
+    # 5. Gerando e Salvando Gráficos
+    console.print("Gerando gráficos de visualização...")
+
+    # Gráfico de Barras (Sempre funciona se tiver tópicos)
+    try:
+        fig_bar = topic_model.visualize_barchart(top_n_topics=20)
+        fig_bar.write_html(os.path.join(output_dir, "grafico_barras.html"))
+    except Exception as e:
+        console.print(f"[yellow]Aviso: Não foi possível gerar gráfico de barras ({e})[/yellow]")
+
+    # Hierarquia e Heatmap (Requerem > 2 tópicos reais)
+    # Conta tópicos ignorando o -1 (ruído)
+    n_topics = len([t for t in topic_model.get_topics().keys() if t != -1])
+    
+    if n_topics > 2:
+        try:
+            fig_hier = topic_model.visualize_hierarchy()
+            fig_hier.write_html(os.path.join(output_dir, "grafico_hierarquia.html"))
+            
+            fig_heat = topic_model.visualize_heatmap()
+            fig_heat.write_html(os.path.join(output_dir, "grafico_heatmap.html"))
+        except Exception as e:
+            console.print(f"[yellow]Aviso: Erro ao gerar visualizações complexas ({e})[/yellow]")
+    else:
+        console.print("[dim]Pufando Hierarquia e Heatmap (menos de 3 tópicos identificados)[/dim]")
+
+    console.print(f"[bold green]✔ Sucesso! Tudo salvo em: {output_dir}/[/bold green]")

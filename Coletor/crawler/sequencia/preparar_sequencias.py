@@ -25,7 +25,6 @@ MAPA_YOUTUBERS_CATEGORIA = {
     'Tex HS': 'Misto'
 }
 
-
 #Amy Scarlet', 'AuthenticGames', 'Cadres', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'Papile', 'Robin Hood Gamer', 'TazerCraft, ''Tex HS']
 
 # Configurações de análise (limiares e estados)
@@ -59,7 +58,6 @@ plt.rcParams['font.family'] = 'sans-serif'
 plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans', 'Liberation Sans']
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
-
 
 '''
     Função para varrer as pastas de um youtuber, ler os arquivos brutos 'tiras_video.csv'
@@ -454,7 +452,6 @@ def orquestrar_preparacao_sequencias_multidimensional(tipo_analise: str, tamanho
     console.print(f"\n[bold magenta]=== Preparação de Sequências Multidimensional ({tipo_analise.upper()}) ===[/bold magenta]")
     console.print(f"Janela: {tamanho_janela} estados anteriores ao gatilho {config['eventos_gatilho']}")
 
-    '''
     # Análise da dimensão individual
     console.print("\n[bold]1. Dimensão: Individual (Por Youtuber)[/bold]")
     for youtuber in MAPA_YOUTUBERS_CATEGORIA.keys():
@@ -472,7 +469,6 @@ def orquestrar_preparacao_sequencias_multidimensional(tipo_analise: str, tamanho
     
     for nome_cat, lista_membros in categorias.items():
         processar_grupo(nome_cat, lista_membros, config, tamanho_janela, tipo_analise)
-    '''
 
     # Análise da dimensão geral (todos)
     console.print("\n[bold]3. Dimensão: Geral (Todos os Dados)[/bold]")
