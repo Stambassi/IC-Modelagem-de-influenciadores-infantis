@@ -412,7 +412,7 @@ def salvar_BERTopic(docs, params, stop_words, nome_grupo="Geral"):
 
     # Definição da pasta de saída
     # Ex: bertopic/Minecraft/ ou bertopic/Geral/
-    output_dir = os.path.join("bertopic", nome_grupo)
+    output_dir = os.path.join("bertopic/modelos", nome_grupo)
     os.makedirs(output_dir, exist_ok=True)
 
     if isinstance(stop_words, set):
@@ -457,14 +457,25 @@ def salvar_BERTopic(docs, params, stop_words, nome_grupo="Geral"):
         vectorizer_model=vectorizer_model,        
         ctfidf_model=ctfidf_model,
         representation_model=representation_model,
-        nr_topics='auto'
+        nr_topics=None
     )
     
-    # Treinamento Final
-    console.print(f"Treinando modelo final com {len(docs)} documentos...")
+    # Treinamento final
+    console.print(f"Treinando modelo base com {len(docs)} documentos...")
     topic_model.fit_transform(docs)
     
+    # Redução de tópicos segura
+    # Antes de reduzir, altera o min_df para não quebrar o c-TF-IDF dos tópicos fundidos
+    console.print("Aplicando redução de tópicos (nr_topics='auto')...")
+    
+    # Relaxa a restrição para evitar o erro "min_df > n_topics"
+    topic_model.vectorizer_model.min_df = 1 
+    
+    # Reduz os tópicos com segurança
+    topic_model.reduce_topics(docs, nr_topics="auto")
+
     # Salvando Arquivos
+    console.print("Salvando artefatos...")
     
     # Salvar CSV de informações
     topicos = topic_model.get_topic_info()
@@ -475,7 +486,7 @@ def salvar_BERTopic(docs, params, stop_words, nome_grupo="Geral"):
     model_path = os.path.join(output_dir, "modelo_final")
     topic_model.save(model_path, serialization="safetensors")
     
-    # 5. Gerando e Salvando Gráficos
+    # Gerando e Salvando Gráficos
     console.print("Gerando gráficos de visualização...")
 
     # Gráfico de Barras (Sempre funciona se tiver tópicos)

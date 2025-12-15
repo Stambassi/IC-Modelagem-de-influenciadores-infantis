@@ -81,8 +81,7 @@ custom_sWords = {
 
     # Domínio de jogos
     "minecraft", "jogo", "games", "baú", "bau", "chão", "teto", 
-    "buraco", "alavanca", "mapa", "bloco", "chao", "prisão",
-    "prisao",
+    "buraco", "alavanca", "mapa", "bloco",
 
     # Interjeições e gírias
     "caramba", "vixe", "eita", "uou", "amigos", "amigo", "cara", 
@@ -98,19 +97,25 @@ custom_sWords = {
     "bom", "boa", "melhor", "comigo", "contigo", "mim",
     "lado", "pouco", "fio", "tábua", "verdade", "certeza",
     "favor", "super", "presente", "ovo", "tela", "menos",
+    "vídeo", "videos", "youtube", "canal", "barulho", 
+    "voz", "som", "música", "moto", "carro",
 
     # Interação entre pessoas
     "spock", "pokao", "pokão", "iago", "iagao", "iagão",
-    "pocão",
+    "pocão", "bella", "kai", "cadres", "eduardo", "juju",
+    "lulú", "amandinha", 
 
     # Vocativos e Gírias Específicas
     "moço", "moco", "amiguinho", "amiguinhos", "cara", "caras", 
-    "pessoal", "gente", "menina", "menino", "filha", "pai",
-    
+    "pessoal", "gente", "filha", "pai", "menina", "menino",
+    "meninas", "meninos", "moça", "vovô", "rapaz", "mames", "mami",
+    "senhora", "senhor",
+
+
     # Interjeições e Ruído
     "uhul", "uhuu", "oba", "vixe", "nossa", "socorro", "ai",
-    "likes", "like", "vídeo", "videos", "youtube", "canal",
-    "barulho", "voz", "som", "música",
+    "likes", "like", "haha", "uhuuu", "wow", "uiuu", "uuuu",
+    "uau", "hey", "huh", 
     
     # Verbos que parecem substantivos ou escaparam
     "vamo", "vamos", "pulo", "olha", "visto",
@@ -124,21 +129,42 @@ custom_sWords = {
     # Humor / Específicos repetitivos (opcional)
     "pum", "bolinha",
 
-    # Erros de Inglês
-    "the", "videos", "youtube", "here",
-    
+    # Inglês
+    "the", "videos", "youtube", "youtuber", "youtubers", "here", 
+    "this", "can", "block", "get", "but", "rock", "pig", "pigs", 
+    "piggy", "bot", "doll", "missy", "guys", "everyone", "liked",
+    "number", "channel", "your", "bunny", "teacher", "now",
+    "show", "people", "comment", "favorite", "friends", "choose",
+    "sister", "minnie",
+
     # Verbos que o Spacy errou
     "morri", "caí", "cai", "rimarão",
 
     # Diminutivos e aumentativos
     "pouquinhos", "pouquinho", "carinhas", "cantinho", 
-    "canto", "ladinho", "escadinha", "lobinho", "bichão",  
+    "canto", "ladinho", "escadinha", "lobinho", "bichão",
+    "lugarzinho", "bloquinhos", "casinha", "foguinho",
+    "anjinho", "juntinho", "carrinho", "trenzinho", "salgadinho",
+    "professorzinho", "mocinho", "patinho", "piscininha", "pezinho",
+    "menininho", "joguinho", "dinheirinho", "bonitozinhozinho",
+    "bonitinhozinhozinho", "mercadinho", "miguelinho",
+    "cunezinho", "mandinha", "vazinho", "puxadinha", "mozinho",
+    "fogãozinho", "gruzinho", "balãozinho", "motinha", "ônibusinho",
+    "macarrãozinho", "quartinho", "patinhos", "olhinho", 
+    "bebezinho", "cachorrrinho", "caixinha", "ppzinho",
 
     # Plurais
     "blocos", "armaduras", "espadas", "mobs", "poções",
+    "carros", "motos", "vídeos", "alunos", "estudantes",
+    "fones", "personagens", "brinquedos",
     
     # Pronomes que escaparam
-    "você", "mim", "comigo" 
+    "você", "mim", "comigo",
+
+    # Ruído
+    "dwi", "gwybod", "ddechrau", "ddod", "nam", "tui",
+    "fawr", "siarad", "byddwn", "wneud", "rydym", "mena",
+    "zúúúúca", 
 }
 
 # --- Intervalos de otimização ---
@@ -189,7 +215,7 @@ def pipeline_BERTopic(grupo_selecionado):
     console.rule(f"[bold magenta]Pipeline BERTopic: {grupo_selecionado}[/bold magenta]")
     
     # Coleta de dados (com ou sem filtro gramatical)
-    documentos = get_dados(grupo_analise=grupo_selecionado, modo_selecao="janela", usar_filtro_gramatical=True)
+    documentos = get_dados(grupo_analise=grupo_selecionado, usar_filtro_gramatical=True)
     
     if not documentos:
         console.print("[red]Nenhum documento encontrado para este grupo. Abortando.[/red]")

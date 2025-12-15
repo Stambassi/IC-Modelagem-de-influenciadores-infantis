@@ -6,3 +6,6 @@
 /Coletor/crawler/.venv
 
 .dvc/
+
+# Para ignorar modelos BERTopic
+/Coletor/crawler/bertopic/modelos
