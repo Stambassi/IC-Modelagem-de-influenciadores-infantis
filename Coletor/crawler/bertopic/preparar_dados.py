@@ -70,72 +70,130 @@ def coletar_informacoes_youtuber(video_path) -> str:
     return texto_limpo
 
 '''
-    Função para coletar a lista de tirinhas de um vídeo dentro de uma janela de tempo
-    determinada por eventos de toxicidade
+    Coleta TODAS as tirinhas de um vídeo, sem filtragem
     
-    @param tirinha_csv_path - Caminho para o arquivo CSV que contém as tirinhas de um vídeo
-    @return list[str] - Lista de strings, em que cada string é uma tira
+    @param tirinha_csv_path - Caminho para o arquivo CSV das tirinhas
+    @return list[str] - Lista com todas as tiras do vídeo
 '''
-def coletar_tirinhas_video_janela_tempo(tirinha_csv_path) -> list[str]:
+def coletar_tirinhas_video_totais(tirinha_csv_path) -> list[str]:
+    try:
+        tiras_csv = pd.read_csv(tirinha_csv_path)
+        return tiras_csv['tiras'].tolist()
+    except Exception as e:
+        console.log(f"[red]Erro na coleta total:[/] {e}")
+        return []
+    
+'''
+    Coleta APENAS as tirinhas marcadas como 'T' (Tóxicas) no arquivo de sequência
+    
+    @param tirinha_csv_path - Caminho para o arquivo CSV das tirinhas
+    @return list[str] - Lista contendo apenas as tiras tóxicas
+'''
+def coletar_tirinhas_video_toxicas(tirinha_csv_path) -> list[str]:
     try:
         sequencias_path = tirinha_csv_path.parent / "sequencias" / "sequencia_toxicidade.csv"
-        # Verifica se arquivo existe antes de abrir
+        
         if not sequencias_path.exists():
-            return ""
+            return []
             
         sequencia = pd.read_csv(sequencias_path, header=None)[0].tolist()
         tiras_csv = pd.read_csv(tirinha_csv_path)
-        tiras = tiras_csv['tiras'].tolist()
+        tiras_brutas = tiras_csv['tiras'].tolist()
 
         indices_selecionados = set()
-
-        for i, estado in enumerate(sequencia):
-            if estado == "T":
-                inicio = max(0, i - 3)
-                fim = min(len(tiras) - 1, i + 3)
-                for j in range(inicio, fim + 1):
-                    indices_selecionados.add(j)
-
-        tirinhas_coletadas = [tiras[i] for i in sorted(indices_selecionados)]
-        return " ".join(tirinhas_coletadas)
-
-    except Exception as e:
-        console.log(f"Erro janela tempo: {e}")
-        return ""
-
-'''
-    Função para coletar a lista de todas as tirinhas de um vídeo
-    
-    @param tirinha_csv_path - Caminho para o arquivo CSV que contém as tirinhas de um vídeo
-    @return list[str] - Lista de strings, em que cada string é uma tira
-'''
-def coletar_tirinhas_video(tirinha_csv_path, filtro=None) -> list[str]:
-    try:
-        tiras_csv = pd.read_csv(tirinha_csv_path)
         
-        if filtro is None:
-            tiras = tiras_csv['tiras'].tolist()
-        else:
-            sequencias_path = tirinha_csv_path.parent / "sequencias" / "sequencia_toxicidade.csv"
-            if not sequencias_path.exists():
-                return []
-                
-            sequencia = pd.read_csv(sequencias_path, header=None)[0].tolist()
-            tiras_brutas = tiras_csv['tiras'].tolist()
+        # Garante que não será acessado um índice que não existe em uma das listas
+        limit = min(len(sequencia), len(tiras_brutas))
+        
+        for i in range(limit):
+            if sequencia[i] == "T":
+                indices_selecionados.add(i)
 
-            indices_selecionados = set()
-            limit = min(len(sequencia), len(tiras_brutas))
-            
-            for i in range(limit):
-                if sequencia[i] == filtro:
-                    indices_selecionados.add(i)
-
-            tiras = [tiras_brutas[i] for i in sorted(indices_selecionados)]
-            
+        tiras = [tiras_brutas[i] for i in sorted(indices_selecionados)]
         return tiras
 
     except Exception as e:
-        console.log(f"Erro coleta simples: {e}")
+        console.log(f"[red]Erro na coleta tóxica:[/] {e}")
+        return []
+
+'''
+    Recebe uma lista de tuplas (inicio, fim) e funde intervalos sobrepostos ou adjacentes
+    Ex: [(10, 18), (15, 23)] -> [(10, 23)]
+'''
+def fundir_intervalos(intervalos):
+    if not intervalos:
+        return []
+
+    # Ordena pelo início do intervalo
+    intervalos.sort(key=lambda x: x[0])
+
+    fundidos = [intervalos[0]]
+
+    for atual_inicio, atual_fim in intervalos[1:]:
+        ultimo_inicio, ultimo_fim = fundidos[-1]
+
+        # Se o início do atual for menor ou igual ao fim do último (+1 para juntar adjacentes)
+        if atual_inicio <= ultimo_fim + 1:
+            # Funde: mantém o início do último e pega o maior fim entre os dois
+            fundidos[-1] = (ultimo_inicio, max(ultimo_fim, atual_fim))
+        else:
+            # Não sobrepõe, adiciona novo intervalo
+            fundidos.append((atual_inicio, atual_fim))
+
+    return fundidos
+
+'''
+    Coleta tirinhas tóxicas com uma janela de contexto.
+    Nota: A lógica de fusão de janelas (4 antes/depois) será implementada na próxima etapa.
+    Por enquanto, retorna vazio ou lógica antiga para manter estrutura.
+    
+    @param tirinha_csv_path - Caminho para o arquivo CSV das tirinhas
+    @return list[str] - Lista de tiras (Tóxicas + Contexto)
+'''
+def coletar_tirinhas_video_janela(tirinha_csv_path) -> list[str]:
+    try:
+        sequencias_path = tirinha_csv_path.parent / "sequencias" / "sequencia_toxicidade.csv"
+        
+        if not sequencias_path.exists():
+            return []
+            
+        sequencia = pd.read_csv(sequencias_path, header=None)[0].tolist()
+        tiras_df = pd.read_csv(tirinha_csv_path)
+        tiras_brutas = tiras_df['tiras'].tolist()
+        total_tiras = len(tiras_brutas)
+
+        # Identificar Intervalos Brutos
+        intervalos_brutos = []
+        limit = min(len(sequencia), total_tiras)
+        
+        janela = 4 # Janela definida na análise estatística
+
+        for i in range(limit):
+            if sequencia[i] == "T":
+                inicio = max(0, i - janela)
+                fim = min(total_tiras - 1, i + janela)
+                intervalos_brutos.append((inicio, fim))
+
+        if not intervalos_brutos:
+            return []
+
+        # Funde Intervalos (Merge)
+        # Transforma [[10,18], [15,23]] em [[10,23]]
+        intervalos_finais = fundir_intervalos(intervalos_brutos)
+
+        #Extrai Texto dos Intervalos Fundidos
+        documentos_janela = []
+        for inicio, fim in intervalos_finais:
+            # Pega o slice do intervalo (fim+1 porque o slice do python é exclusivo no final)
+            segmento = tiras_brutas[inicio : fim + 1]
+            texto_segmento = " ".join(segmento)
+            documentos_janela.append(texto_segmento)
+        
+        # Retorna uma lista de "cenas" tóxicas
+        return documentos_janela
+
+    except Exception as e:
+        console.log(f"[red]Erro coleta janela: {e}[/red]")
         return []
 
 '''
@@ -170,21 +228,22 @@ def filtrar_substantivos(documentos):
     return docs_limpos
 
 '''
-    Recupera os dados de texto baseados no grupo escolhido.
+    Recupera os dados de texto baseados no grupo escolhido e na estratégia de seleção
     
-    @param grupo_analise: "Geral", nome da Categoria (ex: "Minecraft") ou nome do Youtuber.
-    @param arquivo_tirinha: Nome do arquivo CSV a buscar.
-    @param usar_filtro_gramatical: Se True, aplica o filtro de substantivos.
+    @param grupo_analise: "Geral", nome da Categoria (ex: "Minecraft") ou nome do Youtuber
+    @param modo_selecao: Estratégia de coleta ("total", "toxico", "janela")
+    @param arquivo_tirinha: Nome do arquivo CSV a buscar
+    @param usar_filtro_gramatical: Se True, aplica o filtro de substantivos
+    @return list[str]: Lista de documentos (cada string é um vídeo processado)
 '''
-def get_dados(grupo_analise="Geral", arquivo_tirinha='tiras_video.csv', usar_filtro_gramatical=True):    
+def get_dados(grupo_analise="Geral", modo_selecao="total", arquivo_tirinha='tiras_video.csv', usar_filtro_gramatical=True):   
     youtubers_alvo = obter_lista_youtubers(grupo_analise)
     
     # Filtra apenas youtubers que existem no CSV original (segurança)
     youtubers_processar = [y for y in youtubers_alvo if y in YOUTUBER_LIST_VALIDOS]
     
-    console.print(f"[bold cyan]Coletando dados para o grupo: {grupo_analise}[/bold cyan]")
-    console.print(f"Youtubers incluídos: {youtubers_processar}")
-
+    console.print(f"[bold cyan]Coletando dados ({modo_selecao.upper()}) para o grupo: {grupo_analise}[/bold cyan]")
+    
     documento = []
     
     for youtuber in youtubers_processar:
@@ -194,20 +253,32 @@ def get_dados(grupo_analise="Geral", arquivo_tirinha='tiras_video.csv', usar_fil
             
         # Busca recursiva pelos arquivos de tirinhas
         for tirinha_csv_path in base_path.rglob(arquivo_tirinha):
-            # Opção A: Coletar tudo
-            tiras_youtuber = coletar_tirinhas_video(tirinha_csv_path)
             
-            # Opção B: Coletar com janela
-            # tiras_youtuber = coletar_tirinhas_video_janela_tempo(tirinha_csv_path)
-
-            # Transforma lista de tiras em uma única string (um documento por vídeo)
-            if isinstance(tiras_youtuber, list):
-                texto_video_completo = " ".join(tiras_youtuber)
+            tiras_coletadas = []
+            
+            # Seleção da Estratégia
+            if modo_selecao == "total":
+                tiras_coletadas = coletar_tirinhas_video_totais(tirinha_csv_path)
+            
+            elif modo_selecao == "toxico":
+                tiras_coletadas = coletar_tirinhas_video_toxicas(tirinha_csv_path)
+            
+            elif modo_selecao == "janela":
+                tiras_coletadas = coletar_tirinhas_video_janela(tirinha_csv_path)
+            
             else:
-                texto_video_completo = tiras_youtuber # Caso venha string direta da janela
+                console.print(f"[red]Modo de seleção '{modo_selecao}' inválido.[/red]")
+                return []
+            
+            # Processamento Pós-Coleta
+            if tiras_coletadas:
+                # Junta todas as cenas de um vídeo em um único documento 
+                # para manter a unidade de análise como "Vídeo"
+                texto_video_completo = " ".join(tiras_coletadas)
 
-            if texto_video_completo.strip():
-                documento.append(texto_video_completo)
+                # Validação mínima de tamanho
+                if len(texto_video_completo.strip()) > 10:
+                    documento.append(texto_video_completo)
     
     # Estatísticas básicas
     words_count = sum(len(video.split()) for video in documento)
@@ -217,6 +288,7 @@ def get_dados(grupo_analise="Geral", arquivo_tirinha='tiras_video.csv', usar_fil
 
     # Aplicação do Filtro Gramatical (Integrado)
     if usar_filtro_gramatical:
+        # Certifique-se de que a função filtrar_substantivos está disponível
         documento = filtrar_substantivos(documento)
         words_count_clean = sum(len(video.split()) for video in documento)
         console.print(f"-> Total de palavras (após filtro substantivos): {words_count_clean}\n")

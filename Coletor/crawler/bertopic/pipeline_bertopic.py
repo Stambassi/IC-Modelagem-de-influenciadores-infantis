@@ -188,7 +188,7 @@ def pipeline_BERTopic(grupo_selecionado):
     console.rule(f"[bold magenta]Pipeline BERTopic: {grupo_selecionado}[/bold magenta]")
     
     # Coleta de dados (com ou sem filtro gramatical)
-    documentos = get_dados(grupo_analise=grupo_selecionado, usar_filtro_gramatical=True)
+    documentos = get_dados(grupo_analise=grupo_selecionado, modo_selecao="toxico", usar_filtro_gramatical=True)
     
     if not documentos:
         console.print("[red]Nenhum documento encontrado para este grupo. Abortando.[/red]")
