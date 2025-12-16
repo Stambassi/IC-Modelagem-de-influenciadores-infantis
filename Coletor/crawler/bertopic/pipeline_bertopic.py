@@ -55,7 +55,8 @@ custom_sWords = {
     "aham", "juma", "tipo", "então", "assim", "agora", "tudo", "todos",
     "oi", "e aí", "eae", "fala", "galera", "bem-vindos", "cara", "meu", 
     "nossa", "deus", "jeito", "ideia", "pronto", "vocês", "ufa", "desculpa", 
-    "cuidado", "socorro", "ola",
+    "cuidado", "socorro", "ola", "tchau", "oizinho", "que", "oiiiii",
+    "mesmo", "toda", "tomara", "oiiii",
     
     # Verbos de Ação/Modalidade
     "posso", "pode", "podemos", "tenho", "tem", "temos", "ter",
@@ -64,7 +65,7 @@ custom_sWords = {
     "pegar", "peguei", "pega", "usar", "uso", "botar", "colocar",
     "voltar", "sou", "é", "era", "preciso", "precisar", "precisa",
     "estou", "está", "tava", "estava", "estar", "ficar", "ficando", "ficou",
-    "chegar", "cheguei", "chega", "acabar", "acabou", "ver",
+    "chegar", "cheguei", "chega", "acabar", "acabou", "ver", "partir",
     
     # Youtube / Engajamento / Alucinações
     "inscreva", "canal", "like", "vídeo", "video", "sininho",
@@ -81,11 +82,11 @@ custom_sWords = {
 
     # Domínio de jogos
     "minecraft", "jogo", "games", "baú", "bau", "chão", "teto", 
-    "buraco", "alavanca", "mapa", "bloco",
+    "buraco", "alavanca", "mapa", "bloco", "game", "gamespada",
 
     # Interjeições e gírias
     "caramba", "vixe", "eita", "uou", "amigos", "amigo", "cara", 
-    "caraca",
+    "caraca", "maloca",
     
     # Genéricos (substantivos vazios)
     "coisa", "coisas", "parte", "vez", "hora", "momento",
@@ -98,36 +99,45 @@ custom_sWords = {
     "lado", "pouco", "fio", "tábua", "verdade", "certeza",
     "favor", "super", "presente", "ovo", "tela", "menos",
     "vídeo", "videos", "youtube", "canal", "barulho", 
-    "voz", "som", "música", "moto", "carro",
-
+    "voz", "som", "música", "moto", "carro", "malota",
+    "seis", "rua", "cimarão", "gotos", "feijão", "triplo",
+    "certo", "graça",
+ 
     # Interação entre pessoas
     "spock", "pokao", "pokão", "iago", "iagao", "iagão",
     "pocão", "bella", "kai", "cadres", "eduardo", "juju",
-    "lulú", "amandinha", 
+    "lulú", "amandinha", "miguelhinha", "miguelinha", "kais",
+    "lockinho", "kess", "miguelete", "miguilhinha", "mequilhinha",
+    "mequilinha", "ben", "texinho", "paulinho", "lulu", "niki",
+    "loquinho", "kevin", "kaizy", "miquelinhos",
 
     # Vocativos e Gírias Específicas
     "moço", "moco", "amiguinho", "amiguinhos", "cara", "caras", 
     "pessoal", "gente", "filha", "pai", "menina", "menino",
     "meninas", "meninos", "moça", "vovô", "rapaz", "mames", "mami",
-    "senhora", "senhor",
-
+    "senhora", "senhor", "mamie", "mina", "mãe", "madrasta",
+    "garoto", "tia", "moço", "amiga", "amiglis", "mígles",
 
     # Interjeições e Ruído
     "uhul", "uhuu", "oba", "vixe", "nossa", "socorro", "ai",
     "likes", "like", "haha", "uhuuu", "wow", "uiuu", "uuuu",
-    "uau", "hey", "huh", 
+    "uau", "hey", "huh", "eeeeh", "uiiiii", "ihihi", "hehehehehehe",
+    "tum", "aaaa", "hehehehe", "lalalalalala", "nha", "piuí",
+    "uuuuh", "mamamama", "nããão", "miuuuu", "buh", "brrrr",
+    "bláááá", "prrrrrr", "ihihihi",
+
     
     # Verbos que parecem substantivos ou escaparam
-    "vamo", "vamos", "pulo", "olha", "visto",
+    "vamo", "vamos", "pulo", "olha", "visto", "bebí", "diga",
 
     # Erros do Spacy / Verbos disfarçados
-    "ixi", "viu", "pula", "bota", "tadin", "tadinho",
+    "ixi", "viu", "pula", "bota", "tadin",
     
     # Meta e Genéricos
     "videos", "video", "ano", "pessoas", "sala",
     
-    # Humor / Específicos repetitivos (opcional)
-    "pum", "bolinha",
+    # Humor
+    "pum", "pumzinho",
 
     # Inglês
     "the", "videos", "youtube", "youtuber", "youtubers", "here", 
@@ -135,10 +145,11 @@ custom_sWords = {
     "piggy", "bot", "doll", "missy", "guys", "everyone", "liked",
     "number", "channel", "your", "bunny", "teacher", "now",
     "show", "people", "comment", "favorite", "friends", "choose",
-    "sister", "minnie",
+    "sister", "minnie", "kill", "kissy", "dragon", "ending",
 
     # Verbos que o Spacy errou
-    "morri", "caí", "cai", "rimarão",
+    "morri", "caí", "cai", "rimarão", "subindo", "conseguimos",
+    "derrotei", "vem", "ajeitem",
 
     # Diminutivos e aumentativos
     "pouquinhos", "pouquinho", "carinhas", "cantinho", 
@@ -151,29 +162,69 @@ custom_sWords = {
     "cunezinho", "mandinha", "vazinho", "puxadinha", "mozinho",
     "fogãozinho", "gruzinho", "balãozinho", "motinha", "ônibusinho",
     "macarrãozinho", "quartinho", "patinhos", "olhinho", 
-    "bebezinho", "cachorrrinho", "caixinha", "ppzinho",
+    "bebezinho", "cachorrinho", "caixinha", "ppzinho",
+    "bobozinho", "filhotinho", "porquinho", "pedacinhos",
+    "vermelhinho", "vovozinhas", "minhoquinhos", "macaquinho",
+    "terninho", "girantão", "chuchuzinho", "narizinho",
+    "empurrãozinho", "baratinha", "golemszinhos", "videozinho",
+    "dragãozinho", "queridona", "latinha", "verdinho", "subidinha",
+    "pretinho", "pulinho", "cabelinho", "bochechinha", "quezinho",
+    "coitadinha", "tadinha", "punzinho", "garotinho", "lojinha",
+    "torninho", "bandinha", "coelhinho", "caudinho", "bocão",
+    "irmãozinho", "pózinho", "paninhos", "miguinho", "fominha",
+    "candinha", "miguinhos", "igualzinho", "maluquinho",
+    "palhacinho", "bonitinho", "comidinha", "arvorezinha",
+    "boazinhos", "jacarezinho", "paradinha", "pesadinho",
+    "fazendinha", "privadinho", "gramatinho", "salgadinhos",
 
     # Plurais
     "blocos", "armaduras", "espadas", "mobs", "poções",
     "carros", "motos", "vídeos", "alunos", "estudantes",
-    "fones", "personagens", "brinquedos",
+    "fones", "personagens", "brinquedos", "casas", "dragões",
+    "chaves", "andares", "faquinhas", "finais", "garras",
+    "espetinhos", "jogos", "cantoras", "espetos", "pegadas",
+    "minas", "sinais", "diamantes", "sentinelas", "gameplays",
+    "monstros", "paredes", "ninjas",
     
     # Pronomes que escaparam
-    "você", "mim", "comigo",
+    "você", "mim", "comigo", "minhas",
 
     # Ruído
     "dwi", "gwybod", "ddechrau", "ddod", "nam", "tui",
     "fawr", "siarad", "byddwn", "wneud", "rydym", "mena",
-    "zúúúúca", 
+    "zúúúúca", "aaaaaaaaaaaaaaah", "xinglau", "bene",
+    "coi", "naki", "simona", "múteas", "moloco", "yeba",
+    "aaaaaaa", "chitãs", "macharela", "imaro", "lenaju",
+    "pupi", "uuuuuuuu", "cheeeeeeeeeeck", "gamarim", "gamarinho",
+    "saciço", "mamareta", "mua", "tok",  "masesm", "muy", "minios",
+    "lavagantezinho", "mamitão", "aaaaaaaaaaaaaaaaah",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  "
 }
+
+# --- Palavras para serem resgatadas das stop words ---
+palavras_para_resgatar = {
+    # Contexto Familiar (Essencial para Roleplay Tóxico)
+    "mãe", "pai", "filha", "madrasta", "bebezinho",
+    
+    # Contexto de Terror/Ameaça
+    "monstros", "bichão", "piggy", "dragon", "kill",
+    "chata", "chato", "mentira", "mentiroso", "medo",
+    "susto",
+    
+    # Contexto de Posse (Geralmente gera briga por roubo/griefing)
+    "casinha", "baú", "roubou"
+}
+
+custom_sWords.difference(palavras_para_resgatar)
 
 # --- Intervalos de otimização ---
 param_ranges = {
-    "n_neighbors": {"type": "int", "low": 5, "high": 10},
-    "n_components": {"type": "int", "low": 2, "high": 5},
+    "n_neighbors": {"type": "int", "low": 5, "high": 20},
+    "n_components": {"type": "int", "low": 2, "high": 10},
     "min_dist": {"type": "float", "low": 0.0, "high": 0.5},
-    "min_cluster_size": {"type": "int", "low": 7, "high": 10},
-    "min_samples": {"type": "int", "low": 3, "high": 30},
+    "min_cluster_size": {"type": "int", "low": 3, "high": 5},
+    "min_samples": {"type": "int", "low": 3, "high": 15},
     "min_df": {"type": "int", "low": 2, "high": 15}, # Inteiro para limpeza absoluta
     "max_df": {"type": "float", "low": 1.0, "high": 1.0},
     # "ngram_range": {"type": "categorical", "choices": [(1,1), (1,2), (1,3)]},
@@ -210,12 +261,13 @@ def escolher_grupo():
 '''
     Função para definir a sequência de passos da análise de tópicos com o BERTopic
     @param grupo_selecionado - Nome do grupo a ser analisado (Ex: Geral, Minecraft, Roblox, ...)
+    @param tentativas - Número de trials do Optuna
 '''
-def pipeline_BERTopic(grupo_selecionado):
+def pipeline_BERTopic(grupo_selecionado, tentativas):
     console.rule(f"[bold magenta]Pipeline BERTopic: {grupo_selecionado}[/bold magenta]")
     
     # Coleta de dados (com ou sem filtro gramatical)
-    documentos = get_dados(grupo_analise=grupo_selecionado, usar_filtro_gramatical=True)
+    documentos = get_dados(grupo_analise=grupo_selecionado, modo_selecao="toxico", usar_filtro_gramatical=True)
     
     if not documentos:
         console.print("[red]Nenhum documento encontrado para este grupo. Abortando.[/red]")
@@ -223,7 +275,7 @@ def pipeline_BERTopic(grupo_selecionado):
 
     # Otimização Bayesiana dos parâmetros do BERTopic
     console.print(f"[green]Iniciando otimização com {len(documentos)} documentos...[/green]")
-    study = otimizar_BERTopic(documentos, param_ranges, stop_words=list(custom_sWords), n_trials=15)
+    study = otimizar_BERTopic(documentos, param_ranges, stop_words=list(custom_sWords), n_trials=tentativas)
     
     # Salvamento do resultado
     if study and study.best_value > -1: # Aceita 0.0 como válido, mas não erro
@@ -309,7 +361,7 @@ def main_menu():
 
         elif "1. Executar" in choice:
             grupo = escolher_grupo()
-            pipeline_BERTopic(grupo)
+            pipeline_BERTopic(grupo, 15)
 
         elif "2. Visualizar" in choice:
             grupo = escolher_grupo()

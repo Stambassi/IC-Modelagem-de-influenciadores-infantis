@@ -9,3 +9,5 @@
 
 # Para ignorar modelos BERTopic
 /Coletor/crawler/bertopic/modelos
+/Coletor/crawler/bertopic/__pycache__
+

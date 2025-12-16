@@ -300,12 +300,13 @@ def make_objective(documents, param_ranges, stop_words):
                 max_df=1.0, 
                 ngram_range=ngram_range,
                 stop_words=stop_words,
-                token_pattern=r'(?u)\b\w\w+\b',
+                token_pattern=r'(?u)\b[a-zA-ZáàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ]{2,}\b',
                 strip_accents='unicode'
             )
 
             embedding_model = SentenceTransformer("paraphrase-multilingual-MiniLM-L12-v2")
-            representation_model = KeyBERTInspired()
+            # representation_model = KeyBERTInspired()
+            representation_model = PartOfSpeech("pt_core_news_lg")
 
             topic_model = BERTopic(
                 embedding_model=embedding_model,
@@ -444,7 +445,8 @@ def salvar_BERTopic(docs, params, stop_words, nome_grupo="Geral"):
         min_df=min_df, 
         max_df=1.0,
         ngram_range=params['ngram_range'],
-        stop_words=stop_words
+        stop_words=stop_words,
+        token_pattern=r'(?u)\b[a-zA-ZáàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ]{2,}\b'
     )
 
     ctfidf_model = ClassTfidfTransformer()
@@ -512,4 +514,4 @@ def salvar_BERTopic(docs, params, stop_words, nome_grupo="Geral"):
     else:
         console.print("[dim]Pufando Hierarquia e Heatmap (menos de 3 tópicos identificados)[/dim]")
 
-    console.print(f"[bold green]✔ Sucesso! Tudo salvo em: {output_dir}/[/bold green]")
+    console.print(f"[bold green]✔  Sucesso! Tudo salvo em: {output_dir}/[/bold green]")

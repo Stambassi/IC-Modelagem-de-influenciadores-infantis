@@ -71,7 +71,7 @@ def lematizar_topicos(topic_model):
 '''
 def visualizar_bertopic(nome_grupo="Geral"):    
     # Define o caminho base modular
-    base_dir = Path("bertopic") / nome_grupo
+    base_dir = Path("bertopic/modelos") / nome_grupo
     model_path = base_dir / "modelo_final"
     csv_path = base_dir / "topicos_info.csv"
 
