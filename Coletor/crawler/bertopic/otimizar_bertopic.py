@@ -223,8 +223,8 @@ def make_objective(documents, param_ranges):
 
 
         # Modelo de Finetuning
-        # representation_model = PartOfSpeech("pt_core_news_md")
-        representation_model = KeyBERTInspired()
+        representation_model = PartOfSpeech("pt_core_news_lg")
+        # representation_model = KeyBERTInspired()
 
         # ---------------------------
         # Criar modelo
