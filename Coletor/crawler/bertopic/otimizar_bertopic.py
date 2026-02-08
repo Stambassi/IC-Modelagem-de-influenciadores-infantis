@@ -300,7 +300,7 @@ def make_objective(documents, param_ranges, stop_words):
                 max_df=1.0, 
                 ngram_range=ngram_range,
                 stop_words=stop_words,
-                token_pattern=r'(?u)\b[a-zA-ZáàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ]{2,}\b',
+                token_pattern=r'\b[a-zA-ZáàâãéèêíïóôõöúçñÁÀÂÃÉÈÊÍÏÓÔÕÖÚÇÑ]{2,}\b',
                 strip_accents='unicode'
             )
 

@@ -54,9 +54,8 @@ custom_sWords = {
     "pessoal", "galerinha", "acho", "daí", "porta", "hein", "bora", 
     "aham", "juma", "tipo", "então", "assim", "agora", "tudo", "todos",
     "oi", "e aí", "eae", "fala", "galera", "bem-vindos", "cara", "meu", 
-    "nossa", "deus", "jeito", "ideia", "pronto", "vocês", "ufa", "desculpa", 
-    "cuidado", "socorro", "ola", "tchau", "oizinho", "que", "oiiiii",
-    "mesmo", "toda", "tomara", "oiiii",
+    "nossa", "jeito", "ideia", "pronto", "vocês", "ufa", "ola", 
+    "mesmo", "tanto", "mais", "nossa", 
     
     # Verbos de Ação/Modalidade
     "posso", "pode", "podemos", "tenho", "tem", "temos", "ter",
@@ -78,7 +77,7 @@ custom_sWords = {
     "lá", "aí", "ali", "cá", "já", "depois", "esse", "essa", "isso", 
     "esse daqui", "desse", "dessa", "disso", "aquele", "aquela", "aquilo",
     "nessa", "nesse", "nisso", "num", "numa", "onde", "quando", "como", 
-    "porque", "por", "para", "here",
+    "porque", "por", "para",
 
     # Domínio de jogos
     "minecraft", "jogo", "games", "baú", "bau", "chão", "teto", 
@@ -88,7 +87,7 @@ custom_sWords = {
     "caramba", "vixe", "eita", "uou", "amigos", "amigo", "cara", 
     "caraca", "maloca",
     
-    # Genéricos (substantivos vazios)
+    # Genéricos (palavras vazias)
     "coisa", "coisas", "parte", "vez", "hora", "momento",
     "mundo", "lado", "frente", "cima", "baixo", "lugar",
     "sorte", "pouquinhos", "carinhas", "monte", "meio",
@@ -101,7 +100,8 @@ custom_sWords = {
     "vídeo", "videos", "youtube", "canal", "barulho", 
     "voz", "som", "música", "moto", "carro", "malota",
     "seis", "rua", "cimarão", "gotos", "feijão", "triplo",
-    "certo", "graça",
+    "certo", "graça", "semelhante", "igual", "parte", 
+    "próxima", "minuto",
  
     # Interação entre pessoas
     "spock", "pokao", "pokão", "iago", "iagao", "iagão",
@@ -109,23 +109,15 @@ custom_sWords = {
     "lulú", "amandinha", "miguelhinha", "miguelinha", "kais",
     "lockinho", "kess", "miguelete", "miguilhinha", "mequilhinha",
     "mequilinha", "ben", "texinho", "paulinho", "lulu", "niki",
-    "loquinho", "kevin", "kaizy", "miquelinhos",
+    "loquinho", "kevin", "kaizy", "miquelinhos", "miguelets",
+    "pigzito",
 
     # Vocativos e Gírias Específicas
     "moço", "moco", "amiguinho", "amiguinhos", "cara", "caras", 
-    "pessoal", "gente", "filha", "pai", "menina", "menino",
-    "meninas", "meninos", "moça", "vovô", "rapaz", "mames", "mami",
-    "senhora", "senhor", "mamie", "mina", "mãe", "madrasta",
-    "garoto", "tia", "moço", "amiga", "amiglis", "mígles",
-
-    # Interjeições e Ruído
-    "uhul", "uhuu", "oba", "vixe", "nossa", "socorro", "ai",
-    "likes", "like", "haha", "uhuuu", "wow", "uiuu", "uuuu",
-    "uau", "hey", "huh", "eeeeh", "uiiiii", "ihihi", "hehehehehehe",
-    "tum", "aaaa", "hehehehe", "lalalalalala", "nha", "piuí",
-    "uuuuh", "mamamama", "nããão", "miuuuu", "buh", "brrrr",
-    "bláááá", "prrrrrr", "ihihihi",
-
+    "pessoal", "gente", "menina", "menino", "meninas", "meninos", 
+    "moça", "rapaz", "mames", "mami", "senhora", "senhor", 
+    "mamie", "mina", "garoto", "moço", "amiga", "amiglis", 
+    "mígles", "amigli", "mam", "migo",
     
     # Verbos que parecem substantivos ou escaparam
     "vamo", "vamos", "pulo", "olha", "visto", "bebí", "diga",
@@ -142,52 +134,55 @@ custom_sWords = {
     # Inglês
     "the", "videos", "youtube", "youtuber", "youtubers", "here", 
     "this", "can", "block", "get", "but", "rock", "pig", "pigs", 
-    "piggy", "bot", "doll", "missy", "guys", "everyone", "liked",
-    "number", "channel", "your", "bunny", "teacher", "now",
-    "show", "people", "comment", "favorite", "friends", "choose",
-    "sister", "minnie", "kill", "kissy", "dragon", "ending",
+    "bot", "doll", "missy", "guys", "everyone", "liked", "number", 
+    "channel", "your", "teacher", "now","show", "people", 
+    "comment", "favorite", "friends", "choose","sister", "minnie", 
+    "kissy", "dragon", "ending", "likes", "like", 
 
     # Verbos que o Spacy errou
     "morri", "caí", "cai", "rimarão", "subindo", "conseguimos",
     "derrotei", "vem", "ajeitem",
 
-    # Diminutivos e aumentativos
-    "pouquinhos", "pouquinho", "carinhas", "cantinho", 
-    "canto", "ladinho", "escadinha", "lobinho", "bichão",
-    "lugarzinho", "bloquinhos", "casinha", "foguinho",
-    "anjinho", "juntinho", "carrinho", "trenzinho", "salgadinho",
-    "professorzinho", "mocinho", "patinho", "piscininha", "pezinho",
-    "menininho", "joguinho", "dinheirinho", "bonitozinhozinho",
-    "bonitinhozinhozinho", "mercadinho", "miguelinho",
-    "cunezinho", "mandinha", "vazinho", "puxadinha", "mozinho",
-    "fogãozinho", "gruzinho", "balãozinho", "motinha", "ônibusinho",
-    "macarrãozinho", "quartinho", "patinhos", "olhinho", 
-    "bebezinho", "cachorrinho", "caixinha", "ppzinho",
-    "bobozinho", "filhotinho", "porquinho", "pedacinhos",
-    "vermelhinho", "vovozinhas", "minhoquinhos", "macaquinho",
-    "terninho", "girantão", "chuchuzinho", "narizinho",
-    "empurrãozinho", "baratinha", "golemszinhos", "videozinho",
-    "dragãozinho", "queridona", "latinha", "verdinho", "subidinha",
-    "pretinho", "pulinho", "cabelinho", "bochechinha", "quezinho",
-    "coitadinha", "tadinha", "punzinho", "garotinho", "lojinha",
-    "torninho", "bandinha", "coelhinho", "caudinho", "bocão",
-    "irmãozinho", "pózinho", "paninhos", "miguinho", "fominha",
-    "candinha", "miguinhos", "igualzinho", "maluquinho",
-    "palhacinho", "bonitinho", "comidinha", "arvorezinha",
-    "boazinhos", "jacarezinho", "paradinha", "pesadinho",
-    "fazendinha", "privadinho", "gramatinho", "salgadinhos",
+    # # Diminutivos e aumentativos
+    # "pouquinhos", "pouquinho", "carinhas", "cantinho", 
+    # "canto", "ladinho", "escadinha", "lobinho", "bichão",
+    # "lugarzinho", "bloquinhos", "casinha", "foguinho",
+    # "anjinho", "juntinho", "carrinho", "trenzinho", "salgadinho",
+    # "professorzinho", "mocinho", "patinho", "piscininha", "pezinho",
+    # "menininho", "joguinho", "dinheirinho", "bonitozinhozinho",
+    # "bonitinhozinhozinho", "mercadinho", "miguelinho",
+    # "cunezinho", "mandinha", "vazinho", "puxadinha", "mozinho",
+    # "fogãozinho", "gruzinho", "balãozinho", "motinha", "ônibusinho",
+    # "macarrãozinho", "quartinho", "patinhos", "olhinho", 
+    # "bebezinho", "cachorrinho", "caixinha", "ppzinho",
+    # "bobozinho", "filhotinho", "porquinho", "pedacinhos",
+    # "vermelhinho", "vovozinhas", "minhoquinhos", "macaquinho",
+    # "terninho", "girantão", "chuchuzinho", "narizinho",
+    # "empurrãozinho", "baratinha", "golemszinhos", "videozinho",
+    # "dragãozinho", "queridona", "latinha", "verdinho", "subidinha",
+    # "pretinho", "pulinho", "cabelinho", "bochechinha", "quezinho",
+    # "coitadinha", "tadinha", "punzinho", "garotinho", "lojinha",
+    # "torninho", "bandinha", "coelhinho", "caudinho", "bocão",
+    # "irmãozinho", "pózinho", "paninhos", "miguinho", "fominha",
+    # "candinha", "miguinhos", "igualzinho", "maluquinho",
+    # "palhacinho", "bonitinho", "comidinha", "arvorezinha",
+    # "boazinhos", "jacarezinho", "paradinha", "pesadinho",
+    # "fazendinha", "privadinho", "gramatinho", "salgadinhos",
 
-    # Plurais
-    "blocos", "armaduras", "espadas", "mobs", "poções",
-    "carros", "motos", "vídeos", "alunos", "estudantes",
-    "fones", "personagens", "brinquedos", "casas", "dragões",
-    "chaves", "andares", "faquinhas", "finais", "garras",
-    "espetinhos", "jogos", "cantoras", "espetos", "pegadas",
-    "minas", "sinais", "diamantes", "sentinelas", "gameplays",
-    "monstros", "paredes", "ninjas",
+    # # Plurais
+    # "blocos", "armaduras", "espadas", "mobs", "poções",
+    # "carros", "motos", "vídeos", "alunos", "estudantes",
+    # "fones", "personagens", "brinquedos", "casas", "dragões",
+    # "chaves", "andares", "faquinhas", "finais", "garras",
+    # "espetinhos", "jogos", "cantoras", "espetos", "pegadas",
+    # "minas", "sinais", "diamantes", "sentinelas", "gameplays",
+    # "monstros", "paredes", "ninjas",
     
     # Pronomes que escaparam
     "você", "mim", "comigo", "minhas",
+    
+    # Radicais quebrados ou genéricos demais
+    "cois", "fin", "todo", "toda", "cais",
 
     # Ruído
     "dwi", "gwybod", "ddechrau", "ddod", "nam", "tui",
@@ -197,26 +192,13 @@ custom_sWords = {
     "aaaaaaa", "chitãs", "macharela", "imaro", "lenaju",
     "pupi", "uuuuuuuu", "cheeeeeeeeeeck", "gamarim", "gamarinho",
     "saciço", "mamareta", "mua", "tok",  "masesm", "muy", "minios",
-    "lavagantezinho", "mamitão", "aaaaaaaaaaaaaaaaah",
+    "lavagantezinho", "mamitão", "aaaaaaaaaaaaaaaaah", "venga",
+    "gaminhão", "polichimelo", "mordereira", "conterreiro", 
+    "bolaangeio", "micul", "micul", "toto", "amitad", "vikima",
+    "amerado",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  "
 }
-
-# --- Palavras para serem resgatadas das stop words ---
-palavras_para_resgatar = {
-    # Contexto Familiar (Essencial para Roleplay Tóxico)
-    "mãe", "pai", "filha", "madrasta", "bebezinho",
-    
-    # Contexto de Terror/Ameaça
-    "monstros", "bichão", "piggy", "dragon", "kill",
-    "chata", "chato", "mentira", "mentiroso", "medo",
-    "susto",
-    
-    # Contexto de Posse (Geralmente gera briga por roubo/griefing)
-    "casinha", "baú", "roubou"
-}
-
-custom_sWords.difference(palavras_para_resgatar)
 
 # --- Intervalos de otimização ---
 param_ranges = {
@@ -267,7 +249,7 @@ def pipeline_BERTopic(grupo_selecionado, tentativas):
     console.rule(f"[bold magenta]Pipeline BERTopic: {grupo_selecionado}[/bold magenta]")
     
     # Coleta de dados (com ou sem filtro gramatical)
-    documentos = get_dados(grupo_analise=grupo_selecionado, modo_selecao="toxico", usar_filtro_gramatical=True)
+    documentos = get_dados(grupo_analise=grupo_selecionado, modo_selecao="toxico", granularidade="tirinha", usar_filtro_gramatical=True)
     
     if not documentos:
         console.print("[red]Nenhum documento encontrado para este grupo. Abortando.[/red]")
@@ -361,7 +343,7 @@ def main_menu():
 
         elif "1. Executar" in choice:
             grupo = escolher_grupo()
-            pipeline_BERTopic(grupo, 15)
+            pipeline_BERTopic(grupo, 30)
 
         elif "2. Visualizar" in choice:
             grupo = escolher_grupo()
