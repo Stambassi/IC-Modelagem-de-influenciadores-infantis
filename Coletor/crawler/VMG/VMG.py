@@ -5,8 +5,6 @@ import numpy as np
 from rich.console import Console
 import seaborn as sns
 import matplotlib.pyplot as plt
-import networkx as nx
-import matplotlib.patches as mpatches
 
 console = Console()
 
@@ -21,9 +19,7 @@ METRICAS_CONFIG = {
     'sentimento': {
         'coluna_base': 'sentimento_dominante', 
         'tipo_estados': 'categorico', 
-        'estados': ['POS', 'NEU', 'NEG'],
-        # Cores para o grafo: Verde (POS), Cinza (NEU), Vermelho (NEG)
-        'cores_grafo': {'POS': '#2ecc71', 'NEU': '#95a5a6', 'NEG': '#e74c3c'} 
+        'estados': ['POS', 'NEU', 'NEG']
     },
     'negatividade': {
         'coluna_base': 'negatividade',
@@ -33,15 +29,14 @@ METRICAS_CONFIG = {
     'toxicidade': {
         'coluna_base': 'toxicity',
         'tipo_estados': 'numerico_categorizado', 
-        'limiares': [0.0, 0.20, 0.50, 1.01], 
-        'estados': ['NT', 'GZ', 'T'],
-        # Cores para o grafo: Verde (NT), Amarelo (GZ), Vermelho (T)
-        'cores_grafo': {'NT': '#2ecc71', 'GZ': '#f1c40f', 'T': '#e74c3c'} 
+        'limiares': [0.0, 0.20, 0.80, 1.01], 
+        'estados': ['NT', 'GZ', 'T']
     }
 }
 
 '''
     Função para armazenar as transições de estados (para uma métrica específica) de cada vídeo em um arquivo CSV
+
     @param youtubers_list - Lista de youtubers a serem analisados
     @param metrica_config - Dicionário de configuração da métrica (da METRICAS_CONFIG)
     @param nome_analise - O nome da análise (ex: 'sentimento', 'negatividade_3')
@@ -142,6 +137,7 @@ def salvar_transicoes_por_metrica(youtubers_list: list[str], metrica_config: dic
 
 '''
     Função para criar e persistir a Matriz de Transição (VMG) para cada vídeo individual
+
     @param youtubers_list - Lista de youtubers a serem analisados
     @param metrica_config - Dicionário de configuração da métrica (da METRICAS_CONFIG)
     @param nome_analise - O nome da análise (ex: 'sentimento', 'negatividade_3')
@@ -204,11 +200,12 @@ def salvar_matriz_transicao_video(youtubers_list: list[str], metrica_config: dic
                 console.print(f'Inválido (salvar_matriz_transicao_video): {e}')
 
 '''
-    Função para criar e persistir a Matriz de Transição agregada para cada youtuber
-    @param youtubers_list - Lista de youtubers a serem analisados.
-    @param metrica_config - Dicionário de configuração da métrica (da METRICAS_CONFIG).
-    @param nome_analise - O nome da análise (ex: 'sentimento', 'negatividade_3').
-    @param agg_metrica - Tipo de cálculo da agregação (ex: 'mean', 'standard', 'variation').
+    Função para criar e persistir a Matriz de Transição (VMG) agregada para cada youtuber
+
+    @param youtubers_list - Lista de youtubers a serem analisados
+    @param metrica_config - Dicionário de configuração da métrica (da METRICAS_CONFIG)
+    @param nome_analise - O nome da análise (ex: 'sentimento', 'negatividade_3')
+    @param agg_metrica - Tipo de cálculo da agregação (ex: 'mean', 'standard', 'variation')
 '''
 def salvar_matriz_transicao_youtuber(youtubers_list: list[str], metrica_config: dict, nome_analise: str, agg_metrica: str = 'mean') -> None:
     # Definir os estados com base no tipo de métrica
@@ -301,14 +298,110 @@ def salvar_matriz_transicao_youtuber(youtubers_list: list[str], metrica_config: 
             output_path = output_folder / f'VMG_{nome_analise}_{agg_metrica}.csv'
             
             matriz_transicao_youtuber.to_csv(output_path)
-            console.print(f"Matriz de Transição ({agg_metrica}) salva em: {output_path}")
+            console.print(f"     [green]Matriz de Transição ({agg_metrica}) salva em:[/green]: {output_path}")
 
         except Exception as e:
             console.print(f'Inválido (salvar_matriz_transicao_youtuber): {e}')
 
 '''
-    Função para gerar um Heatmap (Mapa de Calor) com qualidade de publicação.
-    Mostra as probabilidades de transição com anotações e escala de cor.
+    Função para criar e persistir a Matriz de Transição (VMG) global e por categoria
+
+    @param mapa_categorias - Dicionário mapeando {nome_youtuber: categoria}
+    @param metrica_config - Dicionário de configuração da métrica
+    @param nome_analise - O nome da análise (ex: 'toxicidade')
+    @param agg_metrica - Tipo de cálculo da agregação ('mean', 'standard', 'variation')
+'''
+def salvar_matriz_transicao_global(mapa_categorias: dict, metrica_config: dict, nome_analise: str, agg_metrica: str = 'mean') -> None:
+    # Definir os estados com base no tipo de métrica
+    if metrica_config['tipo_estados'] in ['categorico', 'numerico_categorizado']:
+        estados = metrica_config['estados']
+    else:
+        estados = list(range(1, metrica_config['n_estados'] + 1))
+    
+    tipo_categorico = CategoricalDtype(categories=estados, ordered=True)
+    
+    agg_funcs = {
+        'standard': 'std',
+        'variation': lambda x: x.std() / x.mean() if x.mean() != 0 else 0
+    }
+
+    if agg_metrica != 'mean' and agg_metrica not in agg_funcs:
+        console.print(f"[bold red]Erro: Métrica de agregação '{agg_metrica}' inválida.[/bold red]")
+        return
+
+    # Coleta inicial de todos os dados de todos os youtubers mapeados
+    lista_geral_transicoes = []
+    
+    for youtuber, categoria in mapa_categorias.items():
+        base_path = Path(f'files/{youtuber}')
+        if not base_path.is_dir():
+            continue
+            
+        for transicoes_csv_path in base_path.rglob(f'transicoes_{nome_analise}.csv'):
+            try:
+                df_video = pd.read_csv(transicoes_csv_path)
+                if not df_video.empty:
+                    df_video['categoria'] = categoria
+                    df_video['youtuber'] = youtuber
+
+                    # Identificador único do vídeo para cálculos de dispersão
+                    df_video['video_id_unique'] = f"{youtuber}_{transicoes_csv_path.parent.parent.name}"
+                    lista_geral_transicoes.append(df_video)
+            except Exception:
+                continue
+
+    if not lista_geral_transicoes:
+        console.print("[yellow]Nenhum dado encontrado para processamento global.[/yellow]")
+        return
+
+    df_master = pd.concat(lista_geral_transicoes, ignore_index=True)
+    df_master['estado'] = df_master['estado'].astype(tipo_categorico)
+    df_master['proximo_estado'] = df_master['proximo_estado'].astype(tipo_categorico)
+
+    # Definir os escopos de análise: por Categoria e o Geral (Global)
+    categorias_unicas = list(df_master['categoria'].unique())
+    escopos = categorias_unicas + ['global']
+
+    for escopo in escopos:
+        console.print(f'>>> Processando VMG "{nome_analise}" para Escopo: [bold magenta]{escopo}[/bold magenta]')
+        
+        # Filtrar o dataframe conforme o escopo
+        if escopo == 'global':
+            df_escopo = df_master.copy()
+        else:
+            df_escopo = df_master[df_master['categoria'] == escopo].copy()
+
+        try:
+            if agg_metrica == 'mean':
+                # Agregação por soma de contagens brutas no escopo
+                df_agregado = df_escopo.groupby(['estado', 'proximo_estado'], observed=False)['contagem'].sum().reset_index()
+                somas_por_estado = df_agregado.groupby('estado', observed=False)['contagem'].transform('sum')
+                df_agregado[agg_metrica] = (df_agregado['contagem'] / somas_por_estado).fillna(0)
+            else:
+                # Agregação baseada na probabilidade individual de cada vídeo (para variabilidade)
+                somas_por_estado_video = df_escopo.groupby(['video_id_unique', 'estado'], observed=False)['contagem'].transform('sum')
+                df_escopo['probabilidade'] = (df_escopo['contagem'] / somas_por_estado_video).fillna(0)
+                
+                agg_func = agg_funcs[agg_metrica]
+                df_agregado = df_escopo.groupby(['estado', 'proximo_estado'], observed=False)['probabilidade'].agg(agg_func).reset_index()
+                df_agregado.rename(columns={'probabilidade': agg_metrica}, inplace=True)
+
+            # Pivotar para matriz
+            matriz_final = df_agregado.pivot(index='estado', columns='proximo_estado', values=agg_metrica).fillna(0)
+
+            # Salvar em pasta centralizada de resultados globais
+            output_folder = Path('files/VMG')
+            output_folder.mkdir(parents=True, exist_ok=True)
+            output_path = output_folder / f'VMG_{escopo}_{nome_analise}_{agg_metrica}.csv'
+            
+            matriz_final.to_csv(output_path)
+            console.print(f"     [green]Matriz salva:[/green] {output_path}")
+
+        except Exception as e:
+            console.print(f'[red]Erro ao processar escopo {escopo}: {e}[/red]')
+
+'''
+    Função para gerar um Heatmap que mostra as probabilidades de transição com anotações e escala de cor
 
     @param matrix_path - Caminho para o arquivo CSV da matriz VTMG
     @param output_path - Caminho onde a imagem será salva
@@ -350,79 +443,10 @@ def gerar_heatmap_vmg(matrix_path: Path, output_path: Path, title: str):
         console.print(f"[red]Erro ao gerar heatmap de {matrix_path.name}: {e}[/red]")
 
 '''
-    Função para gerar um Grafo Dirigido (NetworkX) visualizando as transições.
-    A espessura da seta indica a probabilidade.
+    Função que varre recursivamente todos os vídeos de cada youtuber e gera o gráfico individual para cada matriz de vídeo encontrada
 
-    @param matrix_path - Caminho para o arquivo CSV da matriz VTMG
-    @param output_path - Caminho onde a imagem será salva
-    @param config_cores - Dicionário mapeando nome do estado -> cor Hex
-'''
-def gerar_grafo_vmg(matrix_path: Path, output_path: Path, config_cores: dict = None):
-    try:
-        df_matrix = pd.read_csv(matrix_path, index_col=0)
-        
-        # Cria um grafo dirigido
-        G = nx.DiGraph()
-        
-        # Adiciona os nós
-        estados = df_matrix.index.tolist()
-        G.add_nodes_from(estados)
-        
-        # Adiciona as arestas com pesos (probabilidades)
-        for origem in estados:
-            for destino in estados:
-                peso = df_matrix.loc[origem, destino]
-
-                G.add_edge(origem, destino, weight=peso)
-        
-        plt.figure(figsize=(8, 8))
-        
-        # Layout circular é ideal para matrizes pequenas (3x3)
-        pos = nx.circular_layout(G)
-        
-        # Define cores dos nós
-        node_colors = ['lightgray'] * len(G.nodes())
-        if config_cores:
-            node_colors = [config_cores.get(node, 'lightgray') for node in G.nodes()]
-        
-        # Desenha nós
-        nx.draw_networkx_nodes(G, pos, node_size=3000, node_color=node_colors, edgecolors='black')
-        
-        # Desenha labels dos nós
-        nx.draw_networkx_labels(G, pos, font_size=12, font_weight='bold')
-        
-        # Desenha arestas (setas)
-        # Espessura baseada no peso * fator para ficar visível
-        weights = [G[u][v]['weight'] * 4 for u, v in G.edges()]
-        
-        # connectionstyle='arc3, rad=0.1' faz as setas serem curvas
-        # isso permite ver ida e volta (A->B e B->A) sem sobreposição
-        nx.draw_networkx_edges(
-            G, pos, 
-            width=weights, 
-            edge_color='gray', 
-            arrowstyle='-|>', 
-            arrowsize=20,
-            connectionstyle='arc3, rad=0.2' 
-        )
-        
-        # Adiciona labels nas arestas (opcional, pode poluir, mas professores gostam de dados)
-        edge_labels = {(u, v): f"{d['weight']:.2f}" for u, v, d in G.edges(data=True)}
-        nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, label_pos=0.3, font_size=8)
-        
-        plt.title("Grafo de Probabilidade de Transição", fontsize=14)
-        plt.axis('off') # Remove eixos cartesianos
-        
-        plt.tight_layout()
-        plt.savefig(output_path, bbox_inches='tight')
-        plt.close()
-        
-    except Exception as e:
-        console.print(f"[red]Erro ao gerar grafo de {matrix_path.name}: {e}[/red]")
-
-'''
-    Função nova que varre recursivamente todos os vídeos de cada youtuber
-    e gera o gráfico individual para cada matriz de vídeo encontrada.
+    @param youtubers_list - Lista de youtubers a serem analisados
+    @param nome_analise - O nome da análise (ex: 'sentimento', 'toxicidade')
 '''
 def gerar_visualizacoes_individuais_videos(youtubers_list: list[str], nome_analise: str):
     console.print(f"\n[bold magenta]===== GERANDO HEATMAPS INDIVIDUAIS PARA '{nome_analise.upper()}' =====[/bold magenta]")
@@ -457,9 +481,12 @@ def gerar_visualizacoes_individuais_videos(youtubers_list: list[str], nome_anali
             gerar_heatmap_vmg(vmg_file, output_file, titulo_grafico)
 
 '''
-    Função para gerar o Heatmap da Matriz Média Agregada do Youtuber
+    Função para gerar o Heatmap da transição de toxicidade do Youtuber
+
+    @param youtubers_list - Lista de youtubers a serem analisados
+    @param nome_analise - O nome da análise (ex: 'sentimento', 'toxicidade')
 '''
-def gerar_visualizacoes_agregadas(youtubers_list: list[str], nome_analise: str):
+def gerar_visualizacoes_agregadas_youtuber(youtubers_list: list[str], nome_analise: str):
     console.print(f"\n[bold magenta]===== GERANDO HEATMAPS AGREGADOS PARA '{nome_analise.upper()}' =====[/bold magenta]")
     
     for youtuber in youtubers_list:
@@ -479,13 +506,58 @@ def gerar_visualizacoes_agregadas(youtubers_list: list[str], nome_analise: str):
             console.print(f"   Agregado salvo para: {youtuber}")
 
 '''
+    Função para gerar Heatmaps das Matrizes de Transição (VMG) globais e por categoria
+
+    @param mapa_categorias - Dicionário mapeando {nome_youtuber: categoria}
+    @param nome_analise - O nome da análise (ex: 'sentimento', 'toxicidade')
+'''
+def gerar_visualizacoes_agregadas_globais(mapa_categorias: dict, nome_analise: str):
+    console.print(f"\n[bold magenta]===== GERANDO HEATMAPS GLOBAIS PARA '{nome_analise.upper()}' =====[/bold magenta]")
+    
+    # Pasta onde as matrizes globais/categoria foram salvas
+    base_path = Path('files/VMG')
+    
+    # Pasta centralizada para os plots globais do artigo
+    img_output_folder = Path('files/plots')
+    img_output_folder.mkdir(parents=True, exist_ok=True)
+    
+    # Determina os escopos com base nas categorias presentes no mapa + o global
+    categorias_unicas = list(set(mapa_categorias.values()))
+    escopos = categorias_unicas + ['global']
+    
+    for escopo in escopos:
+        # Padrão de nome definido na função salvar_matriz_transicao_global
+        matriz_media_path = base_path / f'VMG_{escopo}_{nome_analise}_mean.csv'
+        
+        if matriz_media_path.exists():
+            heatmap_path = img_output_folder / f'heatmap_{nome_analise}_{escopo}.png'
+            
+            # Formata o título para o padrão acadêmico
+            titulo_escopo = escopo.capitalize() if escopo != 'global' else "Geral (Todos os Grupos)"
+            
+            try:
+                gerar_heatmap_vmg(
+                    matriz_media_path, 
+                    heatmap_path, 
+                    title=f"Matriz de Transição de {nome_analise.capitalize()}: {titulo_escopo}"
+                )
+                console.print(f"   [green]Heatmap salvo para o escopo:[/green] {escopo}")
+            except Exception as e:
+                console.print(f"   [red]Erro ao gerar heatmap para {escopo}: {e}[/red]")
+        else:
+            console.print(f"   [yellow]Aviso: Matriz não encontrada para {escopo} em {matriz_media_path}[/yellow]")
+
+'''
     Função principal para orquestrar o pipeline de análise de VMG
     @param youtubers_list - Lista de youtubers a serem analisados
+    @param mapa_categorias - Dicionário mapeando {nome_youtuber: categoria}
     @param config_analise - Dicionário de configurações da métrica (da METRICAS_CONFIG)
     @param nome_analise - O nome identificador desta análise (ex: 'sentimento')
 '''
-def rodar_pipeline_vmg(youtubers_list: list[str], config_metrica: dict, nome_analise: str):
+def rodar_pipeline_vmg(youtubers_list: list[str], mapa_categorias: dict, config_metrica: dict, nome_analise: str):
     console.print(f"\n[bold magenta]===== INICIANDO PIPELINE VMG PARA '{nome_analise.upper()}' =====[/bold magenta]")
+
+    agregacoes = ['mean', 'standard', 'variation']
     
     # Gerar arquivos de contagem de transições (por vídeo)
     salvar_transicoes_por_metrica(youtubers_list, config_metrica, nome_analise)
@@ -493,25 +565,49 @@ def rodar_pipeline_vmg(youtubers_list: list[str], config_metrica: dict, nome_ana
     # Gerar matrizes de probabilidade (por vídeo)
     salvar_matriz_transicao_video(youtubers_list, config_metrica, nome_analise)
     
-    # Gerar matriz agregada (por youtuber) para diferentes agregações
-    for agg in ['mean', 'standard', 'variation']:
+    # Gerar matriz para diferentes agregações
+    for agg in agregacoes:
+        # Gerar matriz agregada por youtuber
         salvar_matriz_transicao_youtuber(youtubers_list, config_metrica, nome_analise, agg_metrica=agg)
+
+        # Gerar matrizes de probabilidade globais (geral e por categoria)
+        salvar_matriz_transicao_global(mapa_categorias, config_metrica, nome_analise, agg_metrica=agg)
+
     
     # Visualizações Individuais (Cada Vídeo)
-    #gerar_visualizacoes_individuais_videos(youtubers_list, nome_analise)
+    # gerar_visualizacoes_individuais_videos(youtubers_list, nome_analise)
 
     # Visualizações Agregadas (Por Youtuber)
-    gerar_visualizacoes_agregadas(youtubers_list, nome_analise)
+    gerar_visualizacoes_agregadas_youtuber(youtubers_list, nome_analise)
 
-    console.print(f"\n[bold magenta]===== PIPELINE VSMG PARA '{nome_analise.upper()}' CONCLUÍDO =====[/bold magenta]")
+    # Gerar matrizes de probabilidade globais (Geral / Minecraft / Youtuber)
+    gerar_visualizacoes_agregadas_globais(mapa_categorias, nome_analise)
+
+    console.print(f"\n[bold magenta]===== PIPELINE VMG PARA '{nome_analise.upper()}' CONCLUÍDO =====[/bold magenta]")
 
 
 if __name__ == '__main__':
-    lista_youtubers = ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'Papile', 'Robin Hood Gamer', 'TazerCraft', 'Tex HS']
+    # Mapeia cada youtuber para sua categoria principal (Minecraft, Roblox, etc.)
+    mapa_youtubers_categoria = {
+        'Amy Scarlet': 'Roblox',
+        'AuthenticGames': 'Minecraft',
+        'Cadres': 'Minecraft',
+        'Julia MineGirl': 'Roblox',
+        'Kass e KR': 'Minecraft',
+        'Lokis': 'Roblox',
+        'Luluca Games': 'Roblox',
+        'Papile': 'Roblox',
+        'Robin Hood Gamer': 'Minecraft',
+        'TazerCraft': 'Minecraft',
+        # 'Tex HS': 'Misto'
+    }
+
+    lista_youtubers = list(mapa_youtubers_categoria.keys())
 
     # # Executa o pipeline para a métrica 'sentimento'
     # rodar_pipeline_vmg(
     #     lista_youtubers, 
+    #     mapa_youtubers_categoria,
     #     config_metrica=METRICAS_CONFIG['sentimento'], 
     #     nome_analise='sentimento'
     # )
@@ -519,6 +615,7 @@ if __name__ == '__main__':
     # # Executa o pipeline para a métrica 'negatividade' com 3 estados
     # rodar_pipeline_vmg(
     #     lista_youtubers, 
+    #     mapa_youtubers_categoria,
     #     config_metrica=METRICAS_CONFIG['negatividade'], 
     #     nome_analise='negatividade'
     # )
@@ -526,6 +623,7 @@ if __name__ == '__main__':
     # Executa o pipeline para 'toxicidade' com 3 estados
     rodar_pipeline_vmg(
         lista_youtubers, 
+        mapa_youtubers_categoria,
         config_metrica=METRICAS_CONFIG['toxicidade'], 
         nome_analise='toxicidade' 
     )

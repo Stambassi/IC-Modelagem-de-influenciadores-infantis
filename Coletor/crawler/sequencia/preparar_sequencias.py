@@ -165,12 +165,12 @@ def carregar_sequencias_videos(youtuber_name: str, config: dict) -> list[list[st
     return todas_sequencias_videos
 
 '''
-    Função para extrair as subsequências que antecedem e sucedem um evento de interesse
+    Função para extrair as subsequências que antecedem e sucedem um evento de interesse, capturando casos de borda (início e fim do vídeo)
     
-    @param lista_de_videos - Lista de listas (cada item é um vídeo)
+    @param lista_de_videos - Lista de dicionários (cada item possui 'id' e 'sequencia')
     @param eventos_gatilho - Lista de estados que disparam a extração (ex: ['T'])
-    @param tamanho_janela - Quantos estados anteriores extrair (ex: 3)
-    @return list[list[str]] - Banco de dados de sequências precursoras
+    @param tamanho_janela - Quantos estados anteriores/posteriores extrair
+    @return list[list[str]] - Dataset de sequências com tratamento de borda
 '''
 def extrair_sequencias_janela_completa(lista_de_videos: list[dict], eventos_gatilho: list, tamanho_janela: int) -> list[list]:
     dataset_janelas = []
@@ -178,16 +178,30 @@ def extrair_sequencias_janela_completa(lista_de_videos: list[dict], eventos_gati
     for item in lista_de_videos:
         video_id = item['id']
         sequencia_video = item['sequencia']
+        tamanho_total = len(sequencia_video)
         
-        # Percorre o vídeo garantindo espaço para a janela anterior e posterior
-        for i in range(tamanho_janela, len(sequencia_video) - tamanho_janela):
+        # Percorre todo o vídeo, do índice 0 ao último
+        for i in range(tamanho_total):
             estado_atual = sequencia_video[i]
             
             if estado_atual in eventos_gatilho:
-                # Extrai anteriores
-                anteriores = sequencia_video[i - tamanho_janela : i]
-                # Extrai posteriores
-                posteriores = sequencia_video[i + 1 : i + 1 + tamanho_janela]
+                # Extração de tiras anteriores com Padding
+                inicio_recorte = i - tamanho_janela
+                if inicio_recorte < 0:
+                    # Se o gatilho está perto do início, preenche com 'START'
+                    qtd_padding = abs(inicio_recorte)
+                    anteriores = (['START'] * qtd_padding) + sequencia_video[0 : i]
+                else:
+                    anteriores = sequencia_video[inicio_recorte : i]
+                
+                # Extração de tiras posteriores com Padding
+                fim_recorte = i + 1 + tamanho_janela
+                if fim_recorte > tamanho_total:
+                    # Se o gatilho está perto do fim, preenche com 'END'
+                    qtd_padding = fim_recorte - tamanho_total
+                    posteriores = sequencia_video[i + 1 : tamanho_total] + (['END'] * qtd_padding)
+                else:
+                    posteriores = sequencia_video[i + 1 : fim_recorte]
                 
                 # Monta a linha: [ID, ant..., GATILHO, post...]
                 linha_completa = [video_id] + anteriores + [estado_atual] + posteriores
@@ -196,11 +210,13 @@ def extrair_sequencias_janela_completa(lista_de_videos: list[dict], eventos_gati
     return dataset_janelas
 
 '''
-    Função para salvar as sequências extraídas em um arquivo CSV simples na pasta correta.
+    Função para salvar as sequências extraídas em um arquivo CSV.
+    Atualizada para garantir que o cabeçalho reflita corretamente a janela temporal.
     
     @param sequencias - A lista de listas de estados.
-    @param pasta_grupo - O nome da subpasta onde salvar (ex: 'Minecraft', 'Geral').
-    @param nome_arquivo - O nome do arquivo CSV.
+    @param pasta_grupo - Subpasta de destino.
+    @param nome_arquivo - Nome do arquivo CSV.
+    @param tamanho_janela - Tamanho n utilizado na extração.
 '''
 def salvar_sequencias_para_mineracao(sequencias: list[list], pasta_grupo: str, nome_arquivo: str, tamanho_janela: int) -> None:
     if not sequencias:
@@ -212,18 +228,15 @@ def salvar_sequencias_para_mineracao(sequencias: list[list], pasta_grupo: str, n
         path_saida_dir.mkdir(parents=True, exist_ok=True)
         path_saida_arquivo = path_saida_dir / nome_arquivo
 
-        # Geração Dinâmica do Cabeçalho
+        # Geração Dinâmica do Cabeçalho: t-n até t+n
         cols_anteriores = [f"t-{i}" for i in range(tamanho_janela, 0, -1)]
         cols_posteriores = [f"t+{i}" for i in range(1, tamanho_janela + 1)]
         header = ['video_id'] + cols_anteriores + ['evento'] + cols_posteriores
 
-        # Converter para DataFrame
         df_export = pd.DataFrame(sequencias, columns=header)
-        
-        # Salvar com cabeçalho (header=True)
         df_export.to_csv(path_saida_arquivo, index=False, header=True)
         
-        console.print(f"     [green]Dataset salvo:[/green] {path_saida_arquivo} ({len(sequencias)} sequências)")
+        console.print(f"     [green]Dataset salvo (com Padding):[/green] {path_saida_arquivo} ({len(sequencias)} sequências)")
         
     except Exception as e:
         console.print(f"     [red]Erro ao salvar arquivo: {e}[/red]")

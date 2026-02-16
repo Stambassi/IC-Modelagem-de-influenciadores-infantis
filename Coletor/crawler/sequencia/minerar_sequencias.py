@@ -27,7 +27,73 @@ plt.rcParams['savefig.dpi'] = 300
 sns.set_theme(style="whitegrid", context="paper")
 
 '''
-    Prepara listas específicas para o algoritmo de mineração (PrefixSpan/Apriori).
+    Função para calcular a probabilidade absoluta de ocorrência de cada estado (NT, GZ, T) no banco de dados
+
+    @param database_sequencias - A lista de sequências brutas
+    @return dict - Dicionário com a frequência relativa de cada estado
+'''
+def calcular_probabilidades_basais(database_sequencias: list[list[str]]) -> dict:
+    contagem = {'NT': 0, 'GZ': 0, 'T': 0}
+    total_elementos = 0
+    
+    # Contar o número de ocorrências de cada estado
+    for seq in database_sequencias:
+        for estado in seq:
+            if estado in contagem:
+                contagem[estado] += 1
+                total_elementos += 1
+                
+    # Se não forem encontrados elementos, retorna probabilidade 0
+    if total_elementos == 0: return {k: 0 for k in contagem}
+    
+    # Para cada estado (NT, GZ e T), calcula a probabilidade de ocorrência dividindo
+    # o número de ocorrências pelo total de elementos
+    return {k: v / total_elementos for k, v in contagem.items()}
+
+'''
+    Função para calcular o Lift e Confiança para padrões em relação a um estado alvo
+    O Lift indica o quanto a presença do padrão altera a probabilidade do evento ocorrer
+
+    @param resultados_minerados - Lista de dicionários com os padrões encontrados
+    @param database_controle - Sequências brutas para cálculo da probabilidade basal
+    @param modo - 'pre' (causas), 'pos' (consequências) ou 'full' (análise geral)
+    @param estado_alvo - O estado de interesse para o cálculo (ex: 'T')
+    
+    @return list[dict] - Resultados com as métricas de relevância estatística
+'''
+def calcular_relevancia_lift(resultados_minerados: list[dict], database_controle: list[list[str]], modo: str = 'pre', estado_alvo: str = 'T') -> list[dict]: 
+    # Cacular a probabilidade basal do estado alvo (P(Alvo)) no conjunto de controle
+    probs_basais = calcular_probabilidades_basais(database_controle)
+    p_alvo = probs_basais.get(estado_alvo, 0.0)
+    
+    # Teste para evitar divisão por zero se o estado alvo não existir no controle
+    if p_alvo == 0:
+        p_alvo = 0.0001 
+    
+    for item in resultados_minerados:
+        # No seu pipeline, o suporte_rel representa a frequência do padrão 
+        # dentro de janelas que JÁ são filtradas pela ocorrência do evento.
+        
+        # Confiança: P(Alvo | Padrão)
+        # Em 'pre' ou 'pos', as sequências foram extraídas justamente por estarem
+        # vinculadas ao evento, logo o suporte relativo é a nossa confiança observada.
+        confianca = item['suporte_rel'] / 100 
+        
+        # Lift: Razão entre a probabilidade condicionada e a probabilidade basal
+        # Lift = P(Alvo | Padrão) / P(Alvo)
+        lift = confianca / p_alvo
+        
+        item['confianca'] = round(confianca, 4)
+        item['lift'] = round(lift, 4)
+        item['modo_analise'] = modo
+        
+    # Ordenação por Lift (Decrescente) para evidenciar os padrões de maior relevância
+    resultados_minerados.sort(key=lambda x: x['lift'], reverse=True)
+    
+    return resultados_minerados
+
+'''
+    Função para preparar listas específicas para o algoritmo de mineração
     Permite escolher se queremos olhar para o passado, futuro ou tudo.
 
     @param df - O DataFrame carregado
@@ -38,45 +104,42 @@ def carregar_listas_para_mineracao(caminho_arquivo: str, modo: str = 'full') -> 
     try:
         df = pd.read_csv(caminho_arquivo)
 
-        # Identifica a coluna do evento
-        idx_evento = len(df.columns) // 2
-        try:
-            idx_evento = df.columns.get_loc('evento')
-        except KeyError:
-            # Fallback se não achar a coluna 'evento': pega o meio
-            idx_evento = len(df.columns) // 2
-
-        # Remove o video_id para a mineração de padrões
+        # Identifica colunas de dados (ignorando IDs)
         colunas_dados = [c for c in df.columns if c != 'video_id']
         
-        # Recalcula o índice do evento baseado apenas nas colunas de dados
         colunas_pre = [c for c in colunas_dados if c.startswith('t-')]
         colunas_pos = [c for c in colunas_dados if c.startswith('t+')]
         
-        listas_finais = []
+        listas_brutas = []
 
         if modo == 'pre':
-            # Pega de t-N até t-1
-            # Filtra o df apenas com colunas que começam com 't-'
-            df_recorte = df[colunas_pre]
-            listas_finais = df_recorte.astype(str).values.tolist()
-
+            listas_brutas = df[colunas_pre].astype(str).values.tolist()
         elif modo == 'pos':
-            # Pega de t+1 até t+N
-            df_recorte = df[colunas_pos]
-            listas_finais = df_recorte.astype(str).values.tolist()
+            listas_brutas = df[colunas_pos].astype(str).values.tolist()
+        else:
+            listas_brutas = df[colunas_dados].astype(str).values.tolist()
+            
+        listas_finais = []
 
-        else: # 'full'
-            # Pega tudo (menos o ID)
-            # Útil para ver pontes, ex: "GZ -> EVENTO -> GZ"
-            df_recorte = df[colunas_dados]
-            listas_finais = df_recorte.astype(str).values.tolist()
+        # Lógica para tirar as duplicatas de START e END
+        for seq in listas_brutas:
+            nova_seq = []
+            for i, estado in enumerate(seq):
+                # Só adiciona o estado se:
+                # 1. Ele não for START/END OU
+                # 2. Se for o primeiro START/END de uma sequência deles
+                if estado not in ['START', 'END']:
+                    nova_seq.append(estado)
+                elif i == 0 or seq[i-1] != estado:
+                    nova_seq.append(estado)
+            
+            listas_finais.append(nova_seq)
             
         return listas_finais
 
     except Exception as e:
-        console.print(f"     [red]Erro ao carregar sequências de {caminho_arquivo.name}: {e}[/red]")
-        return pd.DataFrame()
+        console.print(f"     [red]Erro ao carregar sequências: {e}[/red]")
+        return []
 
 '''
     Função que aplica o algoritmo PrefixSpan
@@ -194,8 +257,13 @@ def gerar_grafico_barras_padroes(df: pd.DataFrame, caminho_saida: Path, tipo_seq
     ax.invert_yaxis()
 
     # Títulos e Eixos
-    ax.set_title("Padrões Sequenciais Mais Frequentes", fontsize=14, fontweight='bold', pad=15)
-    
+    if tipo_sequencia == 'precursora':
+        ax.set_title("Padrões Sequenciais Precursores Mais Frequentes", fontsize=14, fontweight='bold', pad=15)
+    elif tipo_sequencia == 'sucessora':
+        ax.set_title("Padrões Sequenciais Sucessores Mais Frequentes", fontsize=14, fontweight='bold', pad=15)
+    else:
+        ax.set_title("Padrões Sequenciais Mais Frequentes", fontsize=14, fontweight='bold', pad=15)
+
     ax.set_xlabel("Suporte (%) - Frequência de Ocorrência", fontsize=11, fontweight='bold')
     ax.set_ylabel("Padrão Sequencial", fontsize=11, fontweight='bold')
     

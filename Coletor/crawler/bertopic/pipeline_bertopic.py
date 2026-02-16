@@ -200,7 +200,7 @@ custom_sWords = {
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 }
 
-# --- Intervalos de otimização ---
+# Intervalos de otimização
 param_ranges = {
     "n_neighbors": {"type": "int", "low": 5, "high": 20},
     "n_components": {"type": "int", "low": 2, "high": 10},
