@@ -17,7 +17,7 @@ try:
     # Encontra o caminho absoluto do script atual
     CURRENT_FILE_PATH = Path(__file__).resolve()
     # Encontra a pasta pai
-    PARENT_DIR = CURRENT_FILE_PATH.parent
+    PARENT_DIR = CURRENT_FILE_PATH
     # Encontra a pasta raiz
     PROJECT_ROOT = PARENT_DIR.parent
 
@@ -25,7 +25,7 @@ try:
     PATH_FOLDER_SENTIMENTO = PROJECT_ROOT / "NLP" / "sentimento"
     PATH_FOLDER_TOXICIDADE = PROJECT_ROOT / "NLP" / "toxicidade"
 
-    # Adiciona as pástas ao sys.path
+    # Adiciona as pastas ao sys.path
     sys.path.append(str(PATH_FOLDER_SENTIMENTO))
     sys.path.append(str(PATH_FOLDER_TOXICIDADE))
 
@@ -50,11 +50,26 @@ except NameError:
     from detoxify_analysis import rodar_analise_toxicidade
 
 # Definir configurações globais
-YOUTUBERS_LIST = ['Robin Hood Gamer', 'Julia MineGirl', 'Tex HS']
 BASE_DIR = Path("files")
+
+# Mapeia cada youtuber para sua categoria principal (Minecraft, Roblox, etc.)
+MAPA_YOUTUBERS_CATEGORIA = {
+    'Amy Scarlet': 'Roblox',
+    'AuthenticGames': 'Minecraft',
+    'Cadres': 'Minecraft',
+    'Julia MineGirl': 'Roblox',
+    'Kass e KR': 'Minecraft',
+    'Lokis': 'Roblox',
+    'Luluca Games': 'Roblox',
+    'Papile': 'Roblox',
+    'Robin Hood Gamer': 'Minecraft',
+    'TazerCraft': 'Minecraft',
+    'Tex HS': 'Misto'
+}
 
 '''
     Função para realizar o agrupamento dos segments em grupos de X segundos, mantendo a coerencia de frases
+
     @param tempo_alvo - Duração alvo de cada tira em segundos (ex: 60)
     @param data_path - Caminho (Path) para o arquivo json com resultado da analise do whisper
     @param margem_percent - Porcentagem de "folga" para buscar o fim da frase (padrão: 10%)
@@ -77,7 +92,13 @@ def gerar_tira_frase_tempo(tempo_alvo: int, data_path: Path, margem_percent: int
         if "segments" not in data:
             console.print(f"[red]Erro: Arquivo JSON {data_path.name} não contém a chave 'segments'[/red]")
             return []
+        
+        # Se o tempo for -1, retorna todo o texto como uma única tira
+        if tempo_alvo == -1:
+            texto_completo = " ".join([s.get('text', '').strip() for s in data["segments"]])
+            return [texto_completo] if texto_completo.strip() else []
 
+        # Lógica de segmentação normal para valores positivos
         tempo_acumulado = 0.0
         tira_atual = ""
         tiras_finais = []
@@ -132,10 +153,11 @@ def gerar_tira_frase_tempo(tempo_alvo: int, data_path: Path, margem_percent: int
 
 '''
     Função para percorrer toda a estrutura de pastas dos arquivos coletados,
-    ler os arquivos 'video_text.json', gerar as tiras de 1 minuto 
-    e salvá-las em um arquivo 'tiras_video.csv' na mesma pasta.
+    ler os arquivos 'video_text.json', gerar as tiras de 60s
+
+    e salvá-las em um arquivo 'tiras_video.csv' na mesma pasta
 '''
-def salvar_tiras():
+def salvar_tiras_monogranular():
     # Definir o diretório base da busca
     base_dir = Path("files")
     
@@ -193,10 +215,11 @@ def salvar_tiras():
     console.print(f"Novos arquivos '{arquivo_destino}' gerados: {arquivos_gerados}")
 
 '''
-    Função orquestradora que executa o pipeline de pré-processamento completo.
-    @param youtubers_list - Lista de youtubers a serem processados.
+    Função orquestradora que executa o pipeline de pré-processamento completo para tiras de 60s
+
+    @param youtubers_list - Lista de youtubers a serem processados
 '''
-def executar_pipeline_processamento(youtubers_list: list[str]):
+def executar_pipeline_processamento_monogranular(youtubers_list: list[str]):
     console.print("[bold magenta]===== INICIANDO PIPELINE DE PRÉ-PROCESSAMENTO COMPLETO =====[/bold magenta]")
     
     # Gerar os arquivos 'tiras_video.csv'
@@ -224,6 +247,91 @@ def executar_pipeline_processamento(youtubers_list: list[str]):
     
     console.print("\n[bold magenta]===== PIPELINE DE PRÉ-PROCESSAMENTO FINALIZADO =====[/bold magenta]")
 
+'''
+    Função para percorrer a estrutura de pastas, gerar tiras com multi-granularidade
+    e salvá-las em uma subpasta 'tiras' dentro de cada diretório de vídeo
+
+    @param lista_granularidade - Lista com os tempos em segundos para as janelas
+'''
+def salvar_tiras_multigranular(lista_granularidade: List[int] = [30, 60, 120]):
+    base_dir = Path("files")
+    arquivo_origem = 'video_text.json'
+
+    console.print(f"[bold green]Iniciando geração de multi-granularidade {lista_granularidade}s...[/bold green]")
+    
+    arquivos_encontrados = 0
+    tiras_geradas = 0
+
+    # rglob para encontrar todos os arquivos de transcrição
+    for json_path in base_dir.rglob(arquivo_origem):
+        arquivos_encontrados += 1
+        video_folder = json_path.parent
+        
+        # Cria a subpasta 'tiras' para organizar as diferentes versões
+        pasta_destino = video_folder / "tiras"
+        pasta_destino.mkdir(parents=True, exist_ok=True)
+
+        for tempo in lista_granularidade:
+            # Nomeia como 'global' se o tempo for o sentinela -1
+            suffix = "global" if tempo == -1 else str(tempo)
+            output_csv_path = pasta_destino / f"tiras_video_{suffix}.csv"
+
+            # Pula se o arquivo desta granularidade específica já existir
+            if output_csv_path.exists():
+                continue
+                
+            try:
+                tiras = gerar_tira_frase_tempo(tempo, json_path)
+
+                if tiras:
+                    df_tiras = pd.DataFrame(tiras, columns=['tiras'])  
+                    df_tiras.to_csv(output_csv_path, index_label='index')
+                    tiras_geradas += 1
+
+            except Exception as e:
+                console.print(f"     [red]Erro ao processar {json_path.name} ({tempo}s): {e}[/red]")
+
+    console.print(f"     [cyan]Processo de segmentação concluído. {tiras_geradas} novos arquivos CSV criados.[/cyan]")
+
+'''
+    Função orquestradora que executa o pipeline completo adaptado para multi-granularidade.
+    Garante que os modelos de NLP processem todos os arquivos na pasta 'tiras'
+    
+    @param youtubers_list - Lista de youtubers a serem processados.
+    @param lista_granularidade - Janelas temporais para análise (padrão 30, 60, 120).
+'''
+def executar_pipeline_processamento_multigranular(youtubers_list: list[str], lista_granularidade: List[int] = [30, 60, 120]):
+    console.print("[bold magenta]===== INICIANDO PIPELINE MULTI-GRANULARIDADE =====[/bold magenta]")
+    
+    # ETAPA 1: Gerar os arquivos CSV para cada tempo definido
+    salvar_tiras_multigranular(lista_granularidade)
+    
+    # Lista de sufixos de arquivos para os modelos processarem
+    arquivos_alvo = [f"tiras_video_{'global' if t == -1 else t}.csv" for t in lista_granularidade]
+    
+    # ETAPA 2: Análise de sentimento (Pysentimiento)
+    console.print(f"\n[bold green]ETAPA 2: Analisando Sentimento (Multi-escala)...[/bold green]")
+    try:
+        for nome_csv in arquivos_alvo:
+            console.print(f"  -> Processando: {nome_csv}", style="dim")
+            atualizar_tiras_sentimento(youtubers_list, nome_arquivo=nome_csv)
+    except Exception as e:
+        console.print(f"[bold red]Erro na Etapa 2: {e}[/bold red]")
+    
+    # ETAPA 3: Análise de toxicidade (Detoxify)
+    console.print(f"\n[bold green]ETAPA 3: Analisando Toxicidade (Multi-escala)...[/bold green]")
+    try:
+        for nome_csv in arquivos_alvo:
+            console.print(f"  -> Processando: {nome_csv}", style="dim")
+            # Assume-se que rodar_analise_toxicidade foi adaptada para aceitar o nome_arquivo
+            rodar_analise_toxicidade(youtubers_list, nome_arquivo=nome_csv)
+    except Exception as e:
+        console.print(f"[bold red]Erro na Etapa 3: {e}[/bold red]")
+    
+    console.print("\n[bold magenta]===== PIPELINE FINALIZADO PARA TODAS AS ESCALAS =====[/bold magenta]")
 
 if __name__ == "__main__":
-    executar_pipeline_processamento(YOUTUBERS_LIST)
+    lista_youtubers = list(MAPA_YOUTUBERS_CATEGORIA.keys())
+
+    # executar_pipeline_processamento_monogranular(lista_youtubers)
+    executar_pipeline_processamento_multigranular(lista_youtubers, [30, 60, 120, 180, 240, 300, -1])

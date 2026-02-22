@@ -97,7 +97,6 @@ def encontrar_tiras_notaveis(df_dados_unificados: pd.DataFrame) -> None:
 
     console.print(Panel(f"'[i]{tira_mais_positiva['tiras']}[/i]'", title="Tira Mais Positiva do Vídeo", subtitle=f"Score: {tira_mais_positiva['positividade']:.2%}", border_style="magenta"))
 
-
 '''
     Função para carregar as palavras-chave do TF-IDF e analisar a sua toxicidade
     @param youtuber - Nome do youtuber para mostrar na tela

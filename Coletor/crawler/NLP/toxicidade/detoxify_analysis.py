@@ -7,11 +7,17 @@ import time
 console = Console()
 
 '''
-    Função para percorrer os diretórios dos youtubers, encontrar os arquivos de tiras e aplicar a análise de toxicidade, atualizando o mesmo arquivo com os novos dados
+    Função para percorrer os diretórios dos youtubers, encontrar os arquivos de tiras e aplicar a análise de toxicidade, 
+    atualizando o mesmo arquivo com os novos dados
+
     @param youtubers_list - Lista de youtubers a serem analisados
     @param model - Modelo do detoxify para análise de toxicidade
+    @param nome_arquivo - Nome específico do arquivo CSV (ex: 'tiras_video_30.csv'). Se None, busca 'tiras_video.csv'.
 '''
-def _processar_tiras_toxicidade(youtubers_list: list, model) -> None:
+def _processar_tiras_toxicidade(youtubers_list: list, model, nome_arquivo: str = None) -> None:
+    # Define o padrão de busca: se um nome_arquivo for dado, busca na pasta /tiras/
+    padrao_busca = f'tiras/{nome_arquivo}' if nome_arquivo else 'tiras_video.csv'
+    
     for youtuber in youtubers_list:
         console.print(f"[bold blue]>>>>>> Processando YouTuber: {youtuber}[/bold blue]")
         base_path = Path('files') / youtuber
@@ -20,63 +26,55 @@ def _processar_tiras_toxicidade(youtubers_list: list, model) -> None:
             console.print(f"[yellow]Aviso: Diretório para '{youtuber}' não encontrado. Pulando.[/yellow]")
             continue
 
-        # Encontrar todos os arquivos de tiras
-        for input_csv_path in base_path.rglob('tiras_video.csv'):
-            #console.print(f"  -> [bold]Analisando:[/bold] {input_csv_path}")
-
+        # Encontrar os arquivos de tiras conforme o padrão de granularidade
+        for input_csv_path in base_path.rglob(padrao_busca):
             try:
                 # Carrega o arquivo CSV original
                 df_tiras = pd.read_csv(input_csv_path)
 
-                # Checa se a coluna 'toxicity' já existe no arquivo.
+                # Checa se a coluna 'toxicity' já existe para evitar reprocessamento dispendioso
                 if 'toxicity' in df_tiras.columns:
-                    #console.print(f"     [yellow]Arquivo já contém colunas de toxicidade. Pulando.[/yellow]")
                     continue
 
-                # Extrai os textos para análise, garantindo que não sejam nulos
+                # Extrai os textos para análise, garantindo integridade dos dados
                 textos_para_analise = df_tiras['tiras'].dropna().astype(str).tolist()
 
                 if not textos_para_analise:
-                    #console.print("     [yellow]Arquivo não contém texto para análise.[/yellow]")
                     continue
 
-                # Realizar a predição em lote
-                start_time = time.time()
+                # Realizar a predição em lote (batch prediction)
                 resultados = model.predict(textos_para_analise)
-                end_time = time.time()
                 
-                #console.print(f"     Análise de {len(textos_para_analise)} tiras concluída em {end_time - start_time:.2f} segundos.")
-
-                # Converte o dicionário de resultados em um DataFrame
+                # Converte o dicionário de resultados do Detoxify em um DataFrame
                 df_resultados_toxicidade = pd.DataFrame(resultados)
                 
-                # Juntar os resultados com os dados originais
+                # Juntar os resultados com os dados originais (concatenação lateral)
                 df_final = pd.concat([df_tiras, df_resultados_toxicidade], axis=1)
                 
-                # Salvar o DataFrame enriquecido de volta no arquivo original
+                # Salvar o DataFrame enriquecido, mantendo a codificação UTF-8
                 df_final.to_csv(input_csv_path, index=False, encoding='utf-8')
-                console.print(f"     [green]Colunas de toxicidade adicionadas e salvas em {input_csv_path}[/green]")
+                console.print(f"     [green]Análise concluída e salva em {input_csv_path.name}[/green]")
 
             except Exception as e:
                 console.print(f"     [red]Ocorreu um erro inesperado ao processar {input_csv_path}: {e}[/red]")
 
 '''
-    Função principal (pública) para carregar o modelo e iniciar a análise de toxicidade.
-    Esta é a função que deve ser importada por outros scripts.
-    @param youtubers_list - Lista de youtubers a serem analisados
-'''
-def rodar_analise_toxicidade(youtubers_list: list[str]) -> None:
-    console.print("[bold]Carregando o modelo Detoxify (multilingual)...[/bold]")
-    console.print("[yellow]Isso pode demorar alguns minutos na primeira execução, pois o modelo será baixado (~500MB).[/yellow]")
+    Função principal (pública) para carregar o modelo e iniciar a análise de toxicidade
     
-    # Carregar o modelo uma única vez
+    @param youtubers_list - Lista de youtubers a serem analisados
+    @param nome_arquivo - Nome do arquivo CSV de granularidade específica
+'''
+def rodar_analise_toxicidade(youtubers_list: list[str], nome_arquivo: str = None) -> None:
+    console.print("[bold]Carregando o modelo Detoxify (multilingual)...[/bold]")
+    
+    # Carregar o modelo uma única vez para otimização de memória e tempo
     try:
         detoxify_model = Detoxify('multilingual')
-        # Chamar a função interna de processamento
-        _processar_tiras_toxicidade(youtubers_list, detoxify_model)
+
+        # Chamar a função interna de processamento com o parâmetro de granularidade
+        _processar_tiras_toxicidade(youtubers_list, detoxify_model, nome_arquivo)
     except Exception as e:
         console.print(f"\n[bold red]Falha ao carregar o modelo Detoxify ou ao executar a análise. Erro: {e}[/bold red]")
-        console.print("[yellow]Verifique sua conexão com a internet ou se há algum problema com a instalação do PyTorch/TensorFlow.[/yellow]")
 
 if __name__ == '__main__':
     # Lista de youtubers a serem analisados

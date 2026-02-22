@@ -22,7 +22,11 @@ def analisar_sentimento(texto: str) -> dict:
     Função para percorrer as pastas dos youtubers, encontrar os vídeos com transcrição e aplicar a análise de sentimento em cada uma das tiras
     @param youtubers_list - Lista de youtubers a serem analisados.
 '''
-def atualizar_tiras_sentimento(youtubers_list: list[str]) -> None:
+def atualizar_tiras_sentimento(youtubers_list: list[str], nome_arquivo: str = None) -> None:
+    # Define o padrão de busca: se um nome_arquivo for dado, busca na pasta /tiras/
+    # Caso contrário, mantém a busca padrão no diretório do vídeo
+    padrao_busca = f'tiras/{nome_arquivo}' if nome_arquivo else 'tiras_video.csv'
+
     # Percorrer a lista de nomes de youtubers
     for youtuber in youtubers_list:
         console.print(f"[bold blue]>>>>>> Processando YouTuber: {youtuber}[/bold blue]")
@@ -34,7 +38,7 @@ def atualizar_tiras_sentimento(youtubers_list: list[str]) -> None:
             continue
 
         # Buscar pelo arquivo de tiras de um vídeo
-        for tiras_path in base_path.rglob('tiras_video.csv'):
+        for tiras_path in base_path.rglob(padrao_busca):
             console.print(f"  -> Processando arquivo: {tiras_path}")
             
             try:
@@ -58,7 +62,7 @@ def atualizar_tiras_sentimento(youtubers_list: list[str]) -> None:
                 resultados_df = pd.DataFrame(resultados_series.tolist(), index=resultados_series.index)
 
                 # Encontrar o sentimento dominante de forma vetorizada (muito rápido)
-                resultados_df['negatividade'] = resultados_df.idxmax(axis=1)
+                resultados_df['sentimento_dominante'] = resultados_df.idxmax(axis=1)
 
                 # Renomear as colunas
                 resultados_df.rename(columns={'POS': 'positividade', 'NEU': 'neutralidade', 'NEG': 'negatividade'}, inplace=True)

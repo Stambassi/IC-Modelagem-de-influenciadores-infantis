@@ -220,6 +220,64 @@ def acao_dividir_em_tiras(output_folder, tempo_segundos=60):
     except Exception as e:
         console.print(f"   └── [red]Erro ao gerar tiras: {e}[/red]")
 
+'''
+    Gera múltiplos arquivos CSV de transcrição com diferentes níveis de granularidade
+    Cria uma subpasta 'tiras' e salva versões para cada tempo solicitado (ex: 30s, 60s, 120s)
+
+    @param output_folder - Pasta onde está o video_text.json
+    @param lista_tempos - Lista de inteiros representando os segundos (ex: [30, 60, 120])
+    @return None
+'''
+def acao_dividir_em_multi_granularidade(output_folder, lista_tempos=[30, 60, 120]):
+    json_path = os.path.join(output_folder, "video_text.json")
+    
+    # Cria a subpasta 'tiras' dentro da pasta do vídeo para organizar os experimentos
+    pasta_tiras = Path(output_folder) / "tiras"
+    
+    if not os.path.exists(json_path):
+        return
+
+    try:
+        # Garante que a pasta de destino exista
+        pasta_tiras.mkdir(parents=True, exist_ok=True)
+        
+        with open(json_path, 'r', encoding='utf-8') as file:
+            data = json.load(file)
+
+        for tempo_segundos in lista_tempos:
+            tiras = []
+            tira_atual = ""
+            tempo_acumulado = 0
+            
+            # Margem de segurança de 10% para evitar quebras de frases muito curtas
+            tempo_alvo = tempo_segundos * 0.9 
+            
+            for segment in data["segments"]:
+                duracao = segment['end'] - segment['start']
+                texto = segment['text'].strip()
+                
+                tira_atual += " " + texto
+                tempo_acumulado += duracao
+                
+                if tempo_acumulado >= tempo_alvo:
+                    tiras.append(tira_atual.strip())
+                    tira_atual = ""
+                    tempo_acumulado = 0
+                    
+            if tira_atual:
+                tiras.append(tira_atual.strip())
+            
+            # Define o nome do arquivo baseado na granularidade
+            csv_path = pasta_tiras / f"tiras_video_{tempo_segundos}.csv"
+            
+            df_tiras = pd.DataFrame(tiras, columns=['tiras'])
+            df_tiras.to_csv(csv_path, index=False)
+            
+        console.print(f"   └── [magenta]Multi-granularidade gerada em /tiras/: {lista_tempos} segundos.[/]")
+        
+    except Exception as e:
+        console.print(f"   └── [red]Erro ao gerar multi-granularidade: {e}[/red]")
+
 # -------------------------------------------------------------------
 # 3. ORQUESTRADOR
 # -------------------------------------------------------------------
@@ -228,7 +286,7 @@ def acao_dividir_em_tiras(output_folder, tempo_segundos=60):
     Navega pela estrutura de pastas (Files -> Youtuber -> Ano -> Mês -> Video) e executa a ação
     
     @param youtuber - Nome do youtuber
-    @param acao_escolhida - 'baixar', 'transcrever' ou 'dividir'
+    @param acao_escolhida - 'baixar', 'transcrever', 'dividir' ou 'multi-dividir'
     @param model_obj - Modelo Whisper (apenas se acao == 'transcrever')
     @return None
 '''
@@ -272,6 +330,9 @@ def processar_diretorios(youtuber, acao_escolhida, model_obj=None):
             elif acao_escolhida == 'dividir':
                 acao_dividir_em_tiras(folder_path)
 
+            elif acao_escolhida == 'multi-dividir':
+                acao_dividir_em_multi_granularidade(folder_path, [30, 60, 120, 180, 240, 300])
+
         except Exception as e:
             console.print(f"[red]Erro crítico na pasta {folder_path}: {e}[/red]")
 
@@ -280,7 +341,7 @@ def processar_diretorios(youtuber, acao_escolhida, model_obj=None):
     Função Principal (Controller) que gerencia o fluxo de execução.
     
     @param grupo_alvo - 'Geral', Categoria (ex: 'Minecraft') ou Nome do Youtuber
-    @param acao - 'baixar', 'transcrever', 'dividir'
+    @param acao - 'baixar', 'transcrever', 'dividir' ou 'multi-dividir
     @param nome_modelo - Modelo do Whisper ('tiny', 'base', 'medium')
     @return None
 '''
@@ -328,4 +389,7 @@ if __name__ == "__main__":
     # Exemplo 3: Baixar áudios faltantes de todos (sem transcrever)
     # orquestrar_processamento(grupo_alvo='Geral', acao='baixar')
 
-    orquestrar_processamento('Geral', 'dividir')
+    # Exemplo 4: Dividir em tiras de várias granularidades para todos
+    orquestrar_processamento(grupo_alvo='Geral', acao='multi-dividir')
+
+    # orquestrar_processamento('Geral', 'dividir')
