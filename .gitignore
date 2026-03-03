@@ -6,3 +6,5 @@
 /Coletor/crawler/.venv
 
 .dvc/
+
+/Coletor/crawler/perspective/api_key.txt
