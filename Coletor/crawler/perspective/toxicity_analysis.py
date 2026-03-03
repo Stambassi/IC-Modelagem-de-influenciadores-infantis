@@ -54,10 +54,10 @@ def _processar_tiras_toxicidade(youtubers_list: list) -> None:
                 # Carrega o arquivo CSV original
                 df_tiras = pd.read_csv(input_csv_path)
 
-                # if 'p_toxicity' in df_tiras.columns:
-                #     console.print(f"[yellow]Arquivo já contém colunas de toxicidade com Perspective API. Pulando.[/yellow]")
-                #     # print(input_csv_path)
-                #     continue
+                if 'p_toxicity' in df_tiras.columns:
+                    console.print(f"[yellow]Arquivo já contém colunas de toxicidade com Perspective API. Pulando.[/yellow]")
+                    # print(input_csv_path)
+                    continue
 
                 # Extrai os textos para análise, garantindo que não sejam nulos
                 textos_para_analise = df_tiras['tiras'].dropna().astype(str).tolist()
@@ -131,8 +131,8 @@ def grafico_comparativo(df):
 
 if __name__ == '__main__':
     # Lista de youtubers a serem analisados
-    # lista_youtubers = ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'Papile', 'Robin Hood Gamer', 'TazerCraft', 'Tex HS']
-    lista_youtubers = ['Julia MineGirl']
+    lista_youtubers = ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'Papile', 'Robin Hood Gamer', 'TazerCraft', 'Tex HS']
+    # lista_youtubers = ['Julia MineGirl']
 
     try:
         with open("perspective/api_key.txt", "r") as file:
