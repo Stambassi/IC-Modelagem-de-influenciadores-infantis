@@ -201,7 +201,7 @@ def plotar_comparativo_granularidade(video_info: dict, dados_escalas: dict, metr
             # Linha tracejada horizontal representando a média total do vídeo
             x_axis = [0, duracao_minutos_real]
             y_axis = [scores[0], scores[0]]
-            label = f"Global (Média Total: {scores[0]:.3f})"
+            label = f"Global (Total: {scores[0]:.3f})"
             ax.plot(x_axis, y_axis, label=label, color=cores_map[g], linestyle='--', linewidth=3, zorder=5)
         else:
             # Cálculo dos intervalos de tempo baseado na granularidade g
