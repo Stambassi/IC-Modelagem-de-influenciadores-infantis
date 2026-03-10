@@ -1,7 +1,6 @@
 from googleapiclient import discovery
 import json
 import pandas as pd
-from detoxify import Detoxify
 from pathlib import Path
 from rich.console import Console
 import time
@@ -9,10 +8,7 @@ import matplotlib.pyplot as plt
 from alive_progress import alive_bar
 from googleapiclient.errors import HttpError
 
-API_KEY = ""
-
 def perspective_toxicity(text):
-
     client = discovery.build(
         "commentanalyzer",
         "v1alpha1",
@@ -33,7 +29,9 @@ def perspective_toxicity(text):
 console = Console()
 
 '''
-    Função para percorrer os diretórios dos youtubers, encontrar os arquivos de tiras e aplicar a análise de toxicidade, atualizando o mesmo arquivo com os novos dados
+    Função para percorrer os diretórios dos youtubers, encontrar os arquivos de tiras e aplicar a análise de toxicidade, 
+    atualizando o mesmo arquivo com os novos dados
+    
     @param youtubers_list - Lista de youtubers a serem analisados
     @param model - Modelo do detoxify para análise de toxicidade
 '''
@@ -56,20 +54,17 @@ def _processar_tiras_toxicidade(youtubers_list: list) -> None:
 
                 if 'p_toxicity' in df_tiras.columns:
                     console.print(f"[yellow]Arquivo já contém colunas de toxicidade com Perspective API. Pulando.[/yellow]")
-                    # print(input_csv_path)
                     continue
 
                 # Extrai os textos para análise, garantindo que não sejam nulos
                 textos_para_analise = df_tiras['tiras'].dropna().astype(str).tolist()
 
-
                 if not textos_para_analise:
-                    # console.print("     [yellow]Arquivo não contém texto para análise.[/yellow]")
                     continue
 
                 resultados = []
 
-                with alive_bar(len(df_tiras.index), bar="classic2", receipt=False, title="    >> Calculando Toxicidade") as bar:
+                with alive_bar(len(textos_para_analise), bar="classic2", receipt=False, title="    >> Calculando Toxicidade") as bar:
                     for texto in textos_para_analise:
                         if numero_tiras >= 60:
                             console.print("[red] !! Limite da API alcançado. Esperando 60 segundos !![/]")
@@ -81,9 +76,6 @@ def _processar_tiras_toxicidade(youtubers_list: list) -> None:
                             numero_tiras += 1
                         bar()
                             
-
-                #console.print(f"     Análise de {len(textos_para_analise)} tiras concluída em {end_time - start_time:.2f} segundos.")
-
                 # Converte o dicionário de resultados em um DataFrame
                 df_resultados_toxicidade = pd.DataFrame({'p_toxicity': resultados})
                 
@@ -110,10 +102,8 @@ def rodar_analise_toxicidade(youtubers_list: list[str]) -> None:
     try:
         _processar_tiras_toxicidade(youtubers_list)
     except Exception as e:
-        console.print("[yellow]Verifique sua conexão com a internet ou se há algum problema com a instalação do PyTorch/TensorFlow.[/yellow]")
+        console.print("[yellow]Verifique sua conexão com a internet ou se há algum problema com a API.[/yellow]")
         print(e)
-
-
 
 def grafico_comparativo(df):
     plt.figure()
@@ -132,16 +122,15 @@ def grafico_comparativo(df):
 if __name__ == '__main__':
     # Lista de youtubers a serem analisados
     lista_youtubers = ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'Papile', 'Robin Hood Gamer', 'TazerCraft', 'Tex HS']
-    # lista_youtubers = ['Julia MineGirl']
+
+    global API_KEY
 
     try:
-        with open("perspective/api_key.txt", "r") as file:
-            API_KEY = file.read()
+        with open("NLP/perspective/api_key.txt", "r") as file:
+            API_KEY = file.read().strip()
+            
         console.print("[bold green]Executando Análise de Toxicidade (Perspective API)[/bold green]")
+        
         rodar_analise_toxicidade(lista_youtubers)   
     except FileNotFoundError:
-        print("Crie um arquivo api_key.txt e coloque a chave")
-
-
-    # grafico_comparativo(pd.read_csv('files/Julia MineGirl/2023/Maio/JOGO SATISFATÓRIO de FRUTAS NO ROBLOX! (Fruit Connect)/tiras_video.csv'))
-
+        console.print("[red]Erro: Arquivo 'NLP/perspective/api_key.txt' não encontrado.[/red]")
