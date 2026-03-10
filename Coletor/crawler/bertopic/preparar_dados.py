@@ -6,6 +6,7 @@ from rich.console import Console
 from pathlib import Path
 import spacy
 from nltk.stem import RSLPStemmer
+import matplotlib.pyplot as plt
 
 console = Console()
 
