@@ -11,5 +11,5 @@
 /Coletor/crawler/bertopic/modelos
 /Coletor/crawler/bertopic/__pycache__
 
-
-/Coletor/crawler/perspective/api_key.txt
+# Para ignorar a chave do Perspective API
+/Coletor/crawler/NLP/perspective/api_key.txt

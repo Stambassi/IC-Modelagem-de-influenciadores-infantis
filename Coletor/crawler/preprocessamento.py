@@ -16,29 +16,30 @@ console = Console()
 try:
     # Encontra o caminho absoluto do script atual
     CURRENT_FILE_PATH = Path(__file__).resolve()
-    # Encontra a pasta pai
-    PARENT_DIR = CURRENT_FILE_PATH
-    # Encontra a pasta raiz
-    PROJECT_ROOT = PARENT_DIR.parent
+    PROJECT_ROOT = CURRENT_FILE_PATH.parent
 
-    # Define os caminhos corretos para as pastas dos scripts
-    PATH_FOLDER_SENTIMENTO = PROJECT_ROOT / "NLP" / "sentimento"
-    PATH_FOLDER_TOXICIDADE = PROJECT_ROOT / "NLP" / "toxicidade"
+    # Define os caminhos para as novas pastas (reformuladas)
+    PATH_FOLDER_PYSENTIMIENTO = PROJECT_ROOT / "NLP" / "pysentimiento"
+    PATH_FOLDER_DETOXIFY = PROJECT_ROOT / "NLP" / "detoxify"
+    PATH_FOLDER_PERSPECTIVE = PROJECT_ROOT / "NLP" / "perspective"
 
     # Adiciona as pastas ao sys.path
-    sys.path.append(str(PATH_FOLDER_SENTIMENTO))
-    sys.path.append(str(PATH_FOLDER_TOXICIDADE))
+    sys.path.append(str(PATH_FOLDER_PYSENTIMIENTO))
+    sys.path.append(str(PATH_FOLDER_DETOXIFY))
+    sys.path.append(str(PATH_FOLDER_PERSPECTIVE))
 
-    # Importar os scripts
+    # Importar os scripts das novas pastas
     from pysentimiento_analysis import atualizar_tiras_sentimento
-    from detoxify_analysis import rodar_analise_toxicidade
+    from detoxify_analysis import rodar_analise_toxicidade as rodar_detoxify
+    from perspective_analysis import rodar_analise_toxicidade as rodar_perspective
 
 except ImportError as e:
     console.print(f"[bold red]ERRO DE IMPORTAÇÃO:[/bold red] Não foi possível encontrar os scripts de análise.")
     console.print(f"Verifique se a estrutura de pastas está correta e se os arquivos '__init__.py' existem.")
     console.print(f"Caminho do Projeto Raiz (calculado): {PROJECT_ROOT}")
-    console.print(f"Tentando carregar de: {PATH_FOLDER_SENTIMENTO}")
-    console.print(f"Tentando carregar de: {PATH_FOLDER_TOXICIDADE}")
+    console.print(f"Tentando carregar de: {PATH_FOLDER_PYSENTIMIENTO}")
+    console.print(f"Tentando carregar de: {PATH_FOLDER_DETOXIFY}")
+    console.print(f"Tentando carregar de: {PATH_FOLDER_PERSPECTIVE}")
     console.print(f"Erro detalhado: {e}")
     sys.exit(1) # Encerra o script se os módulos não puderem ser carregados
 except NameError:
@@ -47,7 +48,8 @@ except NameError:
 
     # Tenta importar diretamente
     from pysentimiento_analysis import atualizar_tiras_sentimento
-    from detoxify_analysis import rodar_analise_toxicidade
+    from detoxify_analysis import rodar_analise_toxicidade as rodar_detoxify
+    from perspective_analysis import rodar_analise_toxicidade as rodar_perspective
 
 # Definir configurações globais
 BASE_DIR = Path("files")
@@ -147,14 +149,16 @@ def gerar_tira_frase_tempo(tempo_alvo: int, data_path: Path, margem_percent: int
     except json.JSONDecodeError:
         console.print(f"[red]Erro: Falha ao decodificar o JSON em {data_path}[/red]")
         return []
+    except TypeError:
+        console.print(f"[red]Erro: Falha ao iterar sobre o JSON[/red]")
+        return []        
     except Exception as e:
         console.print(f"[red]Erro inesperado em gerar_tira_frase_tempo ({data_path.name}): {e}[/red]")
         return []
 
 '''
     Função para percorrer toda a estrutura de pastas dos arquivos coletados,
-    ler os arquivos 'video_text.json', gerar as tiras de 60s
-
+    ler os arquivos 'video_text.json', gerar as tiras de 60,
     e salvá-las em um arquivo 'tiras_video.csv' na mesma pasta
 '''
 def salvar_tiras_monogranular():
@@ -215,37 +219,49 @@ def salvar_tiras_monogranular():
     console.print(f"Novos arquivos '{arquivo_destino}' gerados: {arquivos_gerados}")
 
 '''
-    Função orquestradora que executa o pipeline de pré-processamento completo para tiras de 60s
-
+    Função orquestradora que executa o pipeline completo com tiras de tamanho padrão
+    
     @param youtubers_list - Lista de youtubers a serem processados
+    @param rodar_pysentimiento - Booleano para executar análise de sentimento
+    @param rodar_detoxify - Booleano para executar análise Detoxify
+    @param rodar_perspective - Booleano para executar análise Perspective API
 '''
-def executar_pipeline_processamento_monogranular(youtubers_list: list[str]):
-    console.print("[bold magenta]===== INICIANDO PIPELINE DE PRÉ-PROCESSAMENTO COMPLETO =====[/bold magenta]")
+def executar_pipeline_processamento_monogranular(
+    youtubers_list: list[str], 
+    rodar_pysent: bool = True,
+    rodar_detox: bool = True,
+    rodar_persp: bool = True
+):
+    console.print("[bold magenta]===== INICIANDO PIPELINE MONO-GRANULARIDADE =====[/bold magenta]")
     
-    # Gerar os arquivos 'tiras_video.csv'
-    salvar_tiras()
+    # Gerar os arquivos CSV para cada tempo definido
+    salvar_tiras_monogranular()
     
-    console.print("\n[bold magenta]==========================================================[/bold magenta]")
+    # Análise de sentimento (Pysentimiento)
+    if rodar_pysent:
+        console.print(f"\n[bold green]ETAPA 2: Analisando Sentimento (Pysentimiento)...[/bold green]")
+        try:
+            atualizar_tiras_sentimento(youtubers_list)
+        except Exception as e:
+            console.print(f"[bold red]Erro na Etapa 2: {e}[/bold red]")
     
-    # Rodar a análise de sentimento (Pysentimiento)
-    console.print(f"[bold green]ETAPA 2: Iniciando Análise de Sentimento...[/bold green]")
-    try:
-        atualizar_tiras_sentimento(youtubers_list)
-        console.print(f"\n[bold green]ETAPA 2 Concluída![/bold green]")
-    except Exception as e:
-        console.print(f"\n[bold red]FALHA NA ETAPA 2 (Sentimento): {e}[/bold red]")
-    
-    console.print("\n[bold magenta]==========================================================[/bold magenta]")
+    # Análise de toxicidade (Detoxify)
+    if rodar_detox:
+        console.print(f"\n[bold green]ETAPA 3: Analisando Toxicidade (Detoxify)...[/bold green]")
+        try:
+            rodar_detoxify(youtubers_list)
+        except Exception as e:
+            console.print(f"[bold red]Erro na Etapa 3: {e}[/bold red]")
 
-    # Rodar a análise de toxicidade (Detoxify)
-    console.print(f"[bold green]ETAPA 3: Iniciando Análise de Toxicidade...[/bold green]")
-    try:
-        rodar_analise_toxicidade(youtubers_list)
-        console.print(f"\n[bold green]ETAPA 3 Concluída![/bold green]")
-    except Exception as e:
-        console.print(f"\n[bold red]FALHA NA ETAPA 3 (Toxicidade): {e}[/bold red]")
+    # Análise de toxicidade (Perspective API)
+    if rodar_persp:
+        console.print(f"\n[bold green]ETAPA 4: Analisando Toxicidade (Perspective API)...[/bold green]")
+        try:
+            rodar_perspective(youtubers_list)
+        except Exception as e:
+            console.print(f"[bold red]Erro na Etapa 4: {e}[/bold red]")
     
-    console.print("\n[bold magenta]===== PIPELINE DE PRÉ-PROCESSAMENTO FINALIZADO =====[/bold magenta]")
+    console.print("\n[bold magenta]===== PIPELINE FINALIZADO PARA MONO-GRANULARIDADE =====[/bold magenta]")
 
 '''
     Função para percorrer a estrutura de pastas, gerar tiras com multi-granularidade
@@ -294,44 +310,103 @@ def salvar_tiras_multigranular(lista_granularidade: List[int] = [30, 60, 120]):
     console.print(f"     [cyan]Processo de segmentação concluído. {tiras_geradas} novos arquivos CSV criados.[/cyan]")
 
 '''
-    Função orquestradora que executa o pipeline completo adaptado para multi-granularidade.
+    Função orquestradora que executa o pipeline completo adaptado para multi-granularidade
     Garante que os modelos de NLP processem todos os arquivos na pasta 'tiras'
     
-    @param youtubers_list - Lista de youtubers a serem processados.
-    @param lista_granularidade - Janelas temporais para análise (padrão 30, 60, 120).
+    @param youtubers_list - Lista de youtubers a serem processados
+    @param lista_granularidade - Janelas temporais para análise
+    @param rodar_pysentimiento - Booleano para executar análise de sentimento
+    @param rodar_detoxify - Booleano para executar análise Detoxify
+    @param rodar_perspective - Booleano para executar análise Perspective API
 '''
-def executar_pipeline_processamento_multigranular(youtubers_list: list[str], lista_granularidade: List[int] = [30, 60, 120]):
+def executar_pipeline_processamento_multigranular(
+    youtubers_list: list[str], 
+    lista_granularidade: List[int] = [30, 60, 120],
+    rodar_pysent: bool = True,
+    rodar_detox: bool = True,
+    rodar_persp: bool = True
+):
     console.print("[bold magenta]===== INICIANDO PIPELINE MULTI-GRANULARIDADE =====[/bold magenta]")
     
-    # ETAPA 1: Gerar os arquivos CSV para cada tempo definido
+    # Gerar os arquivos CSV para cada tempo definido
     salvar_tiras_multigranular(lista_granularidade)
     
     # Lista de sufixos de arquivos para os modelos processarem
     arquivos_alvo = [f"tiras_video_{'global' if t == -1 else t}.csv" for t in lista_granularidade]
     
-    # ETAPA 2: Análise de sentimento (Pysentimiento)
-    console.print(f"\n[bold green]ETAPA 2: Analisando Sentimento (Multi-escala)...[/bold green]")
-    try:
-        for nome_csv in arquivos_alvo:
-            console.print(f"  -> Processando: {nome_csv}", style="dim")
-            atualizar_tiras_sentimento(youtubers_list, nome_arquivo=nome_csv)
-    except Exception as e:
-        console.print(f"[bold red]Erro na Etapa 2: {e}[/bold red]")
+    # Análise de sentimento (Pysentimiento)
+    if rodar_pysent:
+        console.print(f"\n[bold green]ETAPA 2: Analisando Sentimento (Pysentimiento)...[/bold green]")
+        try:
+            for nome_csv in arquivos_alvo:
+                console.print(f"  -> Processando: {nome_csv}", style="dim")
+                atualizar_tiras_sentimento(youtubers_list, nome_arquivo=nome_csv)
+        except Exception as e:
+            console.print(f"[bold red]Erro na Etapa 2: {e}[/bold red]")
     
-    # ETAPA 3: Análise de toxicidade (Detoxify)
-    console.print(f"\n[bold green]ETAPA 3: Analisando Toxicidade (Multi-escala)...[/bold green]")
-    try:
-        for nome_csv in arquivos_alvo:
-            console.print(f"  -> Processando: {nome_csv}", style="dim")
-            # Assume-se que rodar_analise_toxicidade foi adaptada para aceitar o nome_arquivo
-            rodar_analise_toxicidade(youtubers_list, nome_arquivo=nome_csv)
-    except Exception as e:
-        console.print(f"[bold red]Erro na Etapa 3: {e}[/bold red]")
+    # Análise de toxicidade (Detoxify)
+    if rodar_detox:
+        console.print(f"\n[bold green]ETAPA 3: Analisando Toxicidade (Detoxify)...[/bold green]")
+        try:
+            for nome_csv in arquivos_alvo:
+                console.print(f"  -> Processando: {nome_csv}", style="dim")
+                rodar_detoxify(youtubers_list, nome_arquivo=nome_csv)
+        except Exception as e:
+            console.print(f"[bold red]Erro na Etapa 3: {e}[/bold red]")
+
+    # Análise de toxicidade (Perspective API)
+    if rodar_persp:
+        console.print(f"\n[bold green]ETAPA 4: Analisando Toxicidade (Perspective API)...[/bold green]")
+        try:
+            for nome_csv in arquivos_alvo:
+                console.print(f"  -> Processando: {nome_csv}", style="dim")
+
+                rodar_perspective(youtubers_list, nome_arquivo=nome_csv)
+        except Exception as e:
+            console.print(f"[bold red]Erro na Etapa 4: {e}[/bold red]")
     
-    console.print("\n[bold magenta]===== PIPELINE FINALIZADO PARA TODAS AS ESCALAS =====[/bold magenta]")
+    console.print("\n[bold magenta]===== PIPELINE FINALIZADO PARA TODAS AS ESCALAS SELECIONADAS =====[/bold magenta]")
 
 if __name__ == "__main__":
     lista_youtubers = list(MAPA_YOUTUBERS_CATEGORIA.keys())
+    granularidade_padrao = [30, 60, 120, 180, 240, 300, -1]
 
-    # executar_pipeline_processamento_monogranular(lista_youtubers)
-    executar_pipeline_processamento_multigranular(lista_youtubers, [30, 60, 120, 180, 240, 300, -1])
+    console.print("[bold cyan]Opções de Análise NLP:[/bold cyan]")
+    console.print("1. Executar TODAS as análises")
+    console.print("2. Apenas Pysentimiento")
+    console.print("3. Apenas Detoxify")
+    console.print("4. Apenas Perspective API")
+    console.print("5. Apenas toxicidade (Detoxify + Perspective)")
+    
+    escolha = input("\nSelecione uma opção (1-5): ")
+
+    # Configuração de flags baseada na escolha
+    config = {
+        "1": (True, True, True),
+        "2": (True, False, False),
+        "3": (False, True, False),
+        "4": (False, False, True),
+        "5": (False, True, True)
+    }
+
+    if escolha in config:
+        pysentimiento, detoxify, perspective = config[escolha]
+
+        salvar_tiras_monogranular()
+
+        executar_pipeline_processamento_monogranular(
+            lista_youtubers,
+            rodar_pysent=pysentimiento,
+            rodar_detox=detoxify,
+            rodar_persp=perspective
+        )
+
+        # executar_pipeline_processamento_multigranular(
+        #     lista_youtubers, 
+        #     granularidade_padrao,
+        #     rodar_pysent=pysentimiento,
+        #     rodar_detox=detoxify,
+        #     rodar_persp=perspective
+        # )
+    else:
+        console.print("[red]Opção inválida. Abortando.[/red]")

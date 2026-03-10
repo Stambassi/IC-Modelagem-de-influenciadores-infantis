@@ -34,12 +34,14 @@ def _processar_tiras_toxicidade(youtubers_list: list, model, nome_arquivo: str =
 
                 # Checa se a coluna 'toxicity' já existe para evitar reprocessamento dispendioso
                 if 'toxicity' in df_tiras.columns:
+                    console.print(f"     [yellow]Já existe análise do Detoxify em {input_csv_path}[/yellow]")
                     continue
 
                 # Extrai os textos para análise, garantindo integridade dos dados
                 textos_para_analise = df_tiras['tiras'].dropna().astype(str).tolist()
 
                 if not textos_para_analise:
+                    console.print(f"     [yellow]Não há textos para análise em {input_csv_path}[/yellow]")
                     continue
 
                 # Realizar a predição em lote (batch prediction)

@@ -8,15 +8,15 @@ import matplotlib.pyplot as plt
 from alive_progress import alive_bar
 from googleapiclient.errors import HttpError
 
-def perspective_toxicity(text):
-    client = discovery.build(
-        "commentanalyzer",
-        "v1alpha1",
-        developerKey=API_KEY,
-        discoveryServiceUrl="https://commentanalyzer.googleapis.com/$discovery/rest?version=v1alpha1",
-        static_discovery=False,
-    )
+# Global para facilitar o acesso nas funções standalone, mas alimentada via rodar_analise_toxicidade
+API_KEY = ""
 
+'''
+    Função para realizar a requisição de toxicidade para um texto específico utilizando o cliente da API
+    @param text - Texto a ser analisado
+    @param client - Cliente discovery build já inicializado
+'''
+def perspective_toxicity(text, client):
     analyze_request = {
         'comment': { 'text': text },
         'requestedAttributes': {'TOXICITY': {}}
@@ -24,7 +24,6 @@ def perspective_toxicity(text):
 
     response = client.comments().analyze(body=analyze_request).execute()
     return response['attributeScores']['TOXICITY']['summaryScore']['value']
-    
 
 console = Console()
 
@@ -33,9 +32,13 @@ console = Console()
     atualizando o mesmo arquivo com os novos dados
     
     @param youtubers_list - Lista de youtubers a serem analisados
-    @param model - Modelo do detoxify para análise de toxicidade
+    @param client - Cliente discovery build da Perspective API
+    @param nome_arquivo - Nome do arquivo CSV a ser buscado (ex: tiras_video.csv ou tiras_video_60.csv)
 '''
-def _processar_tiras_toxicidade(youtubers_list: list) -> None:
+def _processar_tiras_toxicidade(youtubers_list: list, client, nome_arquivo: str = None) -> None:
+    # Define o padrão de busca: se um nome_arquivo for dado, busca na pasta /tiras/
+    padrao_busca = f'{nome_arquivo}' if nome_arquivo else 'tiras_video.csv'
+
     numero_tiras = 0
 
     for youtuber in youtubers_list:
@@ -45,34 +48,35 @@ def _processar_tiras_toxicidade(youtubers_list: list) -> None:
         if not base_path.is_dir():
             console.print(f"[yellow]Aviso: Diretório para '{youtuber}' não encontrado. Pulando.[/yellow]")
             continue
-
-        # Encontrar todos os arquivos de tiras
-        for input_csv_path in base_path.rglob('tiras_video.csv'):
+        
+        # Encontrar os arquivos de tiras conforme o padrão de granularidade
+        for input_csv_path in base_path.rglob(padrao_busca):
             try:
                 # Carrega o arquivo CSV original
                 df_tiras = pd.read_csv(input_csv_path)
 
                 if 'p_toxicity' in df_tiras.columns:
-                    console.print(f"[yellow]Arquivo já contém colunas de toxicidade com Perspective API. Pulando.[/yellow]")
+                    console.print(f"     [yellow]Arquivo {input_csv_path.name} já contém colunas do Perspective. Pulando.[/yellow]")
                     continue
 
                 # Extrai os textos para análise, garantindo que não sejam nulos
                 textos_para_analise = df_tiras['tiras'].dropna().astype(str).tolist()
 
                 if not textos_para_analise:
+                    console.print(f"     [yellow]Não há textos para análise em {input_csv_path}[/yellow]")
                     continue
 
                 resultados = []
 
-                with alive_bar(len(textos_para_analise), bar="classic2", receipt=False, title="    >> Calculando Toxicidade") as bar:
+                with alive_bar(len(textos_para_analise), bar="classic2", receipt=False, title=f"    >> Analisando {input_csv_path.name}") as bar:
                     for texto in textos_para_analise:
                         if numero_tiras >= 60:
                             console.print("[red] !! Limite da API alcançado. Esperando 60 segundos !![/]")
                             time.sleep(60)
-                            resultados.append(perspective_toxicity(texto))
+                            resultados.append(perspective_toxicity(texto, client))
                             numero_tiras = 1
                         else:
-                            resultados.append(perspective_toxicity(texto))
+                            resultados.append(perspective_toxicity(texto, client))
                             numero_tiras += 1
                         bar()
                             
@@ -84,26 +88,48 @@ def _processar_tiras_toxicidade(youtubers_list: list) -> None:
                 
                 # Salvar o DataFrame enriquecido de volta no arquivo original
                 df_final.to_csv(input_csv_path, index=False, encoding='utf-8')
-                console.print(f"    [green]>> Colunas de toxicidade adicionadas e salvas em {input_csv_path}[/green]")
+                console.print(f"    [green]>> Colunas de toxicidade salvas em {input_csv_path.name}[/green]")
 
             except HttpError as e:
                 if e.resp.status == 429:
                     console.print("[red]    >> ERRO: Limite da API alcançado. [/]Esperando 60 segundos...")
                     time.sleep(60)
             except Exception as e:
-                console.print(f"    [red]>> Ocorreu um erro inesperado ao processar {input_csv_path}: {e}[/red]")
+                console.print(f"    [red]>> Ocorreu um erro inesperado ao processar {input_csv_path.name}: {e}[/red]")
 
 '''
     Função principal (pública) para carregar o modelo e iniciar a análise de toxicidade.
     Esta é a função que deve ser importada por outros scripts.
     @param youtubers_list - Lista de youtubers a serem analisados
+    @param nome_arquivo - Nome do arquivo CSV a ser processado (padrão: tiras_video.csv)
 '''
-def rodar_analise_toxicidade(youtubers_list: list[str]) -> None:
+def rodar_analise_toxicidade(youtubers_list: list[str], nome_arquivo: str = 'tiras_video.csv') -> None:
+    global API_KEY
+    
+    # Se a API_KEY estiver vazia, tenta carregar do arquivo padrão
+    if not API_KEY:
+        try:
+            with open("NLP/perspective/api_key.txt", "r") as file:
+                API_KEY = file.read().strip()
+        except FileNotFoundError:
+            console.print("[bold red]Erro:[/bold red] API_KEY não definida e arquivo 'api_key.txt' não encontrado.")
+            return
+
     try:
-        _processar_tiras_toxicidade(youtubers_list)
+        # Inicializa o cliente uma única vez para todas as requisições (Otimização)
+        client = discovery.build(
+            "commentanalyzer",
+            "v1alpha1",
+            developerKey=API_KEY,
+            discoveryServiceUrl="https://commentanalyzer.googleapis.com/$discovery/rest?version=v1alpha1",
+            static_discovery=False,
+        )
+
+        _processar_tiras_toxicidade(youtubers_list, client, nome_arquivo)
+        
     except Exception as e:
-        console.print("[yellow]Verifique sua conexão com a internet ou se há algum problema com a API.[/yellow]")
-        print(e)
+        console.print("[yellow]Verifique sua conexão ou se há algum problema com a API Key.[/yellow]")
+        console.print(f"[red]Erro detalhado: {e}[/red]")
 
 def grafico_comparativo(df):
     plt.figure()
@@ -123,14 +149,6 @@ if __name__ == '__main__':
     # Lista de youtubers a serem analisados
     lista_youtubers = ['Amy Scarlet', 'AuthenticGames', 'Cadres', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'Papile', 'Robin Hood Gamer', 'TazerCraft', 'Tex HS']
 
-    global API_KEY
+    console.print("[bold green]Executando Análise de Toxicidade (Perspective API)[/bold green]")
 
-    try:
-        with open("NLP/perspective/api_key.txt", "r") as file:
-            API_KEY = file.read().strip()
-            
-        console.print("[bold green]Executando Análise de Toxicidade (Perspective API)[/bold green]")
-        
-        rodar_analise_toxicidade(lista_youtubers)   
-    except FileNotFoundError:
-        console.print("[red]Erro: Arquivo 'NLP/perspective/api_key.txt' não encontrado.[/red]")
+    rodar_analise_toxicidade(lista_youtubers)
