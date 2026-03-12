@@ -5,6 +5,7 @@
 # Para ignorar as configurações de máquina
 /Coletor/crawler/.venv
 /Coletor/crawler/__pycache__
+/Coletor/crawler/scripts/__pycache__
 
 .dvc/
 
