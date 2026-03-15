@@ -423,27 +423,31 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
 
     # Função auxiliar para verificar se existe conteúdo real de forma segura
     def _tem_conteudo(val):
-        # Checa Nulo absoluto
+        # 1. Checa Nulo absoluto
         if val is None:
             return False
             
-        # Trata estruturas de dados e strings primeiro
+        # 2. Trata Strings (A causa da alucinação do diff)
+        if isinstance(val, str): 
+            val_limpo = val.strip().lower()
+            # Se for uma string que é apenas a representação de algo vazio, ignora
+            if val_limpo in ["[]", "{}", "nan", "none", "null", ""]:
+                return False
+            return True
+
+        # 3. Trata estruturas de dados
         if isinstance(val, np.ndarray): 
             return val.size > 0
         if isinstance(val, (list, dict)): 
             return len(val) > 0
-        if isinstance(val, str): 
-            return bool(val.strip())
             
-        # Trata valores escalares numéricos (NaN)
+        # 4. Trata valores numéricos/escalares (NaN)
         try:
-            # Como arrays e listas já foram filtrados acima, o pd.isna agora é 100% seguro
             if pd.isna(val): 
                 return False
         except: 
             pass 
         
-        # Se for número válido, booleano, ou objeto desconhecido com conteúdo
         return True
 
     # 1. Carregar Local
