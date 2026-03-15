@@ -25,7 +25,6 @@ MAPA_YOUTUBERS_CATEGORIA = {
     'Tex HS': 'Misto'
 }
 
-
 #Amy Scarlet', 'AuthenticGames', 'Cadres', 'Julia MineGirl', 'Kass e KR', 'Lokis', 'Luluca Games', 'Papile', 'Robin Hood Gamer', 'TazerCraft, ''Tex HS']
 
 # Configurações de análise (limiares e estados)
@@ -60,175 +59,6 @@ plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans', 'Liberation Sans']
 plt.rcParams['figure.dpi'] = 300
 plt.rcParams['savefig.dpi'] = 300
 
-
-'''
-    Função para varrer as pastas de um youtuber, ler os arquivos brutos 'tiras_video.csv'
-    e construir a lista de sequências de todos eles
-    
-    @param youtuber_name - Nome do youtuber
-    @param config - Dicionário de configuração da análise
-    @return list[list[str]] - Lista onde cada item é a sequência de estados de um vídeo
-'''
-def carregar_sequencias_videos(youtuber_name: str, config: dict) -> list[list[str]]:
-    # Identifica a pasta do youtuber e verifica se ela existe
-    youtuber_path = BASE_DATA_FOLDER / youtuber_name
-    if not youtuber_path.is_dir():
-        console.print(f"     [red]Diretório não encontrado: {youtuber_path}[/red]")
-        return []
-
-    # Define as variáveis iniciais
-    todas_sequencias_videos = []
-
-    # Ordena a lista de arquivos de tiras
-    arquivos_csv = sorted(list(youtuber_path.rglob('tiras_video.csv')))
-
-    # Verifica que a lista de tiras existe
-    if not arquivos_csv:
-        return []
-
-    # Itera sobre cada arquivo de tira
-    for csv_path in arquivos_csv:
-        try:
-            # Lê o arquivo de tira
-            df_tira = pd.read_csv(csv_path)
-            
-            # Verifica se o arquivo de tira não está vazio
-            if df_tira.empty:
-                continue
-
-            estados_video = []
-
-            # Análise simples (Ex: só toxicidade ou só sentimento)
-            if config.get('tipo') == 'simples':
-                coluna = str(config['coluna_alvo'])
-                
-                # Verificação de segurança específica para análise simples
-                if coluna not in df_tira.columns: 
-                    continue
-
-                estados_video = pd.cut(
-                    df_tira[coluna], 
-                    bins=config['limiares'], 
-                    labels=config['labels'], 
-                    include_lowest=True, 
-                    right=False
-                ).tolist()
-
-            # Análise combinada (9 estados: sentimento + toxicidade)
-            elif config.get('tipo') == 'combinado':
-                col_sent = config['coluna_sentimento']
-                col_tox = config['coluna_toxicidade']
-
-                # Verificação de segurança
-                if not all(col in df_tira.columns for col in [col_sent, col_tox]):
-                    continue
-                
-                # Extração dos limiares da lista [0.0, 0.30, 0.70, 1.01]
-                limiares = config['limiares_toxicidade']
-                low = limiares[1]  # 0.30
-                high = limiares[2] # 0.70
-                
-                # Lógica de classificação dos 9 estados
-                conditions = [
-                    # NT (Não-Tóxico): Abaixo de 0.30
-                    (df_tira[col_tox] < low) & (df_tira[col_sent] == 'POS'),
-                    (df_tira[col_tox] < low) & (df_tira[col_sent] == 'NEU'),
-                    (df_tira[col_tox] < low) & (df_tira[col_sent] == 'NEG'),
-                    
-                    # GZ (Zona Cinza): Entre 0.30 (inclusive) e 0.70 (exclusive)
-                    (df_tira[col_tox] >= low) & (df_tira[col_tox] < high) & (df_tira[col_sent] == 'POS'),
-                    (df_tira[col_tox] >= low) & (df_tira[col_tox] < high) & (df_tira[col_sent] == 'NEU'),
-                    (df_tira[col_tox] >= low) & (df_tira[col_tox] < high) & (df_tira[col_sent] == 'NEG'),
-                    
-                    # T (Tóxico): Acima de 0.70 (inclusive)
-                    (df_tira[col_tox] >= high) & (df_tira[col_sent] == 'POS'),
-                    (df_tira[col_tox] >= high) & (df_tira[col_sent] == 'NEU'),
-                    (df_tira[col_tox] >= high) & (df_tira[col_sent] == 'NEG')
-                ]
-                
-                choices = ['POS-NT', 'NEU-NT', 'NEG-NT', 'POS-GZ', 'NEU-GZ', 'NEG-GZ', 'POS-T', 'NEU-T', 'NEG-T']
-                
-                estados_video = np.select(conditions, choices, default='Indefinido').tolist()
-            
-            # Identificar o ID do vídeo
-            df_video = pd.read_csv(csv_path.parent / 'videos_info.csv')
-            video_id = df_video['video_id'][0]
-
-            # Se existir, adiciona a lista do vídeo inteiro como um item na lista principal
-            if estados_video:
-                todas_sequencias_videos.append({
-                    'id': video_id,
-                    'sequencia': estados_video
-                })
-            
-        except Exception as e:
-            console.print(f"     [red]Erro ao ler {csv_path.name}: {e}[/red]")
-
-    return todas_sequencias_videos
-
-'''
-    Função para extrair as subsequências que antecedem e sucedem um evento de interesse
-    
-    @param lista_de_videos - Lista de listas (cada item é um vídeo)
-    @param eventos_gatilho - Lista de estados que disparam a extração (ex: ['T'])
-    @param tamanho_janela - Quantos estados anteriores extrair (ex: 3)
-    @return list[list[str]] - Banco de dados de sequências precursoras
-'''
-def extrair_sequencias_janela_completa(lista_de_videos: list[dict], eventos_gatilho: list, tamanho_janela: int) -> list[list]:
-    dataset_janelas = []
-    
-    for item in lista_de_videos:
-        video_id = item['id']
-        sequencia_video = item['sequencia']
-        
-        # Percorre o vídeo garantindo espaço para a janela anterior e posterior
-        for i in range(tamanho_janela, len(sequencia_video) - tamanho_janela):
-            estado_atual = sequencia_video[i]
-            
-            if estado_atual in eventos_gatilho:
-                # Extrai anteriores
-                anteriores = sequencia_video[i - tamanho_janela : i]
-                # Extrai posteriores
-                posteriores = sequencia_video[i + 1 : i + 1 + tamanho_janela]
-                
-                # Monta a linha: [ID, ant..., GATILHO, post...]
-                linha_completa = [video_id] + anteriores + [estado_atual] + posteriores
-                dataset_janelas.append(linha_completa)
-                
-    return dataset_janelas
-
-'''
-    Função para salvar as sequências extraídas em um arquivo CSV simples na pasta correta.
-    
-    @param sequencias - A lista de listas de estados.
-    @param pasta_grupo - O nome da subpasta onde salvar (ex: 'Minecraft', 'Geral').
-    @param nome_arquivo - O nome do arquivo CSV.
-'''
-def salvar_sequencias_para_mineracao(sequencias: list[list], pasta_grupo: str, nome_arquivo: str, tamanho_janela: int) -> None:
-    if not sequencias:
-        console.print(f"     [yellow]Nenhuma sequência encontrada para o grupo '{pasta_grupo}'.[/yellow]")
-        return
-
-    try:
-        path_saida_dir = OUTPUT_ROOT_FOLDER / pasta_grupo
-        path_saida_dir.mkdir(parents=True, exist_ok=True)
-        path_saida_arquivo = path_saida_dir / nome_arquivo
-
-        # Geração Dinâmica do Cabeçalho
-        cols_anteriores = [f"t-{i}" for i in range(tamanho_janela, 0, -1)]
-        cols_posteriores = [f"t+{i}" for i in range(1, tamanho_janela + 1)]
-        header = ['video_id'] + cols_anteriores + ['evento'] + cols_posteriores
-
-        # Converter para DataFrame
-        df_export = pd.DataFrame(sequencias, columns=header)
-        
-        # Salvar com cabeçalho (header=True)
-        df_export.to_csv(path_saida_arquivo, index=False, header=True)
-        
-        console.print(f"     [green]Dataset salvo:[/green] {path_saida_arquivo} ({len(sequencias)} sequências)")
-        
-    except Exception as e:
-        console.print(f"     [red]Erro ao salvar arquivo: {e}[/red]")
 
 '''
     Função auxiliar para renderizar um DataFrame como uma tabela estática
@@ -395,56 +225,252 @@ def calcular_e_plotar_estatisticas_iatt(lista_de_videos: list[dict], estados_int
     titulo_tabela = f"Estatísticas de Tempo de Chegada (IATT) - Grupo: {nome_grupo}"
     renderizar_tabela_academica(df_stats, titulo_tabela, output_file)
 
+
+'''
+    Função para varrer as pastas de um youtuber, ler os arquivos brutos 'tiras_video.csv'
+    e construir a lista de sequências de todos eles
+    
+    @param youtuber_name - Nome do youtuber
+    @param config - Dicionário de configuração da análise
+    @return list[list[str]] - Lista onde cada item é a sequência de estados de um vídeo
+'''
+def carregar_sequencias_videos(youtuber_name: str, config: dict) -> list[list[str]]:
+    # Identifica a pasta do youtuber e verifica se ela existe
+    youtuber_path = BASE_DATA_FOLDER / youtuber_name
+    if not youtuber_path.is_dir():
+        console.print(f"     [red]Diretório não encontrado: {youtuber_path}[/red]")
+        return []
+
+    # Define as variáveis iniciais
+    todas_sequencias_videos = []
+
+    # Ordena a lista de arquivos de tiras
+    arquivos_csv = sorted(list(youtuber_path.rglob('tiras_video.csv')))
+
+    # Verifica que a lista de tiras existe
+    if not arquivos_csv:
+        return []
+
+    # Itera sobre cada arquivo de tira
+    for csv_path in arquivos_csv:
+        try:
+            # Lê o arquivo de tira
+            df_tira = pd.read_csv(csv_path)
+            
+            # Verifica se o arquivo de tira não está vazio
+            if df_tira.empty:
+                continue
+
+            estados_video = []
+
+            # Análise simples (Ex: só toxicidade ou só sentimento)
+            if config.get('tipo') == 'simples':
+                coluna = str(config['coluna_alvo'])
+                
+                # Verificação de segurança específica para análise simples
+                if coluna not in df_tira.columns: 
+                    continue
+
+                estados_video = pd.cut(
+                    df_tira[coluna], 
+                    bins=config['limiares'], 
+                    labels=config['labels'], 
+                    include_lowest=True, 
+                    right=False
+                ).tolist()
+
+            # Análise combinada (9 estados: sentimento + toxicidade)
+            elif config.get('tipo') == 'combinado':
+                col_sent = config['coluna_sentimento']
+                col_tox = config['coluna_toxicidade']
+
+                # Verificação de segurança
+                if not all(col in df_tira.columns for col in [col_sent, col_tox]):
+                    continue
+                
+                # Extração dos limiares da lista [0.0, 0.30, 0.70, 1.01]
+                limiares = config['limiares_toxicidade']
+                low = limiares[1]  # 0.30
+                high = limiares[2] # 0.70
+                
+                # Lógica de classificação dos 9 estados
+                conditions = [
+                    # NT (Não-Tóxico): Abaixo de 0.30
+                    (df_tira[col_tox] < low) & (df_tira[col_sent] == 'POS'),
+                    (df_tira[col_tox] < low) & (df_tira[col_sent] == 'NEU'),
+                    (df_tira[col_tox] < low) & (df_tira[col_sent] == 'NEG'),
+                    
+                    # GZ (Zona Cinza): Entre 0.30 (inclusive) e 0.70 (exclusive)
+                    (df_tira[col_tox] >= low) & (df_tira[col_tox] < high) & (df_tira[col_sent] == 'POS'),
+                    (df_tira[col_tox] >= low) & (df_tira[col_tox] < high) & (df_tira[col_sent] == 'NEU'),
+                    (df_tira[col_tox] >= low) & (df_tira[col_tox] < high) & (df_tira[col_sent] == 'NEG'),
+                    
+                    # T (Tóxico): Acima de 0.70 (inclusive)
+                    (df_tira[col_tox] >= high) & (df_tira[col_sent] == 'POS'),
+                    (df_tira[col_tox] >= high) & (df_tira[col_sent] == 'NEU'),
+                    (df_tira[col_tox] >= high) & (df_tira[col_sent] == 'NEG')
+                ]
+                
+                choices = ['POS-NT', 'NEU-NT', 'NEG-NT', 'POS-GZ', 'NEU-GZ', 'NEG-GZ', 'POS-T', 'NEU-T', 'NEG-T']
+                
+                estados_video = np.select(conditions, choices, default='Indefinido').tolist()
+            
+            # Identificar o ID do vídeo
+            df_video = pd.read_csv(csv_path.parent / 'videos_info.csv')
+            video_id = df_video['video_id'][0]
+
+            # Se existir, adiciona a lista do vídeo inteiro como um item na lista principal
+            if estados_video:
+                todas_sequencias_videos.append({
+                    'id': video_id,
+                    'sequencia': estados_video
+                })
+            
+        except Exception as e:
+            console.print(f"     [red]Erro ao ler {csv_path.name}: {e}[/red]")
+
+    return todas_sequencias_videos
+
+'''
+    Função para extrair todas as subsequências possíveis divididas entre pre-evento e pos-evento
+    
+    @param lista_de_videos - Lista de dicionários (id e sequencia)
+    @param tamanho_janela - Tamanho n da sequência a ser extraída
+    @param eventos_gatilho - Estados alvo (ex: ['T'])
+    @return tuple(list, list) - (lista_sequencias_pre, lista_sequencias_pos)
+'''
+def extrair_sequencias_globais(lista_de_videos: list[dict], tamanho_janela: int, eventos_gatilho: list[str]) -> tuple:
+    dataset_pre = []
+    dataset_pos = []
+    
+    for item in lista_de_videos:
+        video_id = item['id']
+        sequencia_video = item['sequencia']
+        tamanho_total = len(sequencia_video)
+        
+        # Se o vídeo for menor que a janela, ignora
+        if tamanho_total <= tamanho_janela:
+            continue
+            
+        for i in range(tamanho_total):
+            estado_atual = sequencia_video[i]
+            rotulo = 'SIM' if estado_atual in eventos_gatilho else 'NAO'
+            
+            # Lógica precursora (O que veio antes do estado atual?)
+            if i >= tamanho_janela:
+                sub_pre = sequencia_video[i - tamanho_janela : i]
+
+                # [ID, t-n, ..., t-1, Alvo, Rotulo]
+                dataset_pre.append([video_id] + list(sub_pre) + [estado_atual, rotulo])
+            
+            # Lógica sucessora (O que veio depois do estado atual?)
+            if i <= tamanho_total - 1 - tamanho_janela:
+                sub_pos = sequencia_video[i + 1 : i + 1 + tamanho_janela]
+
+                # [ID, Alvo, Rotulo, t+1, ..., t+n]
+                dataset_pos.append([video_id] + [estado_atual, rotulo] + list(sub_pos))
+                
+    return dataset_pre, dataset_pos
+
+'''
+    Função para salvar as sequências extraídas em um arquivo CSV
+    
+    @param sequencias - A lista de listas de estados
+    @param modo - 'pre' (causas) ou 'pos' (consequências)
+    @param nome_grupo - Nome do grupo sendo analisado
+    @param tipo_analise - Nome da análise para o arquivo
+    @param tamanho_janela - Tamanho n utilizado na extração
+'''
+def salvar_sequencias_para_mineracao(sequencias: list[list], modo: str, nome_grupo: str, tipo_analise: str, tamanho_janela: int) -> None:
+    if not sequencias:
+        console.print(f"     [yellow]Nenhuma sequência encontrada para o grupo '{nome_grupo}'.[/yellow]")
+        return
+
+    try:
+        path_saida_dir = OUTPUT_ROOT_FOLDER / nome_grupo
+        path_saida_dir.mkdir(parents=True, exist_ok=True)
+
+        # Definir o cabeçalho
+        if modo == 'pre':
+            cols_sequencia = [f"t-{i}" for i in range(tamanho_janela, 0, -1)]
+            header = ['video_id'] + cols_sequencia + ['estado_alvo', 'foi_evento']
+            nome_arquivo = f"sequencias_pre_{tipo_analise}_{nome_grupo.replace(' ', '_')}.csv"
+        else:
+            cols_sequencia = [f"t+{i}" for i in range(1, tamanho_janela + 1)]
+            header = ['video_id'] + ['estado_origem', 'foi_evento'] + cols_sequencia
+            nome_arquivo = f"sequencias_pos_{tipo_analise}_{nome_grupo.replace(' ', '_')}.csv"
+
+        # Verificação de segurança: printar o tamanho para depuração se falhar
+        if len(sequencias[0]) != len(header):
+            console.print(f"[red]Erro de dimensão no modo {modo}: Dados têm {len(sequencias[0])} colunas, mas o cabeçalho tem {len(header)}[/red]")
+            return
+
+        df_export = pd.DataFrame(sequencias, columns=header)
+        df_export.to_csv(path_saida_dir / nome_arquivo, index=False, header=True)
+        
+        console.print(f"     [green]Dataset Global salvo:[/green] {nome_arquivo} ({len(sequencias)} instâncias)")
+        
+    except Exception as e:
+        console.print(f"     [red]Erro ao salvar arquivo: {e}[/red]")
+
 '''
     Função auxiliar para processar um grupo específico de youtubers (Individual, Categoria ou Geral)
     
     @param nome_grupo - Nome do grupo (ex: 'Geral', 'Minecraft', 'Julia MineGirl')
     @param lista_youtubers - Lista de nomes dos youtubers que compõem este grupo
     @param config - Configuração da análise
+    @param modo - 'pre' (causas) ou 'pos' (consequências)
     @param tamanho_janela - Tamanho da janela de sequência
     @param tipo_analise - Nome da análise para o arquivo
 '''
-def processar_grupo(nome_grupo: str, lista_youtubers: list, config: dict, tamanho_janela: int, tipo_analise: str):
+def processar_grupo(nome_grupo: str, lista_youtubers: list, config: dict, modo: str, tamanho_janela: int, tipo_analise: str) -> None:
     console.print(f"\n  [bold cyan]Processando Grupo: {nome_grupo}[/bold cyan] (Youtubers: {len(lista_youtubers)})")
-    
+   
     # Esta lista conterá todos os vídeos de todos os youtubers do grupo
     todos_videos_do_grupo = []
 
     # Carrega dados de todos os membros
     for youtuber in lista_youtubers:
         videos_youtuber = carregar_sequencias_videos(youtuber, config)
-        todos_videos_do_grupo.extend(videos_youtuber) # Adiciona a lista de vídeos deste youtuber
+        todos_videos_do_grupo.extend(videos_youtuber)
     
     if not todos_videos_do_grupo:
         console.print(f"     [yellow]Nenhum dado encontrado para o grupo {nome_grupo}.[/yellow]")
         return
 
-    # Extrai aequências
-    sequencias = extrair_sequencias_janela_completa(
+    # Extração de sequências de todo o vídeo
+    sequencias_pre, sequencias_pos = extrair_sequencias_globais(
         todos_videos_do_grupo, 
-        config['eventos_gatilho'], 
-        tamanho_janela
+        tamanho_janela,
+        config['eventos_gatilho']
     )
 
     # Salva os dados
-    nome_arquivo = f"sequencias_{tipo_analise}_{nome_grupo.replace(' ', '_')}.csv"
-    salvar_sequencias_para_mineracao(sequencias, nome_grupo, nome_arquivo, tamanho_janela)
+    if modo == 'pre':
+        salvar_sequencias_para_mineracao(sequencias_pre, modo, nome_grupo, tipo_analise, tamanho_janela)
+    else:
+        salvar_sequencias_para_mineracao(sequencias_pos, modo, nome_grupo, tipo_analise, tamanho_janela)
+
 
     # Cálculo de IATT (Estatísticas de tempo entre estados)
-    labels_interesse = []
-    if 'labels' in config:
-        labels_interesse = config['labels'] # Caso simples (NT, GZ, T)
-    elif 'labels_toxicidade' in config:
-        # Caso combinado, usamos os 9 estados gerados
-        labels_interesse = ['POS-NT', 'NEU-NT', 'NEG-NT', 'POS-GZ', 'NEU-GZ', 'NEG-GZ', 'POS-T', 'NEU-T', 'NEG-T']
+    # labels_interesse = []
+    # if 'labels' in config:
+    #     labels_interesse = config['labels'] # Caso simples (NT, GZ, T)
+    # elif 'labels_toxicidade' in config:
+    #     # Caso combinado, usamos os 9 estados gerados
+    #     labels_interesse = ['POS-NT', 'NEU-NT', 'NEG-NT', 'POS-GZ', 'NEU-GZ', 'NEG-GZ', 'POS-T', 'NEU-T', 'NEG-T']
 
-    if labels_interesse:
-        calcular_e_plotar_estatisticas_iatt(todos_videos_do_grupo, labels_interesse, nome_grupo)
+    # if labels_interesse:
+    #     calcular_e_plotar_estatisticas_iatt(todos_videos_do_grupo, labels_interesse, nome_grupo)
 
 '''
     Função principal para orquestrar a preparação dos dados em múltiplas dimensões
+
+    @param tipo_analise - Nome da análise para o arquivo
+    @param modo - 'pre' (causas) ou 'pos' (consequências)
+    @param tamanho_janela - Tamanho da janela de sequência
 '''
-def orquestrar_preparacao_sequencias_multidimensional(tipo_analise: str, tamanho_janela: int):
+def orquestrar_preparacao_sequencias_multidimensional(tipo_analise: str, modo: str, tamanho_janela: int) -> None:
     if tipo_analise not in CONFIG_ANALISE:
         console.print(f"[bold red]Erro: Tipo de análise '{tipo_analise}' não configurado.[/bold red]")
         return
@@ -454,34 +480,33 @@ def orquestrar_preparacao_sequencias_multidimensional(tipo_analise: str, tamanho
     console.print(f"\n[bold magenta]=== Preparação de Sequências Multidimensional ({tipo_analise.upper()}) ===[/bold magenta]")
     console.print(f"Janela: {tamanho_janela} estados anteriores ao gatilho {config['eventos_gatilho']}")
 
-    '''
-    # Análise da dimensão individual
-    console.print("\n[bold]1. Dimensão: Individual (Por Youtuber)[/bold]")
-    for youtuber in MAPA_YOUTUBERS_CATEGORIA.keys():
-        processar_grupo(youtuber, [youtuber], config, tamanho_janela, tipo_analise)
+    # # Análise da dimensão individual
+    # console.print("\n[bold]1. Dimensão: Individual (Por Youtuber)[/bold]")
+    # for youtuber in MAPA_YOUTUBERS_CATEGORIA.keys():
+    #     processar_grupo(youtuber, [youtuber], config, modo, tamanho_janela, tipo_analise)
 
-    # Análise da dimensão de categoria (Minecraft vs Roblox)
-    console.print("\n[bold]2. Dimensão: Categoria (Por Jogo)[/bold]")
+    # # Análise da dimensão de categoria (Minecraft vs Roblox)
+    # console.print("\n[bold]2. Dimensão: Categoria (Por Jogo)[/bold]")
 
-    # Inverte o mapa para agrupar por categoria: {'Roblox': ['Julia', 'Tex'], ...}
-    categorias = {}
-    for youtuber, cat in MAPA_YOUTUBERS_CATEGORIA.items():
-        if cat not in categorias:
-            categorias[cat] = []
-        categorias[cat].append(youtuber)
+    # # Inverte o mapa para agrupar por categoria: {'Roblox': ['Julia', 'Tex'], ...}
+    # categorias = {}
+    # for youtuber, cat in MAPA_YOUTUBERS_CATEGORIA.items():
+    #     if cat not in categorias:
+    #         categorias[cat] = []
+    #     categorias[cat].append(youtuber)
     
-    for nome_cat, lista_membros in categorias.items():
-        processar_grupo(nome_cat, lista_membros, config, tamanho_janela, tipo_analise)
-    '''
+    # for nome_cat, lista_membros in categorias.items():
+    #     processar_grupo(nome_cat, lista_membros, config, modo, tamanho_janela, tipo_analise)
 
     # Análise da dimensão geral (todos)
     console.print("\n[bold]3. Dimensão: Geral (Todos os Dados)[/bold]")
     todos_youtubers = list(MAPA_YOUTUBERS_CATEGORIA.keys())
-    processar_grupo("Geral", todos_youtubers, config, tamanho_janela, tipo_analise)
+    processar_grupo("Geral", todos_youtubers, config, modo, tamanho_janela, tipo_analise)
 
 if __name__ == "__main__":
     JANELA = 4
+    modo = 'pre'
 
-    orquestrar_preparacao_sequencias_multidimensional('toxicidade', JANELA)
-    #orquestrar_preparacao_sequencias_multidimensional('misto_9_estados', JANELA)
-    #orquestrar_preparacao_sequencias_multidimensional('negatividade', JANELA)
+    orquestrar_preparacao_sequencias_multidimensional('toxicidade', modo, JANELA)
+    #orquestrar_preparacao_sequencias_multidimensional('misto_9_estados', modo, JANELA)
+    #orquestrar_preparacao_sequencias_multidimensional('negatividade', modo, JANELA)

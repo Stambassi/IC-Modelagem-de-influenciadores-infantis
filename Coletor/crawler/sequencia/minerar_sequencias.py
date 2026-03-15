@@ -27,116 +27,176 @@ plt.rcParams['savefig.dpi'] = 300
 sns.set_theme(style="whitegrid", context="paper")
 
 '''
-    Prepara listas específicas para o algoritmo de mineração (PrefixSpan/Apriori).
-    Permite escolher se queremos olhar para o passado, futuro ou tudo.
+    Função para calcular a probabilidade absoluta de ocorrência de cada estado (NT, GZ, T) no banco de dados
 
-    @param df - O DataFrame carregado
-    @param modo - 'full' (tudo), 'pre' (antes do evento), 'pos' (depois do evento)
-    @return list[list[str]] - Lista de listas pronta para o algoritmo
+    @param database_sequencias - A lista de sequências brutas
+    @return dict - Dicionário com a frequência relativa de cada estado
 '''
-def carregar_listas_para_mineracao(caminho_arquivo: str, modo: str = 'full') -> list[list[str]]:
+def calcular_probabilidades_basais(database_sequencias: list[list[str]]) -> dict:
+    contagem = {'NT': 0, 'GZ': 0, 'T': 0}
+    total_elementos = 0
+    
+    # Contar o número de ocorrências de cada estado
+    for seq in database_sequencias:
+        for estado in seq:
+            if estado in contagem:
+                contagem[estado] += 1
+                total_elementos += 1
+                
+    # Se não forem encontrados elementos, retorna probabilidade 0
+    if total_elementos == 0: return {k: 0 for k in contagem}
+    
+    # Para cada estado (NT, GZ e T), calcula a probabilidade de ocorrência dividindo
+    # o número de ocorrências pelo total de elementos
+    return {k: v / total_elementos for k, v in contagem.items()}
+
+'''
+    Função para calcular o Lift e Confiança para padrões em relação a um estado alvo
+    O Lift indica o quanto a presença do padrão altera a probabilidade do evento ocorrer
+
+    @param resultados_minerados - Lista de dicionários com os padrões encontrados
+    @param database_controle - Sequências brutas para cálculo da probabilidade basal
+    @param modo - 'pre' (causas), 'pos' (consequências) ou 'full' (análise geral)
+    @param estado_alvo - O estado de interesse para o cálculo (ex: 'T')
+    
+    @return list[dict] - Resultados com as métricas de relevância estatística
+'''
+def calcular_relevancia_lift(resultados_minerados: list[dict], database_controle: list[list[str]], modo: str = 'pre', estado_alvo: str = 'T') -> list[dict]: 
+    # Cacular a probabilidade basal do estado alvo (P(Alvo)) no conjunto de controle
+    probs_basais = calcular_probabilidades_basais(database_controle)
+    p_alvo = probs_basais.get(estado_alvo, 0.0)
+    
+    # Teste para evitar divisão por zero se o estado alvo não existir no controle
+    if p_alvo == 0:
+        p_alvo = 0.0001 
+    
+    for item in resultados_minerados:
+        # No seu pipeline, o suporte_rel representa a frequência do padrão 
+        # dentro de janelas que JÁ são filtradas pela ocorrência do evento.
+        
+        # Confiança: P(Alvo | Padrão)
+        # Em 'pre' ou 'pos', as sequências foram extraídas justamente por estarem
+        # vinculadas ao evento, logo o suporte relativo é a nossa confiança observada.
+        confianca = item['suporte_rel'] / 100 
+        
+        # Lift: Razão entre a probabilidade condicionada e a probabilidade basal
+        # Lift = P(Alvo | Padrão) / P(Alvo)
+        lift = confianca / p_alvo
+        
+        item['confianca'] = round(confianca, 4)
+        item['lift'] = round(lift, 4)
+        item['modo_analise'] = modo
+        
+    # Ordenação por Lift (Decrescente) para evidenciar os padrões de maior relevância
+    resultados_minerados.sort(key=lambda x: x['lift'], reverse=True)
+    
+    return resultados_minerados
+
+'''
+    Função para preparar listas específicas para o algoritmo de mineração
+    Diferencia entre arquivos 'pre' (sequência -> alvo) e 'pos' (origem -> sequência)
+
+    @param caminho_arquivo - Path para o arquivo CSV global
+    @param modo - 'pre' ou 'pos'
+    @return tuple - (lista_de_listas_de_estados, lista_de_rotulos_evento)
+'''
+def carregar_listas_para_mineracao(caminho_arquivo: str, modo: str = 'pre') -> tuple:
     try:
         df = pd.read_csv(caminho_arquivo)
-
-        # Identifica a coluna do evento
-        idx_evento = len(df.columns) // 2
-        try:
-            idx_evento = df.columns.get_loc('evento')
-        except KeyError:
-            # Fallback se não achar a coluna 'evento': pega o meio
-            idx_evento = len(df.columns) // 2
-
-        # Remove o video_id para a mineração de padrões
-        colunas_dados = [c for c in df.columns if c != 'video_id']
         
-        # Recalcula o índice do evento baseado apenas nas colunas de dados
-        colunas_pre = [c for c in colunas_dados if c.startswith('t-')]
-        colunas_pos = [c for c in colunas_dados if c.startswith('t+')]
+        # Filtra colunas que representam os passos temporais (t-n ou t+n)
+        prefixo = 't-' if modo == 'pre' else 't+'
+        colunas_sequencia = [c for c in df.columns if c.startswith(prefixo)]
         
-        listas_finais = []
-
-        if modo == 'pre':
-            # Pega de t-N até t-1
-            # Filtra o df apenas com colunas que começam com 't-'
-            df_recorte = df[colunas_pre]
-            listas_finais = df_recorte.astype(str).values.tolist()
-
-        elif modo == 'pos':
-            # Pega de t+1 até t+N
-            df_recorte = df[colunas_pos]
-            listas_finais = df_recorte.astype(str).values.tolist()
-
-        else: # 'full'
-            # Pega tudo (menos o ID)
-            # Útil para ver pontes, ex: "GZ -> EVENTO -> GZ"
-            df_recorte = df[colunas_dados]
-            listas_finais = df_recorte.astype(str).values.tolist()
-            
-        return listas_finais
+        # Extrai as sequências como listas de strings
+        listas_estados = df[colunas_sequencia].astype(str).values.tolist()
+        
+        # Extrai os rótulos que indicam se aquele momento foi um evento (SIM/NAO)
+        # Fundamental para o cálculo de Confiança e Lift
+        rotulos_evento = df['foi_evento'].tolist()
+        
+        return listas_estados, rotulos_evento
 
     except Exception as e:
-        console.print(f"     [red]Erro ao carregar sequências de {caminho_arquivo.name}: {e}[/red]")
-        return pd.DataFrame()
+        console.print(f"     [red]Erro ao carregar sequências globais: {e}[/red]")
+        return [], []
 
 '''
-    Função que aplica o algoritmo PrefixSpan
-    Inclui filtros de tamanho e retorna dados estruturados com percentuais
+    Função que aplica o algoritmo PrefixSpan e calcula métricas de relevância (Suporte, Confiança e Lift)
 
-    @param database_sequencias - A lista de listas (recorte pré ou pós evento)
-    @param min_suporte_percent - A porcentagem mínima (0 a 100)
-    @param min_tamanho - Ignora padrões menores que isso (padrão: 1)
-    @param max_tamanho - Ignora padrões maiores que isso (padrão: 5)
+    @param database_sequencias - A lista de listas de estados
+    @param rotulos_evento - Lista SIM/NAO correspondente a cada sequência
+    @param min_suporte_percent - Porcentagem mínima (0 a 100)
+    @param modo - 'pre' ou 'pos'
+    @param min_tamanho - Tamanho mínimo do padrão
     
-    @return list[dict] - Lista de dicionários ordenados por relevância
+    @return list[dict] - Lista de dicionários com Suporte, Confiança e Lift
 '''
 def minerar_padroes_frequentes(
     database_sequencias: list[list[str]], 
+    rotulos_evento: list[str],
     min_suporte_percent: float,
+    modo: str = 'pre',
     min_tamanho: int = 1,
     max_tamanho: int = 10
 ) -> list[dict]:
     
-    total_sequencias = len(database_sequencias)
-    if total_sequencias == 0:
-        return []
+    total_instancias = len(database_sequencias)
+    if total_instancias == 0: return []
     
-    # Calcula o suporte absoluto
-    min_suporte_absoluto = int(total_sequencias * (min_suporte_percent / 100))
-
-    # Garante que seja pelo menos 1
-    min_suporte_absoluto = max(1, min_suporte_absoluto)
-
-    console.print(f"     Minerando {total_sequencias} sequências (Min Suporte: {min_suporte_absoluto} | {min_suporte_percent}%)")
-
-    # Executa o PrefixSpan
-    ps = PrefixSpan(database_sequencias)
+    # Filtra apenas as sequências que resultaram em evento (SIM)
+    # para a mineração do PrefixSpan (foco no que causa/sucede a toxicidade)
+    sequencias_evento = [s for s, r in zip(database_sequencias, rotulos_evento) if r == 'SIM']
+    total_eventos = len(sequencias_evento)
     
-    # Encontra os padrões frequentes
-    resultados_brutos = ps.frequent(min_suporte_absoluto)
+    if total_eventos == 0: return []
+
+    min_suporte_abs = max(1, int(total_eventos * (min_suporte_percent / 100)))
+    console.print(f"     Minerando {total_eventos} sequências de evento (Suporte Abs: {min_suporte_abs})")
+
+    ps = PrefixSpan(sequencias_evento)
+    resultados_brutos = ps.frequent(min_suporte_abs)
     
     resultados_estruturados = []
+    
+    # Cálculo da Probabilidade Basal do Evento no dataset global P(E)
+    prob_basal_evento = rotulos_evento.count('SIM') / total_instancias
 
-    # Processa e filtra os resultados
     for count, padrao in resultados_brutos:
-        tamanho_padrao = len(padrao)
-        
-        # Filtra pelo tamanho desejado
-        if tamanho_padrao < min_tamanho or tamanho_padrao > max_tamanho:
+        if len(padrao) < min_tamanho or len(padrao) > max_tamanho:
             continue
             
-        percentual = (count / total_sequencias) * 100
+        # Suporte Relativo ao subconjunto de eventos
+        suporte_no_evento = (count / total_eventos)
         
-        # Cria um objeto rico para análise posterior
+        # Cálculo da Confiança: P(Evento | Padrão)
+        # É preciso contar quantas vezes o padrão aparece no dataset INTEIRO
+        count_global = 0
+        for seq in database_sequencias:
+            # Checagem simples de subsequência (ordem preservada)
+            iterator = iter(seq)
+            if all(item in iterator for item in padrao):
+                count_global += 1
+        
+        # Confiança = Ocorrências com evento / Total de ocorrências do padrão
+        count_com_evento = count
+        confianca = count_com_evento / count_global if count_global > 0 else 0
+        
+        # Lift = Confiança / Probabilidade Basal
+        lift = confianca / prob_basal_evento if prob_basal_evento > 0 else 0
+        
         resultados_estruturados.append({
-            'padrao': padrao,                 # Lista ['NT', 'T']
-            'padrao_str': " -> ".join(padrao), # String "NT -> T"
+            'padrao': padrao,
+            'padrao_str': " -> ".join(padrao),
             'suporte_abs': count,
-            'suporte_rel': percentual,
-            'tamanho': tamanho_padrao
+            'suporte_rel': suporte_no_evento * 100,
+            'confianca': round(confianca, 4),
+            'lift': round(lift, 4),
+            'tamanho': len(padrao)
         })
 
-    # Ordena: Primeiro por Suporte (Decrescente), depois por Tamanho (Decrescente)
-    resultados_estruturados.sort(key=lambda x: (x['suporte_abs'], x['tamanho']), reverse=True)
+    # Ordena por Lift para priorizar padrões com maior significância estatística
+    resultados_estruturados.sort(key=lambda x: x['lift'], reverse=True)
     
     return resultados_estruturados
 
@@ -164,26 +224,64 @@ def obter_cor_semantica(padrao_str: str) -> str:
         return COR_NEUTRO
 
 '''
-    Gera um gráfico de barras horizontais dos Top N padrões mais frequentes.
-    Salva como imagem de alta resolução pronta para slides/artigos.
+    Função para gerar um gráfico de barras horizontais dos Top N padrões, parametrizado por métrica
+    Ajusta automaticamente ordenação, títulos, cores e labels com base na métrica escolhida
+
+    @param df - O DataFrame com os resultados da mineração (deve conter as colunas da métrica)
+    @param caminho_base - O Path base para salvar a imagem (o sufixo da métrica será adicionado)
+    @param tipo_sequencia - 'precursora' ou 'sucessora'
+    @param metrica - 'suporte', 'confianca' ou 'lift'
+    @param top_n - Quantidade de padrões a exibir
 '''
-def gerar_grafico_barras_padroes(df: pd.DataFrame, caminho_saida: Path, tipo_sequencia: str, top_n: int = 15):
+def gerar_grafico_barras_padroes(df: pd.DataFrame, caminho_base: Path, tipo_sequencia: str, metrica: str = 'suporte', top_n: int = 15):
     if df.empty: return
 
-    # Filtra os Top N
-    df_plot = df.head(top_n).copy()
+    # Mapeamento de configurações por métrica
+    config_metrica = {
+        'suporte': {
+            'coluna': 'Suporte Percentual',
+            'label_eixo': 'Suporte (%) - Frequência de Ocorrência',
+            'titulo_sufixo': 'por Suporte',
+            'formato_label': '{:.1f}%',
+            'sufixo_arquivo': 'suporte'
+        },
+        'confianca': {
+            'coluna': 'Confianca',
+            'label_eixo': 'Confiança - $P(Evento \\mid Padrão)$',
+            'titulo_sufixo': 'por Confiança',
+            'formato_label': '{:.4f}',
+            'sufixo_arquivo': 'confianca'
+        },
+        'lift': {
+            'coluna': 'Lift',
+            'label_eixo': 'Lift - Significância Estatística',
+            'titulo_sufixo': 'por Lift',
+            'formato_label': '{:.2f}',
+            'sufixo_arquivo': 'lift'
+        }
+    }
+
+    if metrica not in config_metrica:
+        console.print(f"[red]Métrica '{metrica}' inválida para o gráfico.[/red]")
+        return
+
+    conf = config_metrica[metrica]
+    col_alvo = conf['coluna']
+
+    # Ordenação e Filtro: Garante que o gráfico mostre os Top N da métrica escolhida
+    df_plot = df.sort_values(by=col_alvo, ascending=False).head(top_n).copy()
     
     # Cria a coluna de cores baseada na função semântica
     df_plot['cor'] = df_plot['Padrao'].apply(obter_cor_semantica)
 
     # Configura a figura
-    altura_fig = max(6, top_n * 0.4)
+    altura_fig = max(6, len(df_plot) * 0.4)
     fig, ax = plt.subplots(figsize=(10, altura_fig))
 
-    # Desenha as barras
+    # Desenha as barras baseadas na métrica selecionada
     bars = ax.barh(
         y=df_plot['Padrao'], 
-        width=df_plot['Suporte Percentual'], 
+        width=df_plot[col_alvo], 
         color=df_plot['cor'],
         edgecolor='none',
         height=0.6,
@@ -193,30 +291,27 @@ def gerar_grafico_barras_padroes(df: pd.DataFrame, caminho_saida: Path, tipo_seq
     # Inverte o eixo Y para o Top 1 ficar em cima
     ax.invert_yaxis()
 
-    # Títulos e Eixos
-    ax.set_title("Padrões Sequenciais Mais Frequentes", fontsize=14, fontweight='bold', pad=15)
+    # Títulos Dinâmicos
+    prefixo_titulo = "Padrões Sequenciais"
+    if tipo_sequencia == 'precursora': prefixo_titulo += " Precursores"
+    elif tipo_sequencia == 'sucessora': prefixo_titulo += " Sucessores"
     
-    ax.set_xlabel("Suporte (%) - Frequência de Ocorrência", fontsize=11, fontweight='bold')
+    ax.set_title(f"{prefixo_titulo} ({conf['titulo_sufixo']})", fontsize=14, fontweight='bold', pad=15)
+    ax.set_xlabel(conf['label_eixo'], fontsize=11, fontweight='bold')
     ax.set_ylabel("Padrão Sequencial", fontsize=11, fontweight='bold')
     
-    # Remove bordas desnecessárias (clean look)
     sns.despine(left=True, bottom=True)
-    
-    # Adiciona grid vertical suave
     ax.xaxis.grid(True, linestyle='--', alpha=0.5)
-    ax.yaxis.grid(False)
 
-    # Anotação de valores (Data Labels)
-    # Pesquisadores exigentes querem ver o número exato, não apenas a barra
+    # Anotação de valores (Data Labels) com formatação específica
     for bar in bars:
         width = bar.get_width()
         label_y = bar.get_y() + bar.get_height() / 2
         
-        # Posição do texto um pouco à direita da barra
         ax.text(
-            width + 0.5, # Offset X
-            label_y,     # Posição Y (centro da barra)
-            f'{width:.1f}%', 
+            width + (width * 0.02), # Offset dinâmico baseado no valor
+            label_y,
+            conf['formato_label'].format(width), 
             va='center', 
             ha='left', 
             fontsize=10, 
@@ -225,73 +320,74 @@ def gerar_grafico_barras_padroes(df: pd.DataFrame, caminho_saida: Path, tipo_seq
         )
 
     # Ajuste de margens para o texto não cortar
-    # Aumenta o limite direito do gráfico em 10% para caber os números
-    ax.set_xlim(0, df_plot['Suporte Percentual'].max() * 1.15)
-    
-    # Aumenta a fonte dos labels do eixo Y para legibilidade
+    ax.set_xlim(0, df_plot[col_alvo].max() * 1.20)
     ax.tick_params(axis='y', labelsize=11)
+
+    # Nome do arquivo customizado
+    # Remove a extensão original se houver e adiciona o sufixo da métrica
+    nome_final = f"{caminho_base.stem}_{conf['sufixo_arquivo']}.png"
+    caminho_final = caminho_base.parent / nome_final
 
     try:
         plt.tight_layout()
-        plt.savefig(caminho_saida, bbox_inches='tight')
+        plt.savefig(caminho_final, bbox_inches='tight')
         plt.close()
-        console.print(f"     [green]Gráfico salvo:[/green] {caminho_saida}")
+        console.print(f"     [green]Gráfico ({metrica}) salvo:[/green] {nome_final}")
     except Exception as e:
-        console.print(f"     [red]Erro ao salvar gráfico: {e}[/red]")
+        console.print(f"     [red]Erro ao salvar gráfico de {metrica}: {e}[/red]")
 
 '''
-    Função para formatar os resultados minerados e salvar em um CSV legível.
-    Adapta-se ao novo formato de retorno da função de mineração (lista de dicionários).
+    Função para formatar os resultados minerados e salvar em um CSV com métricas completas
+    Inclui Suporte, Confiança e Lift para análise acadêmica
 
-    @param resultados_minerados - A lista de dicionários retornada por minerar_padroes_frequentes
-    @param caminho_saida - O Path onde o relatório final será salvo
+    @param resultados_minerados - Dicionários vindos da mineração
+    @param tipo_sequencia - 'precursora' ou 'sucessora'
+    @param caminho_saida - Destino do arquivo
 '''
 def formatar_e_salvar_resultados(resultados_minerados: list[dict], tipo_sequencia: str, caminho_saida: Path) -> None:
     if not resultados_minerados:
-        console.print(f"     [yellow]Nenhum padrão frequente encontrado para salvar em {caminho_saida.name}.[/yellow]")
+        console.print(f"     [yellow]Nenhum padrão relevante encontrado para {caminho_saida.name}.[/yellow]")
         return
 
-    # Prepara dados para o DataFrame
     dados_csv = []
-    
+
     for item in resultados_minerados:
         dados_csv.append({
             'Padrao': item['padrao_str'],
             'Tamanho': item['tamanho'],
             'Suporte Absoluto': item['suporte_abs'],
-            'Suporte Percentual': round(item['suporte_rel'], 2)
+            'Suporte no Evento (%)': round(item['suporte_rel'], 2),
+            'Confianca': item['confianca'],
+            'Lift': item['lift']
         })
     
-    # Cria DataFrame
     df_resultados = pd.DataFrame(dados_csv)
     
-    # Salva em CSV
     try:
+        # 1. Persistência dos dados brutos em CSV
         df_resultados.to_csv(caminho_saida, index=False)
-        console.print(f"[green]Resultados salvos:[/green] {caminho_saida}")
+        console.print(f"     [green]Resultados (Suporte/Confiança/Lift) salvos:[/green] {caminho_saida.name}")
+        
+        # 2. Preparação para a geração de gráficos
+        # Renomear para compatibilidade com a função de plotagem
+        df_plot = df_resultados.rename(columns={'Suporte no Evento (%)': 'Suporte Percentual'})
+        
+        # O caminho base servirá de semente para os nomes dos arquivos (suporte, confianca, lift)
+        caminho_base_grafico = caminho_saida.parent / f"plot_{caminho_saida.stem}"
+        
+        # 3. Geração dos três gráficos acadêmicos
+        # Cada chamada gera um arquivo com sufixo próprio e ordenação específica
+        for metrica in ['suporte', 'confianca', 'lift']:
+            gerar_grafico_barras_padroes(
+                df=df_plot, 
+                caminho_base=caminho_base_grafico, 
+                tipo_sequencia=tipo_sequencia, 
+                metrica=metrica, 
+                top_n=15
+            )
+        
     except Exception as e:
-        console.print(f"[red]Erro ao escrever arquivo CSV: {e}[/red]")
-        return
-    
-    # Gera Gráfico de Barras (Top 15)
-    caminho_imagem = caminho_saida.parent / f"grafico_{caminho_saida.stem}.png"
-    gerar_grafico_barras_padroes(df_resultados, caminho_imagem, tipo_sequencia, top_n=15)
-
-    # Mostra prévia dos top 10 padrões no console
-    console.print(f"[bold]Top Padrões Encontrados:[/bold]")
-    
-    # Pegamos os 10 primeiros
-    limit = min(10, len(dados_csv))
-    
-    for i in range(limit):
-        row = dados_csv[i]
-        padrao_display = row['Padrao']
-        perc_display = row['Suporte Percentual']
-        
-        # Formatação condicional simples para o console
-        cor = "white"
-        
-        console.print(f"     #{i+1:02d}: [{cor}]{padrao_display}[/{cor}] (Suporte: {perc_display}%)")
+        console.print(f"[red]Erro ao processar salvamento de resultados: {e}[/red]")
 
 '''
     Gera um Diagrama de Sankey (Plotly) visualizando os fluxos dos padrões mais frequentes.
@@ -415,83 +511,48 @@ def gerar_sankey_sequencias(resultados: list[dict], modo: str, output_html: Path
     @param min_suporte - Porcentagem mínima de frequência (padrão 5%)
 '''
 def orquestrar_mineracao_sequencias(tipo_analise: str, min_suporte: float = 5.0):
-    console.print(f"\n[bold magenta]=== Iniciando Mineração de Sequências ({tipo_analise.upper()}) ===[/bold magenta]")
-    console.print(f"Buscando padrões com suporte mínimo de: {min_suporte}%")
-
-    pasta_busca = BASE_DATA_FOLDER 
+    console.print(f"\n[bold magenta]=== Mineração de Sequências Globais ({tipo_analise.upper()}) ===[/bold magenta]")
     
-    if not pasta_busca.is_dir():
-        console.print(f"[red]Pasta de sequências não encontrada: {pasta_busca}[/red]")
-        return
+    pasta_busca = BASE_DATA_FOLDER 
+    if not pasta_busca.is_dir(): return
 
-    # Busca todos os arquivos CSV recursivamente que correspondem ao tipo de análise
-    padrao_busca = f"sequencias_{tipo_analise}_*.csv"
-    arquivos_dataset = list(pasta_busca.rglob(padrao_busca))
-
-    if not arquivos_dataset:
-        console.print(f"[yellow]Nenhum dataset encontrado com o padrão: {padrao_busca}[/yellow]")
-        return
-
-    # Itera por cada arquivo encontrado (cada grupo/youtuber)
-    for caminho_dataset in arquivos_dataset:
-        nome_grupo = caminho_dataset.parent.name
-        console.print(f"\n[bold cyan]--------------------------------------------------[/bold cyan]")
-        console.print(f"[bold cyan]Processando Grupo: {nome_grupo}[/bold cyan]")
-        console.print(f"[dim]Arquivo: {caminho_dataset.name}[/dim]")
+    # Itera sobre as pastas de grupos/youtubers
+    for pasta_grupo in [d for d in pasta_busca.iterdir() if d.is_dir()]:
+        if pasta_grupo.name == 'plots': continue
         
-        # Cria pasta para plots se não existir
-        pasta_plots = caminho_dataset.parent / 'plots'
+        nome_grupo = pasta_grupo.name
+        pasta_plots = pasta_grupo / 'plots'
         pasta_plots.mkdir(exist_ok=True)
 
-        # --- Analisando Causas (Pré-Evento) ---
-        console.print(f"\n[bold]A. Analisando Causas (Pré-Evento)[/bold]")
-        seqs_pre = carregar_listas_para_mineracao(caminho_dataset, modo='pre')
+        # Processamento PRE (Causas)
+        arquivo_pre = list(pasta_grupo.glob(f"sequencias_pre_{tipo_analise}_*.csv"))
+        if arquivo_pre:
+            caminho = arquivo_pre[0]
+            console.print(f"\n[bold cyan]> Analisando CAUSAS em: {nome_grupo}[/bold cyan]")
+            
+            listas, rotulos = carregar_listas_para_mineracao(caminho, modo='pre')
+            resultados = minerar_padroes_frequentes(listas, rotulos, min_suporte, modo='pre', min_tamanho=2)
+            
+            nome_csv = f"padroes_CAUSA_{tipo_analise}_{nome_grupo}.csv"
+            formatar_e_salvar_resultados(resultados, 'precursora', pasta_grupo / nome_csv)
+            
+            gerar_sankey_sequencias(resultados, 'pre', pasta_plots / f"sankey_CAUSA_{nome_grupo}.html", f"Fluxo de Causa: {nome_grupo}")
 
-        resultados_pre = minerar_padroes_frequentes(
-            seqs_pre, 
-            min_suporte_percent=min_suporte, 
-            min_tamanho=2, # Padrões com pelo menos 2 passos para ter fluxo
-            max_tamanho=5
-        )
-        
-        # Salva Relatório PRE
-        nome_saida_pre = f"padroes_CAUSA_{caminho_dataset.stem}.csv"
-        formatar_e_salvar_resultados(resultados_pre, 'precursora', caminho_dataset.parent / nome_saida_pre)
-        
-        # Gera Sankey PRE
-        sankey_pre_path = pasta_plots / f"sankey_CAUSA_{caminho_dataset.stem}.html"
-        gerar_sankey_sequencias(
-            resultados_pre, 
-            'pre', 
-            sankey_pre_path, 
-            f"Fluxo de Causa (O que leva à Toxicidade?) - {nome_grupo}"
-        )
+        # Processamento POS (Consequências)
+        arquivo_pos = list(pasta_grupo.glob(f"sequencias_pos_{tipo_analise}_*.csv"))
+        if arquivo_pos:
+            caminho = arquivo_pos[0]
+            console.print(f"\n[bold cyan]> Analisando CONSEQUÊNCIAS em: {nome_grupo}[/bold cyan]")
+            
+            listas, rotulos = carregar_listas_para_mineracao(caminho, modo='pos')
+            resultados = minerar_padroes_frequentes(listas, rotulos, min_suporte, modo='pos', min_tamanho=2)
+            
+            nome_csv = f"padroes_CONSEQUENCIA_{tipo_analise}_{nome_grupo}.csv"
+            formatar_e_salvar_resultados(resultados, 'sucessora', pasta_grupo / nome_csv)
+            
+            gerar_sankey_sequencias(resultados, 'pos', pasta_plots / f"sankey_CONSEQUENCIA_{nome_grupo}.html", f"Fluxo de Consequência: {nome_grupo}")
 
-        # --- Analisando Consequências (Pós-Evento) ---
-        console.print(f"\n[bold]B. Analisando Consequências (Pós-Evento)[/bold]")
-        seqs_pos = carregar_listas_para_mineracao(caminho_dataset, modo='pos')
-        
-        resultados_pos = minerar_padroes_frequentes(
-            seqs_pos, 
-            min_suporte_percent=min_suporte, 
-            min_tamanho=2, # Padrões com pelo menos 2 passos para ter fluxo
-            max_tamanho=5
-        )
-
-        # Salva Relatório POS
-        nome_saida_pos = f"padroes_CONSEQUENCIA_{caminho_dataset.stem}.csv"
-        formatar_e_salvar_resultados(resultados_pos, 'sucessora', caminho_dataset.parent / nome_saida_pos)
-        
-        # Gera Sankey POS
-        sankey_pos_path = pasta_plots / f"sankey_CONSEQUENCIA_{caminho_dataset.stem}.html"
-        gerar_sankey_sequencias(
-            resultados_pos, 
-            'pos', 
-            sankey_pos_path, 
-            f"Fluxo de Consequência (O que acontece após?) - {nome_grupo}"
-        )
-
-    console.print("\n[bold green]=== Processamento Concluído ===[/bold green]")
+    console.print("\n[bold green]=== Mineração de Relevância Concluída ===[/bold green]")
 
 if __name__ == "__main__":
     MIN_SUPORTE_PERCENT = 10.0 

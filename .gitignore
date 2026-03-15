@@ -4,7 +4,14 @@
 
 # Para ignorar as configurações de máquina
 /Coletor/crawler/.venv
+/Coletor/crawler/__pycache__
+/Coletor/crawler/scripts/__pycache__
 
 .dvc/
 
-/Coletor/crawler/perspective/api_key.txt
+# Para ignorar modelos BERTopic
+/Coletor/crawler/bertopic/modelos
+/Coletor/crawler/bertopic/__pycache__
+
+# Para ignorar a chave do Perspective API
+/Coletor/crawler/NLP/perspective/api_key.txt

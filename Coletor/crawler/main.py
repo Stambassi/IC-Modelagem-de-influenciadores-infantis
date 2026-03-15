@@ -4,10 +4,10 @@ import pandas as pd
 from googleapiclient.discovery import build
 from rich.console import Console
 from rich.table import Table
-from rich.markdown import Markdown
 import script
 from scripts.analise import analise_completa
 from scripts.reset import reset
+from pathlib import Path
 import video_process
 import os
 import csv
@@ -19,333 +19,218 @@ console.print(" Coletor de dados do [bold red]Youtube[/] - [bold white]v1.1[/]\n
 console.print("==============================================================================================\n",style="bold white")
 
 csv_path = "youtuberslist.csv"
-perguntas = [
-    {
+
+# -------------------------------------------------------------------
+# CONFIGURAÇÃO DE PERGUNTAS (INQUIRER)
+# -------------------------------------------------------------------
+perguntas = {
+    "menu_principal": {
         "type": "list",
         "message": "Escolha uma ação",
         "choices": ["Mostrar Lista de influenciadores pesquisados", "Adicionar novo(s) influenciadore(s)", 
-        "Coletar dados", "Analisar dados","Transcrever vídeos","Baixar vídeos","Reiniciar data de coleta","Sair"]
+        "Coletar dados", "Analisar dados","Transcrever vídeos","Baixar áudios","Reiniciar data de coleta","Sair"]
     },
-    {
-        "type": "list",
-        "message": "Deseja adicionar novo(s)?",
-        "choices": ["Sim", "Não"]
-    },
-    {
+    "whisper_model": {
         "type": "list",
         "message": "Qual tamanho do modelo do Whisper?",
-        "choices": ["tiny", "base", "small", "medium", "large","turbo"]
-    },{
+        "choices": ["tiny", "base", "small", "medium", "large", "turbo"]
+    },
+    "coleta_modo": {
         "type": "list",
         "message": "Coletar dados >> Coletar de todos os youtubers ou escolher alguns?",
-        "choices": ["Todos","Escolher","Voltar"]
-    },{
+        "choices": ["Todos", "Escolher", "Voltar"]
+    },
+    "alvo_modo": {
         "type": "list",
         "message": "Todos os youtubers ou apenas um?",
-        "choices": ["Todos","Escolher","Voltar"]
-    },{
+        "choices": ["Todos", "Escolher", "Voltar"]
+    },
+    "transcrever_download": {
         "type": "list",
-        "message": "Transcrever vídeo >> Precisa fazer o download do áudio também?",
-        "choices": ["Sim","Não"]
+        "message": "Transcrever vídeo >> Precisa fazer o download do áudio se não existir?",
+        "choices": ["Sim", "Não (Apenas locais)"]
     }
-]
+}
 
 api_key = "AIzaSyDb4titBt1hddZ1uC1gdvtySjyWmyYW70c"
 
-def get_channel_id_subs(channel_name):
-# Criação do serviço da API do YouTube
-    youtube = build('youtube', 'v3', developerKey=api_key)
+# -------------------------------------------------------------------
+# FUNÇÕES DE APOIO (YOUTUBE API & VALIDATION)
+# -------------------------------------------------------------------
 
-    # Busca pelo canal com o nome especificado
-    search_request = youtube.search().list(
-        q=channel_name,
-        type='channel',
-        part='snippet',
-        maxResults=1
-    )
+def get_channel_id_subs(channel_name):
+    youtube = build('youtube', 'v3', developerKey=api_key)
+    search_request = youtube.search().list(q=channel_name, type='channel', part='snippet', maxResults=1)
     search_response = search_request.execute()
 
-    # Verifica se foi encontrado algum resultado
     if 'items' in search_response and len(search_response['items']) > 0:
         channel_id = search_response['items'][0]['id']['channelId']
-
-        # Obtém informações detalhadas do canal
-        channel_request = youtube.channels().list(
-            id=channel_id,
-            part='statistics'
-        )
+        channel_request = youtube.channels().list(id=channel_id, part='statistics')
         channel_response = channel_request.execute()
 
-        # Extrai a quantidade de inscritos
         if 'items' in channel_response and len(channel_response['items']) > 0:
             subscriber_count = channel_response['items'][0]['statistics']['subscriberCount']
             return channel_id, subscriber_count
-        else:
-            return channel_id, None  
-    else:
-        return None, None
+    return None, None
 
-def is_channel_valid(data):
-    test = True
-    try:
-        df = pd.read_csv(csv_path)
-        if df.empty == False:
-            for _, row in df.iterrows():
-                if str(row["channel_id"]) == data[0]:
-                    test = False
-    except FileNotFoundError:
-        test = True
-    return test
+def is_channel_valid(channel_id):
+    if not os.path.exists(csv_path): return True
+    df = pd.read_csv(csv_path)
+    return not (df['channel_id'] == channel_id).any()
 
 def adicionar_influenciador():
-    console.print(">> Inseririndo canais -> Pode inserir um ou vários, quando for mais de um usar [bold cyan],[/] para dividir")
+    console.print(">> Inserindo canais -> Use [bold cyan],[/] para múltiplos")
     entrada = input("Nome(s): ")
-    nomes = entrada.split(',')
-    total_subs = []
-    total_id = []
-    nomes_correto = []
-    dict = {}
-    i = 0
-    while i < len(nomes):
-        nome = nomes[i]
-        console.log("Adicionando "+nome.strip()+" ("+str(i)+")")
-        data = get_channel_id_subs(nome)
-        test = is_channel_valid(data)
-        nomes_correto.append(script.nomeCanal(data[0]))
-        if test: 
-            total_id.append(data[0])
-            total_subs.append(data[1])
-            nomes[i] = nome.strip() # Deixar nome sem espaços em branco no comeco e final
-            console.print("[green]Sucesso[/] ao inserir canal")
-            dict = {'nome': nomes_correto, 'channel_id': total_id, 'subscribers': total_subs, 'ultimoAnoColetado': "2019", 'ultimoMesColetado': "Janeiro"
-            , "videosColetados":0,"comentariosColetados":0,"videosTranscritos":0}
-            i += 1
+    nomes = [n.strip() for n in entrada.split(',')]
+    
+    novos_dados = []
+    for nome in nomes:
+        console.log(f"Buscando {nome}...")
+        c_id, subs = get_channel_id_subs(nome)
+        
+        if c_id and is_channel_valid(c_id):
+            nome_oficial = script.nomeCanal(c_id)
+            novos_dados.append({
+                'nome': nome_oficial, 'channel_id': c_id, 'subscribers': subs,
+                'ultimoAnoColetado': "2019", 'ultimoMesColetado': "Janeiro",
+                'videosColetados': 0, 'comentariosColetados': 0, 'videosTranscritos': 0
+            })
+            console.print(f"[green]Sucesso[/] ao inserir {nome_oficial}")
         else:
-            console.print("[red]Erro[/] ao inserir canal: Canal já existente")
-            nomes.pop(i)
+            console.print(f"[red]Erro[/] ao inserir {nome}: Canal já existe ou não encontrado")
 
-        # console.log("Testando",log_locals=True)
+    if novos_dados:
+        df_novos = pd.DataFrame(novos_dados)
+        header = not os.path.exists(csv_path)
+        df_novos.to_csv(csv_path, mode='a', index=False, header=header)
 
-    df = pd.DataFrame(dict)
-    try:
-    # Verifica se o arquivo já existe
-        with open(csv_path, 'r') as f:
-            header = False  # Não escreve o cabeçalho se o arquivo já existe
-    except FileNotFoundError:
-        header = True  # Escreve o cabeçalho se o arquivo não existe
-    df.to_csv(csv_path, mode='a', index=False, header=header)
-    print(" ")
-
-def gerar_pergunta_youtube(varios=False):
-    try:
-        df = pd.read_csv(csv_path)
-        if df.empty:
-            prompt (perguntas[1])
-        else:
-            youtubers = []
-            for _, row in df.iterrows():
-                youtubers.append(str(row["nome"]))
-            if varios:
-                return youtubers
-            return [{ "type": "list", "message": "Escolha um youtuber", "choices": youtubers}]
-
-    except FileNotFoundError:
-        console.print("Lista [red]vazia[/]")
-        adicionar = prompt (perguntas[1])
-        print(" ")
-        if adicionar[0] == "Sim":
-            adicionar_influenciador()
+def obter_youtubers_csv():
+    if not os.path.exists(csv_path): return []
+    return pd.read_csv(csv_path)['nome'].tolist()
 
 def atualizar_lista_influenciadores():
-    try:
-        df = pd.read_csv(csv_path)
-        base_dir = "files"
-        for ytb_folder in os.listdir(base_dir):
-            videos_coletados = 0
-            comentarios_coletados = 0
-            next_ytb_dir = os.path.join(base_dir, ytb_folder)
-            if os.path.isdir(next_ytb_dir):
-                # andar pelos anos
-                for year_folder in os.listdir(next_ytb_dir):
-                    next_year_dir = os.path.join(next_ytb_dir, year_folder)
-                    if os.path.isdir(next_year_dir):
-                        # andar pelos meses
-                        for month_folder in os.listdir(next_year_dir):
-                            next_month_dir = os.path.join(next_year_dir, month_folder)
-                            if os.path.isdir(next_month_dir):
-                                # andar por cada pasta dentro do mes
-                                for folder in os.listdir(next_month_dir):
-                                    folder_path = os.path.join(next_month_dir, folder)
-                                    if os.path.isdir(folder_path):
-                                        # Path to the comments_info.csv file
-                                        comments_path = os.path.join(folder_path, 'comments_analysis.csv')
-                                        video_path = os.path.join(folder_path, 'videos_info.csv')
-                                        # Check if the file exists
-                                        if os.path.exists(comments_path):
-                                            videos_coletados += 1
-                                            result_df = pd.read_csv(comments_path)
-                                            comentarios_coletados += result_df.loc[0,'comments_total']
-                                        elif os.path.exists(video_path):
-                                            videos_coletados += 1
-            videos_transcritos = video_process.atualizar_video_total_transcritos(ytb_folder)
+    """Sincroniza os dados locais com o CSV principal"""
+    if not os.path.exists(csv_path): return
     
-            df.loc[df.nome == ytb_folder, 'videosColetados'] = videos_coletados
-            df.loc[df.nome == ytb_folder, 'comentariosColetados'] = comentarios_coletados
-            df.loc[df.nome == ytb_folder, 'videosTranscritos'] = videos_transcritos
-        df.to_csv(csv_path, index=False)
-    except FileNotFoundError as e:
-        header = ['nome',"channel_id","subscribers","ultimoAnoColetado","ultimoMesColetado","videosColetados","comentariosColetados","videosTranscritos"]
-        print(e)
-        with open(csv_path, 'w', newline='') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=header)
-            writer.writeheader()
-    console.print("Lista de youtubers inicializada...\n")
+    df = pd.read_csv(csv_path)
+    base_dir = Path("files")
+    
+    for index, row in df.iterrows():
+        youtuber = row['nome']
+        ytb_path = base_dir / youtuber
+        v_col, c_col = 0, 0
+        
+        if ytb_path.exists():
+            for csv_info in ytb_path.rglob("videos_info.csv"):
+                v_col += 1
+                comm_path = csv_info.parent / "comments_analysis.csv"
+                if comm_path.exists():
+                    try: 
+                        c_col += pd.read_csv(comm_path).loc[0, 'comments_total']
+                    except: pass
+            
+            # Chama a função de contagem do video_process
+            v_trans = video_process.atualizar_video_total_transcritos(youtuber)
+            
+            df.at[index, 'videosColetados'] = v_col
+            df.at[index, 'comentariosColetados'] = c_col
+            df.at[index, 'videosTranscritos'] = v_trans
+            
+    df.to_csv(csv_path, index=False)
+    console.print("[dim]Dashboard sincronizado com sucesso.[/]")
 
 def mostrar_lista_influenciadores():
-    try:
-        df = pd.read_csv(csv_path)
-        #print(df)
-        #print(csv_path)
+    if not os.path.exists(csv_path):
+        console.print("[red]Lista vazia![/]")
+        return
 
-        if df.empty:
-            prompt (perguntas[1])
-        else:
-            tabela = Table(title="Influenciadores")
-            tabela.add_column("Nome", justify="center", style="red")
-            # tabela.add_column("Channel ID", justify="center", style="white")
-            tabela.add_column("Subscribers", justify="right", style="green")
-            tabela.add_column("Ultima Data de coleta", justify="center")
-            tabela.add_column("Videos coletados", justify="right", style="green")
-            tabela.add_column("Comentários coletados", justify="right", style="cyan")
-            tabela.add_column("Videos transcritos", justify="right", style="green")
-            total_videos = 0
-            total_comentarios = 0
-            total_videos_transcritos = 0
-            for _, row in df.iterrows():
-                mes = str(row['ultimoMesColetado'])
-                ano = str(row['ultimoAnoColetado'])
-                videos_transcritos = row["videosTranscritos"]
-                tabela.add_row(
-                    str(row["nome"]), 
-                    str(row["subscribers"]), 
-                    str(mes +"/"+ ano),
-                    str(row["videosColetados"]),
-                    str(row["comentariosColetados"]),
-                    str(videos_transcritos)
-                )
-                total_videos += row["videosColetados"]
-                total_comentarios += row["comentariosColetados"]
-                total_videos_transcritos += videos_transcritos
-            console.print(tabela)
-            console.print("[bold]Total de vídeos coletados: [green]"+str(total_videos)+"[/]\nTotal de comentários coletados: [cyan]"+str(total_comentarios)+"[/]\nTotal de videos transcritos: [purple]"+str(total_videos_transcritos)+"[/]")
-            print(" ")
-    except FileNotFoundError:
-        console.print("Lista [red]vazia[/]")
-        adicionar = prompt (perguntas[1])
-        print(" ")
-        if adicionar[0] == "Sim":
-            adicionar_influenciador()
+    df = pd.read_csv(csv_path)
+    tabela = Table(title="Influenciadores")
+    tabela.add_column("Nome", justify="center", style="red")
+    tabela.add_column("Subscribers", justify="right", style="green")
+    tabela.add_column("Última Coleta", justify="center")
+    tabela.add_column("Vídeos", justify="right", style="green")
+    tabela.add_column("Comentários", justify="right", style="cyan")
+    tabela.add_column("Transcritos", justify="right", style="magenta")
+
+    for _, row in df.iterrows():
+        tabela.add_row(
+            str(row["nome"]), str(row["subscribers"]),
+            f"{row['ultimoMesColetado']}/{row['ultimoAnoColetado']}",
+            str(row["videosColetados"]), str(row["comentariosColetados"]),
+            str(row["videosTranscritos"])
+        )
+    
+    console.print(tabela)
+    console.print(f"Total Vídeos: [green]{df['videosColetados'].sum()}[/] | "
+                  f"Comentários: [cyan]{df['comentariosColetados'].sum()}[/] | "
+                  f"Transcritos: [magenta]{df['videosTranscritos'].sum()}[/]")
+
+# -------------------------------------------------------------------
+# LOOP PRINCIPAL
+# -------------------------------------------------------------------
 
 def main():
-    resultado = prompt (perguntas[0])
-    print(" ")
-    while resultado[0] != "Sair":
-        if resultado[0] == "Mostrar Lista de influenciadores pesquisados":
+    while True:
+        acao = inquirer.select(
+            message=perguntas["menu_principal"]["message"],
+            choices=perguntas["menu_principal"]["choices"]
+        ).execute()
+
+        if acao == "Sair": break
+
+        if acao == "Mostrar Lista de influenciadores pesquisados":
             atualizar_lista_influenciadores()
             mostrar_lista_influenciadores()
-        elif resultado [0] == "Adicionar novo(s) influenciadore(s)":
+
+        elif acao == "Adicionar novo(s) influenciadore(s)":
             adicionar_influenciador()
-        elif resultado[0] == "Coletar dados":
-            resultado_escolha = prompt(perguntas[3])
-            if resultado_escolha[0] == "Todos":
-                console.print(">> [green]Coletando dados[/]")
+
+        elif acao == "Coletar dados":
+            modo = inquirer.select(message=perguntas["coleta_modo"]["message"], choices=perguntas["coleta_modo"]["choices"]).execute()
+            if modo == "Todos":
                 script.main()
-                print(" ")
-            elif resultado_escolha[0] == "Escolher":
-                lista_total_youtubers = gerar_pergunta_youtube(varios=True)
-                lista_youtubers = inquirer.checkbox(
-                    message="Marque youtubers desejados (use <espaço> para escolher e <enter> para finalizar escolhas)",
-                    choices=lista_total_youtubers,  
-                    validate=lambda result: len(result) >= 1,
-                    invalid_message="Escolha pelo menos um youtuber",).execute()
-                script.coletar_videos_youtuber(lista_youtubers)
-                print(" ")
-            elif resultado_escolha[0] == "Voltar":
-                print("Voltando...")
-        elif resultado[0] == "Analisar dados":
-            console.print(">> [green]Analisando dados[/]")
+            elif modo == "Escolher":
+                lista = obter_youtubers_csv()
+                selecionados = inquirer.checkbox(message="Escolha os youtubers:", choices=lista).execute()
+                if selecionados: script.coletar_videos_youtuber(selecionados)
+
+        elif acao == "Analisar dados":
             analise_completa()
-            print(" ")
-        elif resultado[0] == "Transcrever vídeos":
-            download = prompt(perguntas[5])
-            resultado_escolha = prompt(perguntas[4])
-            if download[0] == "Sim":
-                if resultado_escolha[0] == "Todos":
-                    modelo = prompt(perguntas[2])
-                    console.print(">> [green]Transcrevendo vídeos de todos[/]")
-                    print(f"Modelo escolhido: "+modelo[0])
-                    video_process.process_all_videos(modelo[0])
-                    print(" ")
-                elif resultado_escolha[0] == "Escolher":
-                    modelo = prompt(perguntas[2])
-                    pergunta_youtuber = gerar_pergunta_youtube()
-                    print(" ")
-                    youtuber = prompt(pergunta_youtuber)
-                    print(youtuber)
-                    console.print(">> [green]Transcrevendo vídeos do "+youtuber[0])
-                    video_process.process_youtuber_video(modelo[0],youtuber[0])
-                    print(" ")
-                elif resultado_escolha[0] == "Voltar":
-                    print("Voltando...")
-            else:
-                if resultado_escolha[0] == "Todos":
-                    modelo = prompt(perguntas[2])
-                    console.print(">> [green]Transcrevendo vídeos de todos[/]")
-                    print(f"Modelo escolhido: "+modelo[0])
-                    video_process.transcript_all_videos(modelo[0])
-                    print(" ")
-                elif resultado_escolha[0] == "Escolher":
-                    modelo = prompt(perguntas[2])
-                    pergunta_youtuber = gerar_pergunta_youtube()
-                    print(" ")
-                    youtuber = prompt(pergunta_youtuber)
-                    print(youtuber)
-                    console.print(">> [green]Transcrevendo vídeos do "+youtuber[0])
-                    video_process.transcript_videos_youtuber(modelo[0],youtuber[0])
-                    print(" ")
-                elif resultado_escolha[0] == "Voltar":
-                    print("Voltando...")
 
-        elif resultado[0] == "Baixar vídeos":
-            resultado_escolha = prompt(perguntas[4])
-            if resultado_escolha[0] == "Todos":
-                console.print(">> [green]Baixando vídeos de todos[/]")
-                video_process.download_all_videos()
-                print(" ")
-            elif resultado_escolha[0] == "Escolher":
-                pergunta_youtuber = gerar_pergunta_youtube()
-                print(" ")
-                youtuber = prompt(pergunta_youtuber)
-                print(youtuber)
-                console.print(">> [green]Baixando vídeos do "+youtuber[0])
-                video_process.download_videos_youtuber(youtuber[0])
-                print(" ")
-            elif resultado_escolha[0] == "Voltar":
-                print("Voltando...")
+        elif acao == "Transcrever vídeos":
+            # 1. Pergunta sobre o download
+            quer_baixar = inquirer.select(message=perguntas["transcrever_download"]["message"], choices=perguntas["transcrever_download"]["choices"]).execute()
+            tipo_transcricao = "transcrever" if "Sim" in quer_baixar else "transcrever_local"
             
-        elif resultado[0] == "Reiniciar data de coleta":
+            # 2. Pergunta sobre o alvo
+            alvo_modo = inquirer.select(message=perguntas["alvo_modo"]["message"], choices=perguntas["alvo_modo"]["choices"]).execute()
+            if alvo_modo == "Voltar": continue
+
+            # 3. Pergunta sobre o modelo Whisper
+            modelo = inquirer.select(message=perguntas["whisper_model"]["message"], choices=perguntas["whisper_model"]["choices"]).execute()
+            
+            if alvo_modo == "Todos":
+                video_process.orquestrar_processamento("Geral", tipo_transcricao, modelo)
+            else:
+                lista = obter_youtubers_csv()
+                alvo = inquirer.select(message="Selecione o Youtuber:", choices=lista).execute()
+                video_process.orquestrar_processamento(alvo, tipo_transcricao, modelo)
+
+        elif acao == "Baixar áudios":
+            alvo_modo = inquirer.select(message=perguntas["alvo_modo"]["message"], choices=perguntas["alvo_modo"]["choices"]).execute()
+            if alvo_modo == "Voltar": continue
+            
+            if alvo_modo == "Todos":
+                video_process.orquestrar_processamento("Geral", "baixar")
+            else:
+                lista = obter_youtubers_csv()
+                alvo = inquirer.select(message="Selecione o Youtuber:", choices=lista).execute()
+                video_process.orquestrar_processamento(alvo, "baixar")
+
+        elif acao == "Reiniciar data de coleta":
             data = reset()
-            console.print(">> Dia de coleta reinciado para: "+str(data[2])+"/"+str(data[1])+"/"+str(data[0]))
-            print("")
-
-        resultado = prompt (perguntas[0])
-        print(" ")
-
+            console.print(f">> Data reiniciada para: {data[2]}/{data[1]}/{data[0]}")
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
