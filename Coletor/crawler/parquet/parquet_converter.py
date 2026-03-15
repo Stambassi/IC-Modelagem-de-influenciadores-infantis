@@ -95,8 +95,7 @@ def sanitizar_dataframe_generico(df_novo: pd.DataFrame, df_referencia: pd.DataFr
         
         if is_bool:
             mapper = {'true': True, '1': True, '1.0': True, 'false': False, '0': False, '0.0': False}
-            mapped = df_final[col].astype(str).str.lower().map(mapper)
-            df_final[col] = mapped.infer_objects(copy=False).fillna(False).astype(bool)
+            df_final[col] = (df_final[col].astype(str).str.lower().map(mapper) == True)
             continue
 
         # Fallback: Se não é número nem bool, garantimos que seja STRING
@@ -149,7 +148,7 @@ def ler_dados_locais(caminho_youtuber: str) -> pd.DataFrame:
                 # Ler Tiras
                 path_tiras = os.path.join(root, "tiras_video.csv")
                 if os.path.exists(path_tiras):
-                    df_tiras = pd.read_csv(path_tiras)
+                    df_tiras = pd.read_csv(path_tiras, engine='python', on_bad_lines='skip')
                     video_data['tiras_data'] = df_tiras.to_dict(orient='records')
                 else:
                     video_data['tiras_data'] = []
@@ -157,10 +156,18 @@ def ler_dados_locais(caminho_youtuber: str) -> pd.DataFrame:
                 # Ler Comentários
                 path_comments = os.path.join(root, "comments_info.csv")
                 if os.path.exists(path_comments):
-                    df_comments = pd.read_csv(path_comments)
+                    df_comments = pd.read_csv(path_comments, engine='python', on_bad_lines='skip')
                     video_data['comment_data'] = df_comments.to_dict(orient='records')
                 else:
                     video_data['comment_data'] = []
+
+                # Ler Análise de Comentários
+                path_comments = os.path.join(root, "comments_analysis.csv")
+                if os.path.exists(path_comments):
+                    df_comments = pd.read_csv(path_comments, engine='python', on_bad_lines='skip')
+                    video_data['comment_analysis'] = df_comments.to_dict(orient='records')
+                else:
+                    video_data['comment_analysis'] = []
 
                 # Ler Transcrição
                 path_json = os.path.join(root, "video_text.json")
@@ -336,7 +343,7 @@ def recriar_pastas_do_parquet(nome_youtuber: str, dir_files="files", dir_data="d
             os.makedirs(path_video, exist_ok=True)
 
             # Recriar videos_info.csv (Metadados simples)
-            cols_drop_aux = ['tiras_data', 'transcript', 'comment_data', 'published_at_dt']
+            cols_drop_aux = ['tiras_data', 'transcript', 'comment_data', 'comment_analysis', 'published_at_dt']
             cols_drop_total = cols_drop_aux + cols_canal
             cols_drop_existentes = [c for c in cols_drop_total if c in df.columns]
             
@@ -360,6 +367,24 @@ def recriar_pastas_do_parquet(nome_youtuber: str, dir_files="files", dir_data="d
             if isinstance(comment_data, str):
                 try: comment_data = json.loads(comment_data)
                 except: comment_data = []
+            
+            if comment_data is not None:
+                if isinstance(comment_data, np.ndarray): comment_data = comment_data.tolist()
+                if isinstance(comment_data, list) and len(comment_data) > 0:
+                    df_comments = pd.DataFrame(comment_data)
+                    df_comments.to_csv(os.path.join(path_video, "comments_info.csv"), index=False)
+
+            # Recriar comments_analysis.csv (Análise dos Comentários)
+            comment_analysis = row.get('comment_analysis')
+            if isinstance(comment_analysis, str):
+                try: comment_analysis = json.loads(comment_analysis)
+                except: comment_analysis = []
+            
+            if comment_analysis is not None:
+                if isinstance(comment_analysis, np.ndarray): comment_analysis = comment_analysis.tolist()
+                if isinstance(comment_analysis, list) and len(comment_analysis) > 0:
+                    df_analysis = pd.DataFrame(comment_analysis)
+                    df_analysis.to_csv(os.path.join(path_video, "comments_analysis.csv"), index=False)
 
             # Recriar video_text.json (JSON)
             transcript = row.get('transcript')
@@ -388,7 +413,7 @@ def recriar_pastas_do_parquet(nome_youtuber: str, dir_files="files", dir_data="d
     console.print(f"[bold green]Decoder finalizado para {nome_youtuber}.[/bold green]\n")
 
 '''
-    Ação DIFF: Compara IDs e status (Transcrição) entre Pasta Local e Parquet Remoto.
+    Ação DIFF: Compara IDs e status (Transcrição, Comentários, Análises) entre Pasta Local e Parquet Remoto.
 '''
 def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
     path_parquet = os.path.join(dir_data, f"{nome_youtuber}.parquet")
@@ -398,43 +423,53 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
 
     # Função auxiliar para verificar se existe conteúdo real de forma segura
     def _tem_conteudo(val):
-        # Checa Nulo/NaN/None
+        # Checa Nulo absoluto
         if val is None:
             return False
-        try:
-            if pd.isna(val): return False
-        except: pass # pd.isna pode falhar em estruturas muito complexas, ignora erro
-        
-        # Checa Array Numpy 
-        if isinstance(val, np.ndarray):
+            
+        # Trata estruturas de dados e strings primeiro
+        if isinstance(val, np.ndarray): 
             return val.size > 0
-            
-        # Checa Lista ou Dict
-        if isinstance(val, (list, dict)):
+        if isinstance(val, (list, dict)): 
             return len(val) > 0
-            
-        # Checa String
-        if isinstance(val, str):
+        if isinstance(val, str): 
             return bool(val.strip())
             
-        # Se for número ou outro objeto não nulo, considera que tem conteúdo
+        # Trata valores escalares numéricos (NaN)
+        try:
+            # Como arrays e listas já foram filtrados acima, o pd.isna agora é 100% seguro
+            if pd.isna(val): 
+                return False
+        except: 
+            pass 
+        
+        # Se for número válido, booleano, ou objeto desconhecido com conteúdo
         return True
 
-    # Carregar Local
+    # 1. Carregar Local
     df_local = ler_dados_locais(path_files)
     ids_local = set()
     transcritos_local_count = 0
+    comments_local_count = 0
+    analysis_local_count = 0
     
     if not df_local.empty and 'video_id' in df_local.columns:
         df_local = df_local.drop_duplicates(subset=['video_id'], keep='last')
         ids_local = set(df_local['video_id'])
-        # Conta transcritos locais
+        
+        # Conta métricas locais
         if 'transcript' in df_local.columns:
             transcritos_local_count = df_local['transcript'].apply(_tem_conteudo).sum()
+        if 'comment_data' in df_local.columns:
+            comments_local_count = df_local['comment_data'].apply(_tem_conteudo).sum()
+        if 'comment_analysis' in df_local.columns:
+            analysis_local_count = df_local['comment_analysis'].apply(_tem_conteudo).sum()
     
-    # Carregar Remoto
+    # 2. Carregar Remoto
     ids_remoto = set()
     transcritos_remoto_count = 0
+    comments_remoto_count = 0
+    analysis_remoto_count = 0
     df_parquet = pd.DataFrame()
     
     if os.path.exists(path_parquet):
@@ -443,27 +478,46 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
             if not df_parquet.empty and 'video_id' in df_parquet.columns:
                 df_parquet['video_id'] = df_parquet['video_id'].astype(str).str.strip()
                 ids_remoto = set(df_parquet['video_id'])
-                # Conta transcritos remotos
+                
+                # Conta métricas remotas
                 if 'transcript' in df_parquet.columns:
                     transcritos_remoto_count = df_parquet['transcript'].apply(_tem_conteudo).sum()
+                if 'comment_data' in df_parquet.columns:
+                    comments_remoto_count = df_parquet['comment_data'].apply(_tem_conteudo).sum()
+                if 'comment_analysis' in df_parquet.columns:
+                    analysis_remoto_count = df_parquet['comment_analysis'].apply(_tem_conteudo).sum()
         except: pass
 
-    # Operações de Conjunto (IDs)
+    # 3. Operações de Conjunto (IDs)
     novos_locais = ids_local - ids_remoto
     apenas_remoto = ids_remoto - ids_local
     em_ambos = ids_local & ids_remoto
 
-    # Cálculos de porcentagem
+    # Cálculos de porcentagem Local
     total_local = len(ids_local)
-    pct_local = (transcritos_local_count / total_local * 100) if total_local > 0 else 0.0
+    pct_trans_local = (transcritos_local_count / total_local * 100) if total_local > 0 else 0.0
+    pct_comm_local = (comments_local_count / total_local * 100) if total_local > 0 else 0.0
+    pct_anal_local = (analysis_local_count / total_local * 100) if total_local > 0 else 0.0
     
+    # Cálculos de porcentagem Remoto
     total_remoto = len(ids_remoto)
-    pct_remoto = (transcritos_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
+    pct_trans_remoto = (transcritos_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
+    pct_comm_remoto = (comments_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
+    pct_anal_remoto = (analysis_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
 
-    console.print(f"Vídeos Locais: {total_local} ([cyan]{transcritos_local_count} transcritos - {pct_local:.1f}%[/cyan])")
-    console.print(f"Vídeos Remotos: {total_remoto} ([cyan]{transcritos_remoto_count} transcritos - {pct_remoto:.1f}%[/cyan])")
+    # Exibição no terminal
+    console.print(f"[bold]Vídeos Locais: {total_local}[/bold]")
+    console.print(f"  ├─ Transcrições: [cyan]{transcritos_local_count} ({pct_trans_local:.1f}%)[/cyan]")
+    console.print(f"  ├─ Comentários: [cyan]{comments_local_count} ({pct_comm_local:.1f}%)[/cyan]")
+    console.print(f"  └─ Análises de Comentários.: [cyan]{analysis_local_count} ({pct_anal_local:.1f}%)[/cyan]")
+    
+    console.print(f"[bold]Vídeos Remotos: {total_remoto}[/bold]")
+    console.print(f"  ├─ Transcrições: [cyan]{transcritos_remoto_count} ({pct_trans_remoto:.1f}%)[/cyan]")
+    console.print(f"  ├─ Comentários: [cyan]{comments_remoto_count} ({pct_comm_remoto:.1f}%)[/cyan]")
+    console.print(f"  └─ Análises de Comentários.: [cyan]{analysis_remoto_count} ({pct_anal_remoto:.1f}%)[/cyan]")
     console.print("-" * 40)
     
+    # Diff de Arquivos Físicos
     if novos_locais:
         console.print(f"[yellow]Novos Locais (Falta Encode):[/yellow] {len(novos_locais)}")
         console.print(f"  Ex: {list(novos_locais)[:3]}...")
@@ -473,39 +527,43 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
     if apenas_remoto:
         console.print(f"[red]Faltando Local (Necessário Decode):[/red] {len(apenas_remoto)}")
 
-    # Diff de Conteúdo (Transcrição)
-    atualizacao_local = []
-    atualizacao_remota = []
+    # Diff de Conteúdo Interno
+    atualizacao_local_trans = []
+    atualizacao_remota_trans = []
+    atualizacao_local_comm = []
+    atualizacao_remota_comm = []
 
     if em_ambos and not df_local.empty and not df_parquet.empty:
         df_l_check = df_local[df_local['video_id'].isin(em_ambos)].set_index('video_id')
         df_r_check = df_parquet[df_parquet['video_id'].isin(em_ambos)].set_index('video_id')
 
         for vid in em_ambos:
-            # Verifica Local
-            has_local = False
-            if 'transcript' in df_l_check.columns:
-                val = df_l_check.at[vid, 'transcript']
-                has_local = _tem_conteudo(val)
+            # 1. Verifica Transcrição
+            has_l_trans = _tem_conteudo(df_l_check.at[vid, 'transcript']) if 'transcript' in df_l_check.columns else False
+            has_r_trans = _tem_conteudo(df_r_check.at[vid, 'transcript']) if 'transcript' in df_r_check.columns else False
+            
+            if has_l_trans and not has_r_trans: atualizacao_local_trans.append(vid)
+            elif has_r_trans and not has_l_trans: atualizacao_remota_trans.append(vid)
 
-            # Verifica Remoto
-            has_remote = False
-            if 'transcript' in df_r_check.columns:
-                val = df_r_check.at[vid, 'transcript']
-                has_remote = _tem_conteudo(val)
+            # 2. Verifica Comentários (Usa comment_data como base para saber se tem comentários novos)
+            has_l_comm = _tem_conteudo(df_l_check.at[vid, 'comment_data']) if 'comment_data' in df_l_check.columns else False
+            has_r_comm = _tem_conteudo(df_r_check.at[vid, 'comment_data']) if 'comment_data' in df_r_check.columns else False
 
-            # Classifica
-            if has_local and not has_remote:
-                atualizacao_local.append(vid)
-            elif has_remote and not has_local:
-                atualizacao_remota.append(vid)
+            if has_l_comm and not has_r_comm: atualizacao_local_comm.append(vid)
+            elif has_r_comm and not has_l_comm: atualizacao_remota_comm.append(vid)
 
-    if atualizacao_local:
-        console.print(f"\n[cyan]Transcrição Nova no Local (Falta Encode):[/cyan] {len(atualizacao_local)}")
-        console.print(f"  Ex: {atualizacao_local[:3]}...")
-    
-    if atualizacao_remota:
-        console.print(f"[magenta]Transcrição Nova no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota)}")
+    # Exibição das atualizações de conteúdo
+    if atualizacao_local_trans:
+        console.print(f"\n[cyan]Transcrição Nova no Local (Falta Encode):[/cyan] {len(atualizacao_local_trans)}")
+        console.print(f"  Ex: {atualizacao_local_trans[:3]}...")
+    if atualizacao_remota_trans:
+        console.print(f"[magenta]Transcrição Nova no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_trans)}")
+
+    if atualizacao_local_comm:
+        console.print(f"\n[cyan]Comentários Novos no Local (Falta Encode):[/cyan] {len(atualizacao_local_comm)}")
+        console.print(f"  Ex: {atualizacao_local_comm[:3]}...")
+    if atualizacao_remota_comm:
+        console.print(f"[magenta]Comentários Novos no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_comm)}")
         
     console.print("")
 
