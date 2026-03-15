@@ -3,6 +3,7 @@ import os
 import json
 import sys
 import numpy as np
+import gc
 from rich.console import Console
 from rich.rule import Rule
 
@@ -94,7 +95,8 @@ def sanitizar_dataframe_generico(df_novo: pd.DataFrame, df_referencia: pd.DataFr
         
         if is_bool:
             mapper = {'true': True, '1': True, '1.0': True, 'false': False, '0': False, '0.0': False}
-            df_final[col] = df_final[col].astype(str).str.lower().map(mapper).fillna(False).astype(bool)
+            mapped = df_final[col].astype(str).str.lower().map(mapper)
+            df_final[col] = mapped.infer_objects(copy=False).fillna(False).astype(bool)
             continue
 
         # Fallback: Se não é número nem bool, garantimos que seja STRING
@@ -232,6 +234,11 @@ def atualizar_parquet_com_locais(nome_youtuber: str, dir_files="files", dir_data
         # Junta tudo e remove duplicatas (mantendo a versão local mais recente)
         df_unificado = pd.concat([df_remoto, df_local])
         df_unificado = df_unificado.drop_duplicates(subset=['video_id'], keep='last')
+
+        # Limpeza de memória
+        del df_remoto
+        del df_local
+        gc.collect()
     else:
         df_unificado = df_remoto
 
@@ -254,6 +261,10 @@ def atualizar_parquet_com_locais(nome_youtuber: str, dir_files="files", dir_data
             console.print("[green]Salvo em modo texto.[/green]")
     else:
         console.print("[red]Nada para salvar.[/red]")
+
+    # Limpeza final antes de ir para o próximo youtuber
+    del df_unificado
+    gc.collect()
     console.print("")
 
 '''
