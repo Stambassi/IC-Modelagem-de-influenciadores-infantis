@@ -20,6 +20,7 @@ BASE_DIR = Path("files")
 MAPA_YOUTUBERS_CATEGORIA = {
     'Amy Scarlet': 'Roblox',
     'AuthenticGames': 'Minecraft',
+    'Athos': 'Minecraft',
     'Cadres': 'Minecraft',
     'Julia MineGirl': 'Roblox',
     'Kass e KR': 'Minecraft',

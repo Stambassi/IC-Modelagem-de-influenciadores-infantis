@@ -152,6 +152,14 @@ def ler_dados_locais(caminho_youtuber: str) -> pd.DataFrame:
                 else:
                     video_data['tiras_data'] = []
 
+                # Ler Comentários
+                path_comments = os.path.join(root, "comments_info.csv")
+                if os.path.exists(path_comments):
+                    df_comments = pd.read_csv(path_comments)
+                    video_data['comment_data'] = df_comments.to_dict(orient='records')
+                else:
+                    video_data['comment_data'] = []
+
                 # Ler Transcrição
                 path_json = os.path.join(root, "video_text.json")
                 if os.path.exists(path_json):
@@ -317,7 +325,7 @@ def recriar_pastas_do_parquet(nome_youtuber: str, dir_files="files", dir_data="d
             os.makedirs(path_video, exist_ok=True)
 
             # Recriar videos_info.csv (Metadados simples)
-            cols_drop_aux = ['tiras_data', 'transcript', 'published_at_dt']
+            cols_drop_aux = ['tiras_data', 'transcript', 'comment_data', 'published_at_dt']
             cols_drop_total = cols_drop_aux + cols_canal
             cols_drop_existentes = [c for c in cols_drop_total if c in df.columns]
             
@@ -336,7 +344,13 @@ def recriar_pastas_do_parquet(nome_youtuber: str, dir_files="files", dir_data="d
                     df_tiras = pd.DataFrame(tiras_data)
                     df_tiras.to_csv(os.path.join(path_video, "tiras_video.csv"), index=False)
 
-            # Recriar Transcrição (JSON)
+            # Recriar comments_info.csv (Comentários)
+            comment_data = row.get('comment_data')
+            if isinstance(comment_data, str):
+                try: comment_data = json.loads(comment_data)
+                except: comment_data = []
+
+            # Recriar video_text.json (JSON)
             transcript = row.get('transcript')
             
             # Tratamento: Pode vir como string JSON ou Objeto Python
