@@ -57,7 +57,16 @@ def limpar_nome_arquivo(nome: str) -> str:
 def sanitizar_dataframe_generico(df_novo: pd.DataFrame, df_referencia: pd.DataFrame = None) -> pd.DataFrame:
     df_final = df_novo.copy()
     
-    # Herança de Tipos: Se já tem dados antigos, tenta imitar os tipos deles
+    # 1. Força a conversão de objetos complexos para JSON válido
+    colunas_complexas = ['tiras_data', 'comment_data', 'comment_analysis', 'transcript']
+    for col in colunas_complexas:
+        if col in df_final.columns:
+            # Aplica o dumps apenas se for uma estrutura real. Se já for string (ex: vindo do remoto), ignora
+            df_final[col] = df_final[col].apply(
+                lambda x: json.dumps(x, ensure_ascii=False, cls=NumpyEncoder) if isinstance(x, (dict, list, np.ndarray)) else x
+            )
+            
+    # 2. Herança de Tipos: Se já tem dados antigos, tenta imitar os tipos deles
     if df_referencia is not None:
         for col in df_referencia.columns:
             if col in df_final.columns:
@@ -72,24 +81,25 @@ def sanitizar_dataframe_generico(df_novo: pd.DataFrame, df_referencia: pd.DataFr
                 except:
                     pass # Se falhar, cairá na regra genérica abaixo
 
-    # Inferência Genérica: Para colunas novas ou sem referência
+    # 3. Inferência Genérica: Para colunas novas ou sem referência
     for col in df_final.columns:
-        # Se já tratamos acima, pula
+        # Se já foi tratado na herança, pula
         if df_referencia is not None and col in df_referencia.columns:
             continue
             
-        # Colunas de ID (video_id, channel_id) NUNCA devem ser números
-        # para evitar perder zeros à esquerda (ex: "001" virar 1)
+        # Pula a alteração das colunas complexas para não quebrar a string JSON que acabamos de montar
+        if col in colunas_complexas:
+            df_final[col] = df_final[col].astype(str)
+            continue
+            
+        # Colunas de ID NUNCA devem ser números para não perder zeros à esquerda
         if not col.lower().endswith("id") and not col.lower().endswith("ids"):
-            # Tenta converter para número
             df_temp = pd.to_numeric(df_final[col], errors='coerce')
-            # Se a conversão funcionou (não gerou apenas Nulos), é aceita
             if not df_temp.isna().all():
                 df_final[col] = df_temp
                 continue
 
         # Tenta converter para Booleano (True/False)
-        # Verifica se os valores únicos parecem booleanos
         unique_vals = set(df_final[col].astype(str).str.lower().unique())
         is_bool = unique_vals.issubset({'true', 'false', '1', '0', '1.0', '0.0', 'nan', 'none'})
         
@@ -98,10 +108,15 @@ def sanitizar_dataframe_generico(df_novo: pd.DataFrame, df_referencia: pd.DataFr
             df_final[col] = (df_final[col].astype(str).str.lower().map(mapper) == True)
             continue
 
-        # Fallback: Se não é número nem bool, garantimos que seja STRING
+        # Fallback: Se não é número nem bool (e não é JSON), garantimos que seja STRING
         df_final[col] = df_final[col].astype(str)
     
     return df_final
+
+
+
+
+
 
 '''
     Lê recursivamente a estrutura de pastas 'files/{youtuber}' e consolida em um DataFrame
