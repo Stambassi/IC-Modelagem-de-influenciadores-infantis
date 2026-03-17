@@ -38,6 +38,28 @@ class NumpyEncoder(json.JSONEncoder):
         return super().default(obj)
 
 '''
+    Função global para verificar se existe conteúdo real de forma segura
+    Usada tanto pelo Diff quanto pelo Encode para evitar perda de dados
+'''
+def tem_conteudo_valido(val):
+    if val is None: return False
+
+    if isinstance(val, str): 
+        val_limpo = val.strip().lower()
+        if val_limpo in ["[]", "{}", "nan", "none", "null", ""]: return False
+        return True
+        
+    if isinstance(val, np.ndarray): return val.size > 0
+
+    if isinstance(val, (list, dict)): return len(val) > 0
+
+    try:
+        if pd.isna(val): return False
+    except: pass 
+
+    return True
+
+'''
     Remove caracteres especiais de nomes de arquivos para evitar erros no sistema operacional
     @param nome - String original
     @return str - String limpa
@@ -247,17 +269,39 @@ def atualizar_parquet_com_locais(nome_youtuber: str, dir_files="files", dir_data
 
         console.print("[dim]Normalizando tipos de dados...[/dim]")
         
-        # Aplica sanitização: Usa o remoto como gabarito de tipos para o local
         if not df_remoto.empty:
+            # Aplica sanitização
             df_local = sanitizar_dataframe_generico(df_local, df_referencia=df_remoto)
+            
+            console.print("[dim]Mesclando dados e preservando conteúdos antigos...[/dim]")
+            df_remoto_idx = df_remoto.set_index('video_id')
+            df_local_idx = df_local.set_index('video_id')
+            
+            # Identifica vídeos que existem nos dois lugares
+            ids_comuns = df_local_idx.index.intersection(df_remoto_idx.index)
+            
+            # Colunas de conteúdo que não queremos sobrescrever por vazio
+            colunas_preservar = ['transcript', 'comment_data', 'comment_analysis', 'tiras_data']
+            
+            for vid in ids_comuns:
+                for col in colunas_preservar:
+                    if col in df_remoto_idx.columns and col in df_local_idx.columns:
+                        val_local = df_local_idx.at[vid, col]
+                        val_remoto = df_remoto_idx.at[vid, col]
+                        
+                        # Se local VAZIO e remoto CHEIO, resgata o remoto
+                        if not tem_conteudo_valido(val_local) and tem_conteudo_valido(val_remoto):
+                            df_local_idx.at[vid, col] = val_remoto
+            
+            # Separa os vídeos exclusivos do remoto e junta com o nosso local (agora enriquecido)
+            df_remoto_exclusivos = df_remoto_idx[~df_remoto_idx.index.isin(df_local_idx.index)]
+            df_unificado = pd.concat([df_remoto_exclusivos, df_local_idx]).reset_index()
+            
         else:
             df_local = sanitizar_dataframe_generico(df_local)
+            df_unificado = df_local
 
-        # Junta tudo e remove duplicatas (mantendo a versão local mais recente)
-        df_unificado = pd.concat([df_remoto, df_local])
-        df_unificado = df_unificado.drop_duplicates(subset=['video_id'], keep='last')
-
-        # Limpeza de memória
+        # Limpeza de memória crítica
         del df_remoto
         del df_local
         gc.collect()
@@ -276,7 +320,7 @@ def atualizar_parquet_com_locais(nome_youtuber: str, dir_files="files", dir_data
             console.print(f"[bold green]Sucesso! {path_parquet} salvo com {len(df_unificado)} registros.[/bold green]")
         except Exception as e:
             console.print(f"[bold red]Erro Fatal no Encoder: {e}[/bold red]")
-            # Fallback de Emergência: Salvar tudo como texto se a tipagem estrita falhar
+            # Fallback de Emergência
             console.print("[yellow]Tentando salvar convertendo tudo para String (Modo de Emergência)...[/yellow]")
             df_unificado = df_unificado.astype(str)
             df_unificado.to_parquet(path_parquet, index=False)
@@ -285,10 +329,11 @@ def atualizar_parquet_com_locais(nome_youtuber: str, dir_files="files", dir_data
         console.print("[red]Nada para salvar.[/red]")
 
     # Limpeza final antes de ir para o próximo youtuber
-    del df_unificado
+    try: del df_unificado 
+    except: pass
     gc.collect()
     console.print("")
-
+    
 '''
     Ação DECODE: Lê arquivo Parquet e recria a árvore de diretórios e arquivos JSON/CSV.
     
@@ -436,35 +481,6 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
     
     console.print(Rule(f"Diff: {nome_youtuber}"))
 
-    # Função auxiliar para verificar se existe conteúdo real de forma segura
-    def _tem_conteudo(val):
-        # 1. Checa Nulo absoluto
-        if val is None:
-            return False
-            
-        # 2. Trata Strings (A causa da alucinação do diff)
-        if isinstance(val, str): 
-            val_limpo = val.strip().lower()
-            # Se for uma string que é apenas a representação de algo vazio, ignora
-            if val_limpo in ["[]", "{}", "nan", "none", "null", ""]:
-                return False
-            return True
-
-        # 3. Trata estruturas de dados
-        if isinstance(val, np.ndarray): 
-            return val.size > 0
-        if isinstance(val, (list, dict)): 
-            return len(val) > 0
-            
-        # 4. Trata valores numéricos/escalares (NaN)
-        try:
-            if pd.isna(val): 
-                return False
-        except: 
-            pass 
-        
-        return True
-
     # 1. Carregar Local
     df_local = ler_dados_locais(path_files)
     ids_local = set()
@@ -478,11 +494,11 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
         
         # Conta métricas locais
         if 'transcript' in df_local.columns:
-            transcritos_local_count = df_local['transcript'].apply(_tem_conteudo).sum()
+            transcritos_local_count = df_local['transcript'].apply(tem_conteudo_valido).sum()
         if 'comment_data' in df_local.columns:
-            comments_local_count = df_local['comment_data'].apply(_tem_conteudo).sum()
+            comments_local_count = df_local['comment_data'].apply(tem_conteudo_valido).sum()
         if 'comment_analysis' in df_local.columns:
-            analysis_local_count = df_local['comment_analysis'].apply(_tem_conteudo).sum()
+            analysis_local_count = df_local['comment_analysis'].apply(tem_conteudo_valido).sum()
     
     # 2. Carregar Remoto
     ids_remoto = set()
@@ -500,11 +516,11 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
                 
                 # Conta métricas remotas
                 if 'transcript' in df_parquet.columns:
-                    transcritos_remoto_count = df_parquet['transcript'].apply(_tem_conteudo).sum()
+                    transcritos_remoto_count = df_parquet['transcript'].apply(tem_conteudo_valido).sum()
                 if 'comment_data' in df_parquet.columns:
-                    comments_remoto_count = df_parquet['comment_data'].apply(_tem_conteudo).sum()
+                    comments_remoto_count = df_parquet['comment_data'].apply(tem_conteudo_valido).sum()
                 if 'comment_analysis' in df_parquet.columns:
-                    analysis_remoto_count = df_parquet['comment_analysis'].apply(_tem_conteudo).sum()
+                    analysis_remoto_count = df_parquet['comment_analysis'].apply(tem_conteudo_valido).sum()
         except: pass
 
     # 3. Operações de Conjunto (IDs)
@@ -558,15 +574,15 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
 
         for vid in em_ambos:
             # 1. Verifica Transcrição
-            has_l_trans = _tem_conteudo(df_l_check.at[vid, 'transcript']) if 'transcript' in df_l_check.columns else False
-            has_r_trans = _tem_conteudo(df_r_check.at[vid, 'transcript']) if 'transcript' in df_r_check.columns else False
+            has_l_trans = tem_conteudo_valido(df_l_check.at[vid, 'transcript']) if 'transcript' in df_l_check.columns else False
+            has_r_trans = tem_conteudo_valido(df_r_check.at[vid, 'transcript']) if 'transcript' in df_r_check.columns else False
             
             if has_l_trans and not has_r_trans: atualizacao_local_trans.append(vid)
             elif has_r_trans and not has_l_trans: atualizacao_remota_trans.append(vid)
 
             # 2. Verifica Comentários (Usa comment_data como base para saber se tem comentários novos)
-            has_l_comm = _tem_conteudo(df_l_check.at[vid, 'comment_data']) if 'comment_data' in df_l_check.columns else False
-            has_r_comm = _tem_conteudo(df_r_check.at[vid, 'comment_data']) if 'comment_data' in df_r_check.columns else False
+            has_l_comm = tem_conteudo_valido(df_l_check.at[vid, 'comment_data']) if 'comment_data' in df_l_check.columns else False
+            has_r_comm = tem_conteudo_valido(df_r_check.at[vid, 'comment_data']) if 'comment_data' in df_r_check.columns else False
 
             if has_l_comm and not has_r_comm: atualizacao_local_comm.append(vid)
             elif has_r_comm and not has_l_comm: atualizacao_remota_comm.append(vid)
