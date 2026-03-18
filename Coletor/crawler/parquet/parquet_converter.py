@@ -4,6 +4,7 @@ import json
 import sys
 import numpy as np
 import gc
+import ast
 from rich.console import Console
 from rich.rule import Rule
 
@@ -43,10 +44,12 @@ class NumpyEncoder(json.JSONEncoder):
 '''
 def tem_conteudo_valido(val):
     if val is None: return False
-
+    
+    if isinstance(val, bool): return val 
+    
     if isinstance(val, str): 
         val_limpo = val.strip().lower()
-        if val_limpo in ["[]", "{}", "nan", "none", "null", ""]: return False
+        if val_limpo in ["[]", "{}", "nan", "none", "null", "", "false"]: return False
         return True
         
     if isinstance(val, np.ndarray): return val.size > 0
@@ -58,6 +61,34 @@ def tem_conteudo_valido(val):
     except: pass 
 
     return True
+
+'''
+    Função para mergulhar em listas de dicionários (como tiras ou comentários)
+    para checar se uma sub-coluna específica existe e tem dados reais
+'''
+def verifica_coluna_interna(val, nome_coluna):
+    if not tem_conteudo_valido(val): 
+        return False
+        
+    # Se for string (veio do Parquet), tenta converter para lista de volta
+    if isinstance(val, str):
+        import json, ast
+        try:
+            try: obj = json.loads(val)
+            except: obj = ast.literal_eval(val)
+        except:
+            return False
+    else:
+        obj = val
+        
+    # Percorre as linhas (dicionários) procurando pela nossa coluna de toxicidade
+    if isinstance(obj, list):
+        for linha in obj:
+            if isinstance(linha, dict) and nome_coluna in linha:
+                v = linha[nome_coluna]
+                if pd.notna(v) and str(v).strip().lower() not in ['nan', 'none', 'null', '']:
+                    return True # Achou pelo menos uma tira com a coluna preenchida
+    return False
 
 '''
     Remove caracteres especiais de nomes de arquivos para evitar erros no sistema operacional
@@ -104,24 +135,24 @@ def sanitizar_dataframe_generico(df_novo: pd.DataFrame, df_referencia: pd.DataFr
                     pass # Se falhar, cairá na regra genérica abaixo
 
     # 3. Inferência Genérica: Para colunas novas ou sem referência
+    colunas_complexas = ['transcript', 'comment_data', 'comment_analysis', 'tiras_data']
+
     for col in df_final.columns:
-        # Se já foi tratado na herança, pula
         if df_referencia is not None and col in df_referencia.columns:
             continue
             
-        # Pula a alteração das colunas complexas para não quebrar a string JSON que acabamos de montar
+        # Força as colunas de dados pesados a serem sempre strings seguras, 
+        # impedindo que o Pandas as transforme em False ou números
         if col in colunas_complexas:
             df_final[col] = df_final[col].astype(str)
             continue
-            
-        # Colunas de ID NUNCA devem ser números para não perder zeros à esquerda
+
         if not col.lower().endswith("id") and not col.lower().endswith("ids"):
             df_temp = pd.to_numeric(df_final[col], errors='coerce')
             if not df_temp.isna().all():
                 df_final[col] = df_temp
                 continue
 
-        # Tenta converter para Booleano (True/False)
         unique_vals = set(df_final[col].astype(str).str.lower().unique())
         is_bool = unique_vals.issubset({'true', 'false', '1', '0', '1.0', '0.0', 'nan', 'none'})
         
@@ -130,15 +161,10 @@ def sanitizar_dataframe_generico(df_novo: pd.DataFrame, df_referencia: pd.DataFr
             df_final[col] = (df_final[col].astype(str).str.lower().map(mapper) == True)
             continue
 
-        # Fallback: Se não é número nem bool (e não é JSON), garantimos que seja STRING
+        # Fallback
         df_final[col] = df_final[col].astype(str)
     
     return df_final
-
-
-
-
-
 
 '''
     Lê recursivamente a estrutura de pastas 'files/{youtuber}' e consolida em um DataFrame
@@ -161,9 +187,11 @@ def ler_dados_locais(caminho_youtuber: str) -> pd.DataFrame:
     if os.path.exists(path_channel):
         try:
             df_channel = pd.read_csv(path_channel)
+
             if not df_channel.empty:
                 row_channel = df_channel.iloc[0].to_dict()
                 channel_data = {f"{PREFIXO_CANAL}{k}": v for k, v in row_channel.items()}
+
         except Exception as e:
             console.print(f"[bold red]Erro ao ler channel_info.csv: {e}[/bold red]")
 
@@ -224,9 +252,25 @@ def ler_dados_locais(caminho_youtuber: str) -> pd.DataFrame:
                 console.print(f"[bold red]Erro ao processar pasta {root}: {e}[/bold red]")
 
     df = pd.DataFrame(todos_videos)
-    # Garante tipagem de ID no final
+    
+    # Garante tipagem de ID no final e resolve Pastas Duplicadas Físicas
     if not df.empty and 'video_id' in df.columns:
         df['video_id'] = df['video_id'].astype(str).str.strip()
+        
+        # Calcula uma "pontuação" para cada pasta baseada em quantos dados vitais ela tem
+        colunas_vitais = ['transcript', 'comment_data', 'comment_analysis',' tiras_data']
+        colunas_existentes = [c for c in colunas_vitais if c in df.columns]
+        
+        if colunas_existentes:
+            # Cria uma coluna temporária somando os dados não-nulos
+            df['_score'] = df[colunas_existentes].notna().sum(axis=1)
+
+            # Ordena para que a pasta mais "cheia" vá para o final da lista
+            df = df.sort_values('_score', ascending=True)
+            df = df.drop(columns=['_score'])
+            
+        # Agora o keep='last' vai sempre manter a pasta que tem as transcrições e comentários
+        df = df.drop_duplicates(subset=['video_id'], keep='last')
         
     return df
 
@@ -320,7 +364,6 @@ def atualizar_parquet_com_locais(nome_youtuber: str, dir_files="files", dir_data
             console.print(f"[bold green]Sucesso! {path_parquet} salvo com {len(df_unificado)} registros.[/bold green]")
         except Exception as e:
             console.print(f"[bold red]Erro Fatal no Encoder: {e}[/bold red]")
-            # Fallback de Emergência
             console.print("[yellow]Tentando salvar convertendo tudo para String (Modo de Emergência)...[/yellow]")
             df_unificado = df_unificado.astype(str)
             df_unificado.to_parquet(path_parquet, index=False)
@@ -449,17 +492,30 @@ def recriar_pastas_do_parquet(nome_youtuber: str, dir_files="files", dir_data="d
             # Recriar video_text.json (JSON)
             transcript = row.get('transcript')
             
-            # Tratamento: Pode vir como string JSON ou Objeto Python
-            if isinstance(transcript, str):
-                try: transcript_obj = json.loads(transcript)
-                except: transcript_obj = None
-            else:
-                transcript_obj = transcript
+            # Limpeza preventiva de strings vazias ou falsas
+            if str(transcript).strip().lower() in ['false', 'none', 'nan', 'null', '', '[]', '{}']:
+                transcript = None
+            
+            transcript_obj = None
+            if transcript is not None:
+                if isinstance(transcript, str):
+                    try: 
+                        # Tentativa 1: JSON permissivo (strict=False ignora \n e \t literais no meio do texto)
+                        transcript_obj = json.loads(transcript, strict=False)
+                    except Exception as e1: 
+                        try:
+                            # Tentativa 2: Modo Python bruto (com correção via Regex para 'nan')
+                            import re
+                            clean_str = re.sub(r'\bnan\b', 'None', transcript)
+                            transcript_obj = ast.literal_eval(clean_str)
+                        except Exception as e2:
+                            console.print(f"[yellow]⚠️ Falha no parser do vídeo {video_id} | Erro JSON: {e1} | Erro AST: {e2}[/yellow]")
+                            transcript_obj = None
+                else:
+                    transcript_obj = transcript
 
             if transcript_obj is not None:
-                # Verifica se não é NaN float
                 if not (isinstance(transcript_obj, float) and np.isnan(transcript_obj)):
-                    # Usa NumpyEncoder para garantir que tipos int64/float32 sejam salvos corretamente
                     with open(os.path.join(path_video, "video_text.json"), 'w', encoding='utf-8') as f:
                         json.dump(transcript_obj, f, ensure_ascii=False, cls=NumpyEncoder)
                         
@@ -473,7 +529,7 @@ def recriar_pastas_do_parquet(nome_youtuber: str, dir_files="files", dir_data="d
     console.print(f"[bold green]Decoder finalizado para {nome_youtuber}.[/bold green]\n")
 
 '''
-    Ação DIFF: Compara IDs e status (Transcrição, Comentários, Análises) entre Pasta Local e Parquet Remoto.
+    Ação DIFF: Compara IDs e status (Transcrição, Comentários, Análises, Tiras e Toxicidade) entre Pasta Local e Parquet Remoto
 '''
 def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
     path_parquet = os.path.join(dir_data, f"{nome_youtuber}.parquet")
@@ -484,27 +540,37 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
     # 1. Carregar Local
     df_local = ler_dados_locais(path_files)
     ids_local = set()
-    transcritos_local_count = 0
-    comments_local_count = 0
-    analysis_local_count = 0
+    transcritos_local_count = comments_local_count = analysis_local_count = 0
+    tiras_local_count = tox_local_count = ptox_local_count = 0
     
     if not df_local.empty and 'video_id' in df_local.columns:
         df_local = df_local.drop_duplicates(subset=['video_id'], keep='last')
         ids_local = set(df_local['video_id'])
         
-        # Conta métricas locais
-        if 'transcript' in df_local.columns:
+        # Conta métricas locais básicas
+        if 'transcript' in df_local.columns: 
             transcritos_local_count = df_local['transcript'].apply(tem_conteudo_valido).sum()
-        if 'comment_data' in df_local.columns:
+
+        if 'comment_data' in df_local.columns: 
             comments_local_count = df_local['comment_data'].apply(tem_conteudo_valido).sum()
-        if 'comment_analysis' in df_local.columns:
+
+        if 'comment_analysis' in df_local.columns: 
             analysis_local_count = df_local['comment_analysis'].apply(tem_conteudo_valido).sum()
+
+        # Conta métricas cruzadas (Tiras + Toxicidade) local
+        mask_tiras_l = df_local['tiras_data'].apply(tem_conteudo_valido) if 'tiras_data' in df_local.columns else pd.Series(False, index=df_local.index)
+        tiras_local_count = mask_tiras_l.sum()
+        
+        mask_tox_l = df_local['tiras_data'].apply(lambda x: verifica_coluna_interna(x, 'toxicity')) if 'tiras_data' in df_local.columns else pd.Series(False, index=df_local.index)
+        tox_local_count = (mask_tiras_l & mask_tox_l).sum()
+        
+        mask_ptox_l = df_local['tiras_data'].apply(lambda x: verifica_coluna_interna(x, 'p_toxicity')) if 'tiras_data' in df_local.columns else pd.Series(False, index=df_local.index)
+        ptox_local_count = (mask_tiras_l & mask_ptox_l).sum()
     
     # 2. Carregar Remoto
     ids_remoto = set()
-    transcritos_remoto_count = 0
-    comments_remoto_count = 0
-    analysis_remoto_count = 0
+    transcritos_remoto_count = comments_remoto_count = analysis_remoto_count = 0
+    tiras_remoto_count = tox_remoto_count = ptox_remoto_count = 0
     df_parquet = pd.DataFrame()
     
     if os.path.exists(path_parquet):
@@ -514,13 +580,25 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
                 df_parquet['video_id'] = df_parquet['video_id'].astype(str).str.strip()
                 ids_remoto = set(df_parquet['video_id'])
                 
-                # Conta métricas remotas
-                if 'transcript' in df_parquet.columns:
+                # Conta métricas remotas básicas
+                if 'transcript' in df_parquet.columns: 
                     transcritos_remoto_count = df_parquet['transcript'].apply(tem_conteudo_valido).sum()
-                if 'comment_data' in df_parquet.columns:
+
+                if 'comment_data' in df_parquet.columns: 
                     comments_remoto_count = df_parquet['comment_data'].apply(tem_conteudo_valido).sum()
-                if 'comment_analysis' in df_parquet.columns:
+
+                if 'comment_analysis' in df_parquet.columns: 
                     analysis_remoto_count = df_parquet['comment_analysis'].apply(tem_conteudo_valido).sum()
+
+                # Conta métricas cruzadas remotas
+                mask_tiras_r = df_parquet['tiras_data'].apply(tem_conteudo_valido) if 'tiras_data' in df_parquet.columns else pd.Series(False, index=df_parquet.index)
+                tiras_remoto_count = mask_tiras_r.sum()
+                
+                mask_tox_r = df_parquet['tiras_data'].apply(lambda x: verifica_coluna_interna(x, 'toxicity')) if 'tiras_data' in df_parquet.columns else pd.Series(False, index=df_parquet.index)
+                tox_remoto_count = (mask_tiras_r & mask_tox_r).sum()
+                
+                mask_ptox_r = df_parquet['tiras_data'].apply(lambda x: verifica_coluna_interna(x, 'p_toxicity')) if 'tiras_data' in df_parquet.columns else pd.Series(False, index=df_parquet.index)
+                ptox_remoto_count = (mask_tiras_r & mask_ptox_r).sum()
         except: pass
 
     # 3. Operações de Conjunto (IDs)
@@ -533,23 +611,35 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
     pct_trans_local = (transcritos_local_count / total_local * 100) if total_local > 0 else 0.0
     pct_comm_local = (comments_local_count / total_local * 100) if total_local > 0 else 0.0
     pct_anal_local = (analysis_local_count / total_local * 100) if total_local > 0 else 0.0
+    pct_tiras_local = (tiras_local_count / total_local * 100) if total_local > 0 else 0.0
+    pct_tox_local = (tox_local_count / tiras_local_count * 100) if tiras_local_count > 0 else 0.0
+    pct_ptox_local = (ptox_local_count / tiras_local_count * 100) if tiras_local_count > 0 else 0.0
     
     # Cálculos de porcentagem Remoto
     total_remoto = len(ids_remoto)
     pct_trans_remoto = (transcritos_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
     pct_comm_remoto = (comments_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
     pct_anal_remoto = (analysis_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
+    pct_tiras_remoto = (tiras_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
+    pct_tox_remoto = (tox_remoto_count / tiras_remoto_count * 100) if tiras_remoto_count > 0 else 0.0
+    pct_ptox_remoto = (ptox_remoto_count / tiras_remoto_count * 100) if tiras_remoto_count > 0 else 0.0
 
     # Exibição no terminal
     console.print(f"[bold]Vídeos Locais: {total_local}[/bold]")
     console.print(f"  ├─ Transcrições: [cyan]{transcritos_local_count} ({pct_trans_local:.1f}%)[/cyan]")
     console.print(f"  ├─ Comentários: [cyan]{comments_local_count} ({pct_comm_local:.1f}%)[/cyan]")
-    console.print(f"  └─ Análises de Comentários.: [cyan]{analysis_local_count} ({pct_anal_local:.1f}%)[/cyan]")
+    console.print(f"  ├─ Análises de Coment.: [cyan]{analysis_local_count} ({pct_anal_local:.1f}%)[/cyan]")
+    console.print(f"  └─ Tiras de Vídeo: [cyan]{tiras_local_count} ({pct_tiras_local:.1f}%)[/cyan]")
+    console.print(f"     ├─ c/ Detoxify: [cyan]{tox_local_count} ({pct_tox_local:.1f}% das tiras)[/cyan]")
+    console.print(f"     └─ c/ Perspective: [cyan]{ptox_local_count} ({pct_ptox_local:.1f}% das tiras)[/cyan]")
     
     console.print(f"[bold]Vídeos Remotos: {total_remoto}[/bold]")
     console.print(f"  ├─ Transcrições: [cyan]{transcritos_remoto_count} ({pct_trans_remoto:.1f}%)[/cyan]")
     console.print(f"  ├─ Comentários: [cyan]{comments_remoto_count} ({pct_comm_remoto:.1f}%)[/cyan]")
-    console.print(f"  └─ Análises de Comentários.: [cyan]{analysis_remoto_count} ({pct_anal_remoto:.1f}%)[/cyan]")
+    console.print(f"  ├─ Análises de Coment.: [cyan]{analysis_remoto_count} ({pct_anal_remoto:.1f}%)[/cyan]")
+    console.print(f"  └─ Tiras de Vídeo: [cyan]{tiras_remoto_count} ({pct_tiras_remoto:.1f}%)[/cyan]")
+    console.print(f"     ├─ c/ Detoxify: [cyan]{tox_remoto_count} ({pct_tox_remoto:.1f}% das tiras)[/cyan]")
+    console.print(f"     └─ c/ Perspective: [cyan]{ptox_remoto_count} ({pct_ptox_remoto:.1f}% das tiras)[/cyan]")
     console.print("-" * 40)
     
     # Diff de Arquivos Físicos
@@ -567,6 +657,8 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
     atualizacao_remota_trans = []
     atualizacao_local_comm = []
     atualizacao_remota_comm = []
+    atualizacao_local_tox = []
+    atualizacao_remota_tox = []
 
     if em_ambos and not df_local.empty and not df_parquet.empty:
         df_l_check = df_local[df_local['video_id'].isin(em_ambos)].set_index('video_id')
@@ -580,25 +672,37 @@ def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
             if has_l_trans and not has_r_trans: atualizacao_local_trans.append(vid)
             elif has_r_trans and not has_l_trans: atualizacao_remota_trans.append(vid)
 
-            # 2. Verifica Comentários (Usa comment_data como base para saber se tem comentários novos)
+            # 2. Verifica Comentários
             has_l_comm = tem_conteudo_valido(df_l_check.at[vid, 'comment_data']) if 'comment_data' in df_l_check.columns else False
             has_r_comm = tem_conteudo_valido(df_r_check.at[vid, 'comment_data']) if 'comment_data' in df_r_check.columns else False
 
             if has_l_comm and not has_r_comm: atualizacao_local_comm.append(vid)
             elif has_r_comm and not has_l_comm: atualizacao_remota_comm.append(vid)
+            
+            # 3. Verifica Toxicidade
+            has_l_tox = verifica_coluna_interna(df_l_check.at[vid, 'tiras_data'], 'toxicity') if 'tiras_data' in df_l_check.columns else False
+            has_r_tox = verifica_coluna_interna(df_r_check.at[vid, 'tiras_data'], 'toxicity') if 'tiras_data' in df_r_check.columns else False
+            
+            if has_l_tox and not has_r_tox: 
+                atualizacao_local_tox.append(vid)
+            elif has_r_tox and not has_l_tox: 
+                atualizacao_remota_tox.append(vid)
 
     # Exibição das atualizações de conteúdo
     if atualizacao_local_trans:
         console.print(f"\n[cyan]Transcrição Nova no Local (Falta Encode):[/cyan] {len(atualizacao_local_trans)}")
-        console.print(f"  Ex: {atualizacao_local_trans[:3]}...")
     if atualizacao_remota_trans:
         console.print(f"[magenta]Transcrição Nova no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_trans)}")
 
     if atualizacao_local_comm:
         console.print(f"\n[cyan]Comentários Novos no Local (Falta Encode):[/cyan] {len(atualizacao_local_comm)}")
-        console.print(f"  Ex: {atualizacao_local_comm[:3]}...")
     if atualizacao_remota_comm:
         console.print(f"[magenta]Comentários Novos no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_comm)}")
+        
+    if atualizacao_local_tox:
+        console.print(f"\n[cyan]Análise de Toxicidade Nova no Local (Falta Encode):[/cyan] {len(atualizacao_local_tox)}")
+    if atualizacao_remota_tox:
+        console.print(f"[magenta]Análise de Toxicidade Nova no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_tox)}")
         
     console.print("")
 
