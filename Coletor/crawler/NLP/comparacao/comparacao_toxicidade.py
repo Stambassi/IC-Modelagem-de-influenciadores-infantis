@@ -449,7 +449,7 @@ def encontrar_threshold_por_concordancia(nivel_alvo: float):
     Função para isolar e persistir todas as tiras que atingiram o limiar crítico
     na Perspective API (score > 0.80), incluindo os dados do Detoxify para comparação.
 '''
-def persistir_casos_criticos_perspective(threshold_alvo: float = 0.80):
+def persistir_casos_criticos_perspective(threshold_alvo: float = 0.70):
     console.print(f"[bold magenta]Isolando casos críticos da Perspective (Score > {threshold_alvo})...[/bold magenta]")
     
     amostras_criticas = []
@@ -468,9 +468,9 @@ def persistir_casos_criticos_perspective(threshold_alvo: float = 0.80):
                     # Adicionar metadados para saber de qual vídeo/youtuber veio a tira
                     # (Extraindo o nome do youtuber e ID do vídeo do caminho do arquivo)
                     partes_caminho = csv_path.parts
-                    # Ajuste os índices [-3] e [-2] conforme a estrutura (ex: files/Youtuber/Video/tiras_video.csv)
-                    df_filtrado['youtuber'] = partes_caminho[-3]
-                    df_filtrado['video_id'] = partes_caminho[-2]
+                    # Ajuste os índices [-5] e [-2] conforme a estrutura (ex: files/Youtuber/Ano/Mês/Video/tiras_video.csv)
+                    df_filtrado['youtuber'] = partes_caminho[-5]
+                    df_filtrado['video'] = partes_caminho[-2]
                     
                     amostras_criticas.append(df_filtrado)
         except Exception as e:
