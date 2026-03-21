@@ -174,7 +174,7 @@ def acao_transcrever_audio(audio_path: str, output_folder: str, model_obj, video
         
         if os.path.exists(audio_path):
             os.remove(audio_path)
-            console.print("> Arquivo deletado com [green] sucesso [/]")
+            console.print("> Áudio deletado com [green] sucesso [/]")
             
         atualizar_status_csv(youtuber, video_id)
         

@@ -3,12 +3,10 @@ import os
 import json
 import sys
 import numpy as np
-import gc
-import ast
+import shutil
 from rich.console import Console
 from rich.rule import Rule
 
-# Inicializa o console do Rich para logs bonitos
 console = Console()
 
 # Mapeamento para criar pastas com nomes de meses em Português
@@ -40,721 +38,592 @@ class NumpyEncoder(json.JSONEncoder):
 
 '''
     Função global para verificar se existe conteúdo real de forma segura
-    Usada tanto pelo Diff quanto pelo Encode para evitar perda de dados
 '''
 def tem_conteudo_valido(val):
-    if val is None: return False
+    if val is None: 
+        return False
     
-    if isinstance(val, bool): return val 
+    if isinstance(val, bool): 
+        return val
     
-    if isinstance(val, str): 
-        val_limpo = val.strip().lower()
-        if val_limpo in ["[]", "{}", "nan", "none", "null", "", "false"]: return False
-        return True
-        
-    if isinstance(val, np.ndarray): return val.size > 0
-
-    if isinstance(val, (list, dict)): return len(val) > 0
-
+    if isinstance(val, (list, dict, set, tuple)): 
+        return len(val) > 0
+    
+    if isinstance(val, np.ndarray): 
+        return val.size > 0
+    
     try:
-        if pd.isna(val): return False
-    except: pass 
+        if pd.isna(val): 
+            return False
+    except: 
+        pass
+
+    if isinstance(val, str):
+        val_limpo = val.strip().lower()
+        if val_limpo in ["", "nan", "none", "null", "[]", "{}"]: 
+            return False
 
     return True
-
-'''
-    Função para mergulhar em listas de dicionários (como tiras ou comentários)
-    para checar se uma sub-coluna específica existe e tem dados reais
-'''
-def verifica_coluna_interna(val, nome_coluna):
-    if not tem_conteudo_valido(val): 
-        return False
-        
-    # Se for string (veio do Parquet), tenta converter para lista de volta
-    if isinstance(val, str):
-        import json, ast
-        try:
-            try: obj = json.loads(val)
-            except: obj = ast.literal_eval(val)
-        except:
-            return False
-    else:
-        obj = val
-        
-    # Percorre as linhas (dicionários) procurando pela nossa coluna de toxicidade
-    if isinstance(obj, list):
-        for linha in obj:
-            if isinstance(linha, dict) and nome_coluna in linha:
-                v = linha[nome_coluna]
-                if pd.notna(v) and str(v).strip().lower() not in ['nan', 'none', 'null', '']:
-                    return True # Achou pelo menos uma tira com a coluna preenchida
-    return False
 
 '''
     Remove caracteres especiais de nomes de arquivos para evitar erros no sistema operacional
     @param nome - String original
     @return str - String limpa
-'''
+''' 
 def limpar_nome_arquivo(nome: str) -> str:
     return "".join([c for c in nome if c.isalpha() or c.isdigit() or c in " .-_"]).strip()
 
 '''
-    Função vital para compatibilidade com Parquet (PyArrow)
-    O Pandas é flexível com tipos mistos, mas o Parquet é estrito.
-    Esta função tenta converter colunas para números/booleanos e, se falhar, garante texto
-    
-    @param df_novo - DataFrame com dados locais
-    @param df_referencia - (Opcional) DataFrame remoto para copiar o schema
-    @return pd.DataFrame - DataFrame higienizado
-'''
-def sanitizar_dataframe_generico(df_novo: pd.DataFrame, df_referencia: pd.DataFrame = None) -> pd.DataFrame:
-    df_final = df_novo.copy()
-    
-    # 1. Força a conversão de objetos complexos para JSON válido
-    colunas_complexas = ['tiras_data', 'comment_data', 'comment_analysis', 'transcript']
-    for col in colunas_complexas:
-        if col in df_final.columns:
-            # Aplica o dumps apenas se for uma estrutura real. Se já for string (ex: vindo do remoto), ignora
-            df_final[col] = df_final[col].apply(
-                lambda x: json.dumps(x, ensure_ascii=False, cls=NumpyEncoder) if isinstance(x, (dict, list, np.ndarray)) else x
-            )
-            
-    # 2. Herança de Tipos: Se já tem dados antigos, tenta imitar os tipos deles
-    if df_referencia is not None:
-        for col in df_referencia.columns:
-            if col in df_final.columns:
-                try:
-                    dtype_ref = df_referencia[col].dtype
-                    # Se era numérico, tenta converter o novo para numérico
-                    if pd.api.types.is_numeric_dtype(dtype_ref):
-                        df_final[col] = pd.to_numeric(df_final[col], errors='coerce')
-                    # Se não for genérico (object), força o tipo específico
-                    if dtype_ref != 'object':
-                        df_final[col] = df_final[col].astype(dtype_ref)
-                except:
-                    pass # Se falhar, cairá na regra genérica abaixo
+    Função para extrair e persistir dados pesados (payload) em arquivos externos,
+    evitando que esses dados fiquem apenas em memória ou embutidos no Parquet
 
-    # 3. Inferência Genérica: Para colunas novas ou sem referência
-    colunas_complexas = ['transcript', 'comment_data', 'comment_analysis', 'tiras_data']
+    @param video_id - ID único do vídeo
+    @param video_data - Dicionário contendo os dados completos do vídeo
+    @param base_path - Diretório base para armazenamento (data/{youtuber}/payload)
+    @return dict - Caminhos dos arquivos gerados
+''' 
+def extrair_payload_externo(video_id: str, video_data: dict, base_path: str) -> dict:
+    paths = {}
+    dirs = {
+        "transcript": os.path.join(base_path, "transcripts"),
+        "comments": os.path.join(base_path, "comments"),
+        "tiras": os.path.join(base_path, "tiras"),
+        "analysis": os.path.join(base_path, "analysis"),
+    }
 
-    for col in df_final.columns:
-        if df_referencia is not None and col in df_referencia.columns:
-            continue
-            
-        # Força as colunas de dados pesados a serem sempre strings seguras, 
-        # impedindo que o Pandas as transforme em False ou números
-        if col in colunas_complexas:
-            df_final[col] = df_final[col].astype(str)
-            continue
+    for dir in dirs.values():
+        os.makedirs(dir, exist_ok=True)
 
-        if not col.lower().endswith("id") and not col.lower().endswith("ids"):
-            df_temp = pd.to_numeric(df_final[col], errors='coerce')
-            if not df_temp.isna().all():
-                df_final[col] = df_temp
-                continue
+    # Transcript (JSON)
+    transcript = video_data.get("transcript")
+    if tem_conteudo_valido(transcript):
+        path = os.path.join(dirs["transcript"], f"{video_id}.json")
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(transcript, f, ensure_ascii=False, cls=NumpyEncoder)
+            paths["transcript_path"] = path.replace("\\", "/") # Padrão universal
+        except Exception as e:
+            console.print(f"[red]Erro ao salvar transcript {video_id}: {e}[/red]")
 
-        unique_vals = set(df_final[col].astype(str).str.lower().unique())
-        is_bool = unique_vals.issubset({'true', 'false', '1', '0', '1.0', '0.0', 'nan', 'none'})
-        
-        if is_bool:
-            mapper = {'true': True, '1': True, '1.0': True, 'false': False, '0': False, '0.0': False}
-            df_final[col] = (df_final[col].astype(str).str.lower().map(mapper) == True)
-            continue
+    # Comments (CSV)
+    comments = video_data.get("comment_data")
+    if isinstance(comments, list) and len(comments) > 0:
+        path = os.path.join(dirs["comments"], f"{video_id}.csv")
+        try:
+            pd.DataFrame(comments).to_csv(path, index=False, escapechar='\\')
+            paths["comments_path"] = path.replace("\\", "/")
+        except Exception as e:
+            console.print(f"[red]Erro ao salvar comments {video_id}: {e}[/red]")
 
-        # Fallback
-        df_final[col] = df_final[col].astype(str)
-    
-    return df_final
+    # Tiras (CSV)
+    tiras = video_data.get("tiras_data")
+    if isinstance(tiras, list) and len(tiras) > 0:
+        path = os.path.join(dirs["tiras"], f"{video_id}.csv")
+        try:
+            pd.DataFrame(tiras).to_csv(path, index=False, escapechar='\\')
+            paths["tiras_path"] = path.replace("\\", "/")
+        except Exception as e:
+            console.print(f"[red]Erro ao salvar tiras {video_id}: {e}[/red]")
+
+    # Analysis (CSV)
+    analysis = video_data.get("comment_analysis")
+    if isinstance(analysis, list) and len(analysis) > 0:
+        path = os.path.join(dirs["analysis"], f"{video_id}.csv")
+        try:
+            pd.DataFrame(analysis).to_csv(path, index=False, escapechar='\\')
+            paths["analysis_path"] = path.replace("\\", "/")
+        except Exception as e:
+            console.print(f"[red]Erro ao salvar analysis {video_id}: {e}[/red]")
+
+    return paths
 
 '''
-    Lê recursivamente a estrutura de pastas 'files/{youtuber}' e consolida em um DataFrame
+    Função para extrair métricas leves a partir dos dados do vídeo,
+    evitando a necessidade de parsing pesado em etapas como diff
+
+    @param video_data - Dicionário contendo os dados completos do vídeo
+    @return dict - Métricas calculadas (flags e contagens)
+''' 
+def extrair_metricas_video(video_data: dict) -> dict:
+    metrics = {}
+    transcript = video_data.get("transcript")
+    comments = video_data.get("comment_data")
+    tiras = video_data.get("tiras_data")
+    analysis = video_data.get("comment_analysis")
+
+    metrics["has_transcript"] = tem_conteudo_valido(transcript)
+    metrics["has_comments"] = isinstance(comments, list) and len(comments) > 0
+    metrics["has_tiras"] = isinstance(tiras, list) and len(tiras) > 0
+    metrics["has_analysis"] = isinstance(analysis, list) and len(analysis) > 0
     
+    # Sonda interna para Toxicidade nas tiras
+    has_tox = has_ptox = False
+    if metrics["has_tiras"]:
+        for tira in tiras:
+            if isinstance(tira, dict):
+                if tem_conteudo_valido(tira.get('toxicity')): has_tox = True
+                if tem_conteudo_valido(tira.get('p_toxicity')): has_ptox = True
+                if has_tox and has_ptox: break
+
+    metrics["has_toxicity"] = has_tox
+    metrics["has_perspective"] = has_ptox
+    metrics["num_comments"] = len(comments) if isinstance(comments, list) else 0
+    metrics["num_tiras"] = len(tiras) if isinstance(tiras, list) else 0
+
+    return metrics
+
+'''
+    Função para gerar uma representação leve do vídeo contendo apenas
+    metadados e referências para arquivos externos (payload)
+
+    @param video_data - Dicionário com dados completos do vídeo
+    @param payload_paths - Caminhos dos arquivos externos gerados
+    @return dict - Registro leve para armazenamento em Parquet
+''' 
+def gerar_indice_video(video_data: dict, payload_paths: dict) -> dict:
+    campos_pesados = ["transcript", "comment_data", "tiras_data", "comment_analysis"]
+    indice = {k: v for k, v in video_data.items() if k not in campos_pesados}
+    indice.update(payload_paths)
+    indice.update(extrair_metricas_video(video_data))
+    return indice
+
+'''
+    Lê estrutura de pastas 'files/{youtuber}' e consolida em um DataFrame de Índice
+
     @param caminho_youtuber - Caminho raiz do youtuber
+    @param nome - Nome do youtuber
     @return pd.DataFrame - DataFrame com todos os dados encontrados
-'''
-def ler_dados_locais(caminho_youtuber: str) -> pd.DataFrame:
-    todos_videos = []
+''' 
+def ler_dados_locais(caminho_youtuber: str, nome_youtuber: str = None, salvar_payload: bool = False) -> pd.DataFrame:
+    todos_indices = []
     
     if not os.path.exists(caminho_youtuber):
         return pd.DataFrame()
 
-    console.print(f"[bold blue]Lendo estrutura de pastas em:[/bold blue] [cyan]{caminho_youtuber}[/cyan]...")
+    console.print(f"[dim]Varrendo estrutura em {caminho_youtuber}...[/dim]")
 
-    # Carrega dados do canal (metadados globais)
+    # Carrega dados do canal
     channel_data = {}
+
     path_channel = os.path.join(caminho_youtuber, "channel_info.csv")
-    
+        
     if os.path.exists(path_channel):
         try:
             df_channel = pd.read_csv(path_channel)
-
             if not df_channel.empty:
-                row_channel = df_channel.iloc[0].to_dict()
-                channel_data = {f"{PREFIXO_CANAL}{k}": v for k, v in row_channel.items()}
-
+                channel_data = {f"{PREFIXO_CANAL}{k}": v for k, v in df_channel.iloc[0].to_dict().items()}
         except Exception as e:
-            console.print(f"[bold red]Erro ao ler channel_info.csv: {e}[/bold red]")
+            console.print(f"[bold red]Erro ao ler channel info: {e}[/bold red]")
 
-    # Navega por todas as subpastas
+    # Navega por subpastas
     for root, dirs, files in os.walk(caminho_youtuber):
         if "videos_info.csv" in files:
             try:
                 video_data = {}
-
-                # Ler Metadata
-                # dtype=str previne que o Pandas converta IDs numéricos automaticamente
                 path_info = os.path.join(root, "videos_info.csv")
-                df_info = pd.read_csv(path_info, dtype=str)
-                video_data = df_info.iloc[0].to_dict()
-
+                video_data = pd.read_csv(path_info, dtype=str).iloc[0].to_dict()
+                
                 if 'video_id' in video_data:
                     video_data['video_id'] = str(video_data['video_id']).strip()
 
-                # Ler Tiras
+                # Lê tiras_video.info
                 path_tiras = os.path.join(root, "tiras_video.csv")
                 if os.path.exists(path_tiras):
-                    df_tiras = pd.read_csv(path_tiras, engine='python', on_bad_lines='skip')
-                    video_data['tiras_data'] = df_tiras.to_dict(orient='records')
+                    video_data['tiras_data'] = pd.read_csv(path_tiras, engine='python', on_bad_lines='skip').to_dict('records')
                 else:
                     video_data['tiras_data'] = []
 
-                # Ler Comentários
+                # Lê comments_info.csv
                 path_comments = os.path.join(root, "comments_info.csv")
                 if os.path.exists(path_comments):
-                    df_comments = pd.read_csv(path_comments, engine='python', on_bad_lines='skip')
-                    video_data['comment_data'] = df_comments.to_dict(orient='records')
+                    video_data['comment_data'] = pd.read_csv(path_comments, engine='python', on_bad_lines='skip').to_dict('records')
                 else:
                     video_data['comment_data'] = []
 
-                # Ler Análise de Comentários
-                path_comments = os.path.join(root, "comments_analysis.csv")
-                if os.path.exists(path_comments):
-                    df_comments = pd.read_csv(path_comments, engine='python', on_bad_lines='skip')
-                    video_data['comment_analysis'] = df_comments.to_dict(orient='records')
+                # Lê comments_analysis.csv
+                path_analysis = os.path.join(root, "comments_analysis.csv")
+                if os.path.exists(path_analysis):
+                    video_data['comment_analysis'] = pd.read_csv(path_analysis, engine='python', on_bad_lines='skip').to_dict('records')
                 else:
                     video_data['comment_analysis'] = []
-
-                # Ler Transcrição
+                    
+                # Lê video_text.json
                 path_json = os.path.join(root, "video_text.json")
                 if os.path.exists(path_json):
                     with open(path_json, 'r', encoding='utf-8') as f:
-                        transcript = json.load(f)
-                    video_data['transcript'] = transcript
+                        video_data['transcript'] = json.load(f)
                 else:
                     video_data['transcript'] = None
 
-                # Mescla dados do vídeo com dados do canal
                 if channel_data:
                     video_data.update(channel_data)
 
-                todos_videos.append(video_data)
+                payload_paths = {}
+                if salvar_payload and nome_youtuber:
+                    base_payload_path = os.path.join("data", nome_youtuber, "payload")
+                    payload_paths = extrair_payload_externo(video_data.get("video_id"), video_data, base_payload_path)
+
+                todos_indices.append(gerar_indice_video(video_data, payload_paths))
+
             except Exception as e:
-                console.print(f"[bold red]Erro ao processar pasta {root}: {e}[/bold red]")
+                console.print(f"[bold red]Erro na pasta {root}: {e}[/bold red]")
 
-    df = pd.DataFrame(todos_videos)
+    df_indices = pd.DataFrame(todos_indices)
     
-    # Garante tipagem de ID no final e resolve Pastas Duplicadas Físicas
-    if not df.empty and 'video_id' in df.columns:
-        df['video_id'] = df['video_id'].astype(str).str.strip()
+    # Proteção de Pastas Duplicadas Fisicamente
+    if not df_indices.empty and 'video_id' in df_indices.columns:
+        df_indices['video_id'] = df_indices['video_id'].astype(str).str.strip()
+        colunas_vitais = ['has_transcript', 'has_comments', 'has_tiras', 'has_analysis']
+        df_indices['_score'] = df_indices[colunas_vitais].sum(axis=1)
+        df_indices = df_indices.sort_values('_score', ascending=True)
+        df_indices = df_indices.drop_duplicates(subset=['video_id'], keep='last').drop(columns=['_score'])
         
-        # Calcula uma "pontuação" para cada pasta baseada em quantos dados vitais ela tem
-        colunas_vitais = ['transcript', 'comment_data', 'comment_analysis',' tiras_data']
-        colunas_existentes = [c for c in colunas_vitais if c in df.columns]
-        
-        if colunas_existentes:
-            # Cria uma coluna temporária somando os dados não-nulos
-            df['_score'] = df[colunas_existentes].notna().sum(axis=1)
-
-            # Ordena para que a pasta mais "cheia" vá para o final da lista
-            df = df.sort_values('_score', ascending=True)
-            df = df.drop(columns=['_score'])
-            
-        # Agora o keep='last' vai sempre manter a pasta que tem as transcrições e comentários
-        df = df.drop_duplicates(subset=['video_id'], keep='last')
-        
-    return df
+    return df_indices
 
 '''
-    ENCODE: Lê pastas locais, mescla com parquet remoto (se houver) e salva tudo
-    
-    @param nome_youtuber - Nome da pasta
-    @param dir_files - Diretório de origem (local)
-    @param dir_data - Diretório de destino (parquet)
+    ENCODE: Transforma pastas locais na estrutura Payload + Índice Parquet
 '''
-def atualizar_parquet_com_locais(nome_youtuber: str, dir_files="files", dir_data="data"):
+def encode(nome_youtuber: str, dir_files="files", dir_data="data"):
     path_files = os.path.join(dir_files, nome_youtuber)
-    path_parquet = os.path.join(dir_data, f"{nome_youtuber}.parquet")
+    path_index = os.path.join(dir_data, f"{nome_youtuber}_index.parquet")
     
-    console.print(Rule(f"Encoder: {nome_youtuber}"))
+    console.print(Rule(f"Encode: {nome_youtuber}"))
     
-    # Carrega o que há localmente
-    df_local = ler_dados_locais(path_files)
-    
-    if df_local.empty:
+    # Constrói a estrutura e gera o índice da varredura local
+    df_indices_local = ler_dados_locais(path_files, nome_youtuber, salvar_payload=True)
+
+    if df_indices_local.empty:
         console.print(f"[yellow]Nenhum dado local encontrado para {nome_youtuber}. Pula.[/yellow]")
         return
-    
-    # Carrega o histórico remoto (Parquet existente)
-    df_remoto = pd.DataFrame()
-    if os.path.exists(path_parquet):
-        console.print(f"[blue]Lendo remoto em[/blue] [cyan]{path_parquet}[/cyan]...")
+
+    # Garante tipagem segura do ID para o merge
+    df_indices_local['video_id'] = df_indices_local['video_id'].astype(str).str.strip()
+
+    # Smart Merge
+    if os.path.exists(path_index):
+        console.print("[dim]Índice remoto encontrado. Iniciando cruzamento de dados...[/dim]")
         try:
-            df_remoto = pd.read_parquet(path_parquet)
-            if 'video_id' in df_remoto.columns:
+            df_remoto = pd.read_parquet(path_index)
+            if not df_remoto.empty and 'video_id' in df_remoto.columns:
                 df_remoto['video_id'] = df_remoto['video_id'].astype(str).str.strip()
-        except Exception as e:
-            console.print(f"[bold red]Erro ao ler parquet: {e}[/bold red]")
-
-    # Processo de Mesclagem (Merge)
-    if not df_local.empty:
-        # Garante ID string
-        if 'video_id' in df_local.columns:
-             df_local['video_id'] = df_local['video_id'].astype(str).str.strip()
-
-        console.print("[dim]Normalizando tipos de dados...[/dim]")
-        
-        if not df_remoto.empty:
-            # Aplica sanitização
-            df_local = sanitizar_dataframe_generico(df_local, df_referencia=df_remoto)
-            
-            console.print("[dim]Mesclando dados e preservando conteúdos antigos...[/dim]")
-            df_remoto_idx = df_remoto.set_index('video_id')
-            df_local_idx = df_local.set_index('video_id')
-            
-            # Identifica vídeos que existem nos dois lugares
-            ids_comuns = df_local_idx.index.intersection(df_remoto_idx.index)
-            
-            # Colunas de conteúdo que não queremos sobrescrever por vazio
-            colunas_preservar = ['transcript', 'comment_data', 'comment_analysis', 'tiras_data']
-            
-            for vid in ids_comuns:
-                for col in colunas_preservar:
-                    if col in df_remoto_idx.columns and col in df_local_idx.columns:
-                        val_local = df_local_idx.at[vid, col]
-                        val_remoto = df_remoto_idx.at[vid, col]
-                        
-                        # Se local VAZIO e remoto CHEIO, resgata o remoto
-                        if not tem_conteudo_valido(val_local) and tem_conteudo_valido(val_remoto):
-                            df_local_idx.at[vid, col] = val_remoto
-            
-            # Separa os vídeos exclusivos do remoto e junta com o nosso local (agora enriquecido)
-            df_remoto_exclusivos = df_remoto_idx[~df_remoto_idx.index.isin(df_local_idx.index)]
-            df_unificado = pd.concat([df_remoto_exclusivos, df_local_idx]).reset_index()
-            
-        else:
-            df_local = sanitizar_dataframe_generico(df_local)
-            df_unificado = df_local
-
-        # Limpeza de memória crítica
-        del df_remoto
-        del df_local
-        gc.collect()
-    else:
-        df_unificado = df_remoto
-
-    # Salvamento
-    if not df_unificado.empty:
-        os.makedirs(dir_data, exist_ok=True)
-        try:
-            # Última garantia de ID
-            if 'video_id' in df_unificado.columns:
-                df_unificado['video_id'] = df_unificado['video_id'].astype(str)
                 
-            df_unificado.to_parquet(path_parquet, index=False)
-            console.print(f"[bold green]Sucesso! {path_parquet} salvo com {len(df_unificado)} registros.[/bold green]")
+                df_local_idx = df_indices_local.set_index('video_id')
+                df_remoto_idx = df_remoto.set_index('video_id')
+                
+                # 1. Preencher "buracos" dos vídeos que existem no local e no remoto
+                ids_comuns = df_local_idx.index.intersection(df_remoto_idx.index)
+                
+                # Mapeamento de quais colunas copiar se a flag principal estiver faltando localmente
+                conjuntos_payload = [
+                    ('has_transcript', ['transcript_path']),
+                    ('has_comments', ['comments_path', 'num_comments']),
+                    ('has_tiras', ['tiras_path', 'num_tiras', 'has_toxicity', 'has_perspective']),
+                    ('has_analysis', ['analysis_path'])
+                ]
+                
+                for vid in ids_comuns:
+                    for has_flag, colunas in conjuntos_payload:
+                        # Regra: Se Local NÃO tem o dado, mas Remoto TEM, resgatamos o mapeamento remoto!
+                        if (has_flag in df_local_idx.columns and not df_local_idx.at[vid, has_flag]) and \
+                           (has_flag in df_remoto_idx.columns and df_remoto_idx.at[vid, has_flag]):
+                            
+                            df_local_idx.at[vid, has_flag] = True
+                            for col in colunas:
+                                if col in df_remoto_idx.columns:
+                                    df_local_idx.at[vid, col] = df_remoto_idx.at[vid, col]
+                
+                # Resgatar vídeos exclusivos do remoto (que não existiam na pasta local)
+                ids_exclusivos = df_remoto_idx.index.difference(df_local_idx.index)
+                df_exclusivos = df_remoto_idx.loc[ids_exclusivos]
+                
+                # Unifica o remoto exclusivo com o local enriquecido
+                df_final = pd.concat([df_exclusivos, df_local_idx]).reset_index()
+                
+                console.print(f"[dim]Merge concluído. {len(ids_exclusivos)} vídeos exclusivos do remoto foram preservados.[/dim]")
+            else:
+                df_final = df_indices_local
         except Exception as e:
-            console.print(f"[bold red]Erro Fatal no Encoder: {e}[/bold red]")
-            console.print("[yellow]Tentando salvar convertendo tudo para String (Modo de Emergência)...[/yellow]")
-            df_unificado = df_unificado.astype(str)
-            df_unificado.to_parquet(path_parquet, index=False)
-            console.print("[green]Salvo em modo texto.[/green]")
+            console.print(f"[red]Erro ao ler remoto para merge: {e}. Sobrescrevendo com local.[/red]")
+            df_final = df_indices_local
     else:
-        console.print("[red]Nada para salvar.[/red]")
+        df_final = df_indices_local
 
-    # Limpeza final antes de ir para o próximo youtuber
-    try: del df_unificado 
-    except: pass
-    gc.collect()
-    console.print("")
-    
+    # Sincroniza o channel_info.csv
+    path_channel_src = os.path.join(path_files, "channel_info.csv")
+        
+    if os.path.exists(path_channel_src):
+        os.makedirs(os.path.join(dir_data, nome_youtuber), exist_ok=True)
+        shutil.copy2(path_channel_src, os.path.join(dir_data, nome_youtuber, "channel_info.csv"))
+
+    # Salva o Índice Master Definitivo
+    try:
+        df_final.to_parquet(path_index, index=False)
+        console.print(f"[bold green]✓ Índice salvo em {path_index} ({len(df_final)} vídeos mapeados)[/bold green]")
+        console.print(f"[bold green]✓ Payloads extraídos/atualizados para data/{nome_youtuber}/payload/[/bold green]\n")
+    except Exception as e:
+        console.print(f"[bold red]Erro Fatal no Encoder ao salvar índice: {e}[/bold red]")
+
 '''
-    Ação DECODE: Lê arquivo Parquet e recria a árvore de diretórios e arquivos JSON/CSV.
-    
-    @param nome_youtuber - Nome da pasta
-    @param dir_files - Diretório de destino (local)
-    @param dir_data - Diretório de origem (parquet)
+    DECODE: Reconstrói pastas locais com base no Índice Parquet e streaming de payloads
 '''
-def recriar_pastas_do_parquet(nome_youtuber: str, dir_files="files", dir_data="data"):
-    path_parquet = os.path.join(dir_data, f"{nome_youtuber}.parquet")
+def decode(nome_youtuber: str, dir_files="files", dir_data="data"):
+    console.print(Rule(f"Decode: {nome_youtuber}"))
+
+    path_index = os.path.join(dir_data, f"{nome_youtuber}_index.parquet")
     path_destino_base = os.path.join(dir_files, nome_youtuber)
 
-    console.print(Rule(f"Decoder: {nome_youtuber}"))
-
-    if not os.path.exists(path_parquet):
-        console.print(f"[bold red]Erro: Arquivo {path_parquet} não encontrado.[/bold red]")
+    if not os.path.exists(path_index):
+        console.print(f"[red]Índice não encontrado: {path_index}[/red]")
         return
 
-    try:
-        df = pd.read_parquet(path_parquet)
-    except Exception as e:
-        console.print(f"[bold red]Erro ao ler Parquet: {e}[/bold red]")
-        return
-
-    if 'video_id' in df.columns:
-        df['video_id'] = df['video_id'].astype(str).str.strip()
-    
-    # Cria coluna auxiliar de data para pastas
-    df['published_at_dt'] = pd.to_datetime(df['published_at'], errors='coerce')
-
-    # Restaura channel_info.csv
-    cols_canal = [c for c in df.columns if c.startswith(PREFIXO_CANAL)]
-    if cols_canal:
-        os.makedirs(path_destino_base, exist_ok=True)
-        df_channel_info = df.iloc[[0]][cols_canal].copy()
-        df_channel_info.columns = [c.replace(PREFIXO_CANAL, "") for c in df_channel_info.columns]
-        path_channel_csv = os.path.join(path_destino_base, "channel_info.csv")
-        df_channel_info.to_csv(path_channel_csv, index=False)
+    df = pd.read_parquet(path_index)
+    df['published_at_dt'] = pd.to_datetime(df['published_at'], errors='coerce') if 'published_at' in df.columns else None
 
     lista_ids_processados = []
+    arquivos_preservados = 0
+    arquivos_baixados = 0
 
-    # Processa linha por linha (vídeo por vídeo)
-    for _, row in df.iterrows():
+    for row in df.itertuples(index=False):
         try:
-            video_id = str(row['video_id']).strip()
+            video_id = str(getattr(row, "video_id")).strip()
             lista_ids_processados.append(video_id)
-            
-            # Define estrutura Ano/Mes
-            if pd.notnull(row['published_at_dt']):
-                ano = str(row['published_at_dt'].year)
-                mes_num = row['published_at_dt'].month
-                mes = MAPA_MESES.get(mes_num, "Desconhecido")
-            else:
-                ano = "SemData"
-                mes = "SemData"
 
-            titulo_safe = limpar_nome_arquivo(str(row.get('title', 'SemTitulo')))
-        
-            # Adicionar ID ao nome da pasta para evitar colisão de títulos iguais
-            # Se o título ficar vazio após limpeza, usa apenas o ID
-            if not titulo_safe:
-                nome_pasta = f"[{video_id}]"
-            else:
-                nome_pasta = f"{titulo_safe} [{video_id}]"
+            # Estrutura de pastas
+            published_at = getattr(row, "published_at_dt")
+            ano = str(published_at.year) if pd.notnull(published_at) else "SemData"
+            mes = MAPA_MESES.get(published_at.month, "SemData") if pd.notnull(published_at) else "SemData"
+            
+            titulo_safe = limpar_nome_arquivo(str(getattr(row, "title", "SemTitulo")))
+            nome_pasta = f"{titulo_safe} [{video_id}]" if titulo_safe else f"[{video_id}]"
 
             path_video = os.path.join(path_destino_base, ano, mes, nome_pasta)
-
             os.makedirs(path_video, exist_ok=True)
 
-            # Recriar videos_info.csv (Metadados simples)
-            cols_drop_aux = ['tiras_data', 'transcript', 'comment_data', 'comment_analysis', 'published_at_dt']
-            cols_drop_total = cols_drop_aux + cols_canal
-            cols_drop_existentes = [c for c in cols_drop_total if c in df.columns]
-            
-            dados_info = row.drop(labels=cols_drop_existentes).to_frame().T
-            dados_info.to_csv(os.path.join(path_video, "videos_info.csv"), index=False)
+            # Reconstrói videos_info.csv (sempre sobrescreve com a versão do remoto)
+            dados_dict = row._asdict()
+            campos_excluir = [
+                "transcript_path", "comments_path", "tiras_path", "analysis_path",
+                "has_transcript", "has_comments", "has_tiras", "has_analysis",
+                "has_toxicity", "has_perspective", "num_comments", "num_tiras", "published_at_dt"
+            ]
+            dados_info = {k: v for k, v in dados_dict.items() if k not in campos_excluir and not k.startswith(PREFIXO_CANAL)}
+            pd.DataFrame([dados_info]).to_csv(os.path.join(path_video, "videos_info.csv"), index=False, escapechar='\\')
 
-            # Recriar tiras_video.csv (Frames)
-            tiras_data = row.get('tiras_data')
-            if isinstance(tiras_data, str):
-                try: tiras_data = json.loads(tiras_data)
-                except: tiras_data = []
+            # --- SMART MERGE ---
             
-            if tiras_data is not None:
-                if isinstance(tiras_data, np.ndarray): tiras_data = tiras_data.tolist()
-                if isinstance(tiras_data, list) and len(tiras_data) > 0:
-                    df_tiras = pd.DataFrame(tiras_data)
-                    df_tiras.to_csv(os.path.join(path_video, "tiras_video.csv"), index=False)
-
-            # Recriar comments_info.csv (Comentários)
-            comment_data = row.get('comment_data')
-            if isinstance(comment_data, str):
-                try: comment_data = json.loads(comment_data)
-                except: comment_data = []
-            
-            if comment_data is not None:
-                if isinstance(comment_data, np.ndarray): comment_data = comment_data.tolist()
-                if isinstance(comment_data, list) and len(comment_data) > 0:
-                    df_comments = pd.DataFrame(comment_data)
-                    df_comments.to_csv(os.path.join(path_video, "comments_info.csv"), index=False)
-
-            # Recriar comments_analysis.csv (Análise dos Comentários)
-            comment_analysis = row.get('comment_analysis')
-            if isinstance(comment_analysis, str):
-                try: comment_analysis = json.loads(comment_analysis)
-                except: comment_analysis = []
-            
-            if comment_analysis is not None:
-                if isinstance(comment_analysis, np.ndarray): comment_analysis = comment_analysis.tolist()
-                if isinstance(comment_analysis, list) and len(comment_analysis) > 0:
-                    df_analysis = pd.DataFrame(comment_analysis)
-                    df_analysis.to_csv(os.path.join(path_video, "comments_analysis.csv"), index=False)
-
-            # Recriar video_text.json (JSON)
-            transcript = row.get('transcript')
-            
-            # Limpeza preventiva de strings vazias ou falsas
-            if str(transcript).strip().lower() in ['false', 'none', 'nan', 'null', '', '[]', '{}']:
-                transcript = None
-            
-            transcript_obj = None
-            if transcript is not None:
-                if isinstance(transcript, str):
-                    try: 
-                        # Tentativa 1: JSON permissivo (strict=False ignora \n e \t literais no meio do texto)
-                        transcript_obj = json.loads(transcript, strict=False)
-                    except Exception as e1: 
-                        try:
-                            # Tentativa 2: Modo Python bruto (com correção via Regex para 'nan')
-                            import re
-                            clean_str = re.sub(r'\bnan\b', 'None', transcript)
-                            transcript_obj = ast.literal_eval(clean_str)
-                        except Exception as e2:
-                            console.print(f"[yellow]⚠️ Falha no parser do vídeo {video_id} | Erro JSON: {e1} | Erro AST: {e2}[/yellow]")
-                            transcript_obj = None
+            # Transcrição
+            transcript_path = getattr(row, "transcript_path", None)
+            target_transcript = os.path.join(path_video, "video_text.json")
+            if transcript_path and os.path.exists(transcript_path):
+                if not os.path.exists(target_transcript):
+                    shutil.copy2(transcript_path, target_transcript)
+                    arquivos_baixados += 1
                 else:
-                    transcript_obj = transcript
+                    arquivos_preservados += 1
 
-            if transcript_obj is not None:
-                if not (isinstance(transcript_obj, float) and np.isnan(transcript_obj)):
-                    with open(os.path.join(path_video, "video_text.json"), 'w', encoding='utf-8') as f:
-                        json.dump(transcript_obj, f, ensure_ascii=False, cls=NumpyEncoder)
-                        
+            # Tiras
+            tiras_path = getattr(row, "tiras_path", None)
+            target_tiras = os.path.join(path_video, "tiras_video.csv")
+            if tiras_path and os.path.exists(tiras_path):
+                if not os.path.exists(target_tiras):
+                    shutil.copy2(tiras_path, target_tiras)
+                    arquivos_baixados += 1
+                else:
+                    arquivos_preservados += 1
+
+            # Comentários
+            comments_path = getattr(row, "comments_path", None)
+            target_comments = os.path.join(path_video, "comments_info.csv")
+            if comments_path and os.path.exists(comments_path):
+                if not os.path.exists(target_comments):
+                    shutil.copy2(comments_path, target_comments)
+                    arquivos_baixados += 1
+                else:
+                    arquivos_preservados += 1
+
+            # Análises
+            analysis_path = getattr(row, "analysis_path", None)
+            target_analysis = os.path.join(path_video, "comments_analysis.csv")
+            if analysis_path and os.path.exists(analysis_path):
+                if not os.path.exists(target_analysis):
+                    shutil.copy2(analysis_path, target_analysis)
+                    arquivos_baixados += 1
+                else:
+                    arquivos_preservados += 1
+                    arquivos_preservados += 1
+
         except Exception as e:
-            console.print(f"[red]Erro ao processar vídeo {row.get('video_id')}: {e}[/red]")
+            console.print(f"[red]Erro no vídeo {getattr(row, 'video_id', '???')}: {e}[/red]")
 
-    path_processados = os.path.join(path_destino_base, "videoProcessados.txt")
-    with open(path_processados, 'w', encoding='utf-8') as f:
-        for vid in set(lista_ids_processados): f.write(f"{vid}\n")
+    # Registro de Processados
+    with open(os.path.join(path_destino_base, "videoProcessados.txt"), 'w', encoding='utf-8') as f:
+        f.write("\n".join(set(lista_ids_processados)))
 
-    console.print(f"[bold green]Decoder finalizado para {nome_youtuber}.[/bold green]\n")
+    # Reconstrói o channel_info.csv na raiz do youtuber
+    path_channel_dl = os.path.join(dir_data, nome_youtuber, "channel_info.csv")
+    if os.path.exists(path_channel_dl):
+        shutil.copy2(path_channel_dl, os.path.join(path_destino_base, "channel_info.csv"))
+
+    console.print(f"[bold green]Decoder finalizado com sucesso para {nome_youtuber}[/bold green]")
+    console.print(f"[dim]Relatório Smart Merge: {arquivos_baixados} novos arquivos baixados | {arquivos_preservados} arquivos locais preservados.[/dim]\n")
 
 '''
-    Ação DIFF: Compara IDs e status (Transcrição, Comentários, Análises, Tiras e Toxicidade) entre Pasta Local e Parquet Remoto
+    DIFF: Compara o Índice Remoto ultra leve com a estrutura local
 '''
-def calcular_diferenca(nome_youtuber: str, dir_files="files", dir_data="data"):
-    path_parquet = os.path.join(dir_data, f"{nome_youtuber}.parquet")
+def diff(nome_youtuber: str, dir_files="files", dir_data="data"):
+    console.print(Rule(f"Diff : {nome_youtuber}"))
+
     path_files = os.path.join(dir_files, nome_youtuber)
-    
-    console.print(Rule(f"Diff: {nome_youtuber}"))
+    path_index = os.path.join(dir_data, f"{nome_youtuber}_index.parquet")
 
-    # 1. Carregar Local
-    df_local = ler_dados_locais(path_files)
-    ids_local = set()
-    transcritos_local_count = comments_local_count = analysis_local_count = 0
-    tiras_local_count = tox_local_count = ptox_local_count = 0
-    
-    if not df_local.empty and 'video_id' in df_local.columns:
-        df_local = df_local.drop_duplicates(subset=['video_id'], keep='last')
-        ids_local = set(df_local['video_id'])
-        
-        # Conta métricas locais básicas
-        if 'transcript' in df_local.columns: 
-            transcritos_local_count = df_local['transcript'].apply(tem_conteudo_valido).sum()
+    # Ler dados locais (salvar_payload=False garante que não persiste nada no disco)
+    df_local = ler_dados_locais(path_files, nome_youtuber, salvar_payload=False)
 
-        if 'comment_data' in df_local.columns: 
-            comments_local_count = df_local['comment_data'].apply(tem_conteudo_valido).sum()
+    if df_local.empty:
+        console.print("[yellow]Sem dados locais.[/yellow]")
+        return
 
-        if 'comment_analysis' in df_local.columns: 
-            analysis_local_count = df_local['comment_analysis'].apply(tem_conteudo_valido).sum()
+    if not os.path.exists(path_index):
+        console.print("[red]Índice remoto não encontrado. Necessário rodar Encode.[/red]")
+        return
 
-        # Conta métricas cruzadas (Tiras + Toxicidade) local
-        mask_tiras_l = df_local['tiras_data'].apply(tem_conteudo_valido) if 'tiras_data' in df_local.columns else pd.Series(False, index=df_local.index)
-        tiras_local_count = mask_tiras_l.sum()
-        
-        mask_tox_l = df_local['tiras_data'].apply(lambda x: verifica_coluna_interna(x, 'toxicity')) if 'tiras_data' in df_local.columns else pd.Series(False, index=df_local.index)
-        tox_local_count = (mask_tiras_l & mask_tox_l).sum()
-        
-        mask_ptox_l = df_local['tiras_data'].apply(lambda x: verifica_coluna_interna(x, 'p_toxicity')) if 'tiras_data' in df_local.columns else pd.Series(False, index=df_local.index)
-        ptox_local_count = (mask_tiras_l & mask_ptox_l).sum()
-    
-    # 2. Carregar Remoto
-    ids_remoto = set()
-    transcritos_remoto_count = comments_remoto_count = analysis_remoto_count = 0
-    tiras_remoto_count = tox_remoto_count = ptox_remoto_count = 0
-    df_parquet = pd.DataFrame()
-    
-    if os.path.exists(path_parquet):
-        try:
-            df_parquet = pd.read_parquet(path_parquet)
-            if not df_parquet.empty and 'video_id' in df_parquet.columns:
-                df_parquet['video_id'] = df_parquet['video_id'].astype(str).str.strip()
-                ids_remoto = set(df_parquet['video_id'])
-                
-                # Conta métricas remotas básicas
-                if 'transcript' in df_parquet.columns: 
-                    transcritos_remoto_count = df_parquet['transcript'].apply(tem_conteudo_valido).sum()
+    df_remoto = pd.read_parquet(path_index)
 
-                if 'comment_data' in df_parquet.columns: 
-                    comments_remoto_count = df_parquet['comment_data'].apply(tem_conteudo_valido).sum()
+    # 1. Conjuntos de IDs
+    ids_local = set(df_local['video_id'])
+    ids_remoto = set(df_remoto['video_id'])
 
-                if 'comment_analysis' in df_parquet.columns: 
-                    analysis_remoto_count = df_parquet['comment_analysis'].apply(tem_conteudo_valido).sum()
-
-                # Conta métricas cruzadas remotas
-                mask_tiras_r = df_parquet['tiras_data'].apply(tem_conteudo_valido) if 'tiras_data' in df_parquet.columns else pd.Series(False, index=df_parquet.index)
-                tiras_remoto_count = mask_tiras_r.sum()
-                
-                mask_tox_r = df_parquet['tiras_data'].apply(lambda x: verifica_coluna_interna(x, 'toxicity')) if 'tiras_data' in df_parquet.columns else pd.Series(False, index=df_parquet.index)
-                tox_remoto_count = (mask_tiras_r & mask_tox_r).sum()
-                
-                mask_ptox_r = df_parquet['tiras_data'].apply(lambda x: verifica_coluna_interna(x, 'p_toxicity')) if 'tiras_data' in df_parquet.columns else pd.Series(False, index=df_parquet.index)
-                ptox_remoto_count = (mask_tiras_r & mask_ptox_r).sum()
-        except: pass
-
-    # 3. Operações de Conjunto (IDs)
     novos_locais = ids_local - ids_remoto
     apenas_remoto = ids_remoto - ids_local
     em_ambos = ids_local & ids_remoto
 
-    # Cálculos de porcentagem Local
-    total_local = len(ids_local)
-    pct_trans_local = (transcritos_local_count / total_local * 100) if total_local > 0 else 0.0
-    pct_comm_local = (comments_local_count / total_local * 100) if total_local > 0 else 0.0
-    pct_anal_local = (analysis_local_count / total_local * 100) if total_local > 0 else 0.0
-    pct_tiras_local = (tiras_local_count / total_local * 100) if total_local > 0 else 0.0
-    pct_tox_local = (tox_local_count / tiras_local_count * 100) if tiras_local_count > 0 else 0.0
-    pct_ptox_local = (ptox_local_count / tiras_local_count * 100) if tiras_local_count > 0 else 0.0
-    
-    # Cálculos de porcentagem Remoto
-    total_remoto = len(ids_remoto)
-    pct_trans_remoto = (transcritos_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
-    pct_comm_remoto = (comments_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
-    pct_anal_remoto = (analysis_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
-    pct_tiras_remoto = (tiras_remoto_count / total_remoto * 100) if total_remoto > 0 else 0.0
-    pct_tox_remoto = (tox_remoto_count / tiras_remoto_count * 100) if tiras_remoto_count > 0 else 0.0
-    pct_ptox_remoto = (ptox_remoto_count / tiras_remoto_count * 100) if tiras_remoto_count > 0 else 0.0
+    # Contagens Local
+    t_loc = len(df_local)
+    trans_loc = df_local['has_transcript'].sum() if 'has_transcript' in df_local.columns else 0
+    comm_loc = df_local['has_comments'].sum() if 'has_comments' in df_local.columns else 0
+    anal_loc = df_local['has_analysis'].sum() if 'has_analysis' in df_local.columns else 0
+    tiras_loc = df_local['has_tiras'].sum() if 'has_tiras' in df_local.columns else 0
+    tox_loc = df_local['has_toxicity'].sum() if 'has_toxicity' in df_local.columns else 0
+    ptox_loc = df_local['has_perspective'].sum() if 'has_perspective' in df_local.columns else 0
 
-    # Exibição no terminal
-    console.print(f"[bold]Vídeos Locais: {total_local}[/bold]")
-    console.print(f"  ├─ Transcrições: [cyan]{transcritos_local_count} ({pct_trans_local:.1f}%)[/cyan]")
-    console.print(f"  ├─ Comentários: [cyan]{comments_local_count} ({pct_comm_local:.1f}%)[/cyan]")
-    console.print(f"  ├─ Análises de Coment.: [cyan]{analysis_local_count} ({pct_anal_local:.1f}%)[/cyan]")
-    console.print(f"  └─ Tiras de Vídeo: [cyan]{tiras_local_count} ({pct_tiras_local:.1f}%)[/cyan]")
-    console.print(f"     ├─ c/ Detoxify: [cyan]{tox_local_count} ({pct_tox_local:.1f}% das tiras)[/cyan]")
-    console.print(f"     └─ c/ Perspective: [cyan]{ptox_local_count} ({pct_ptox_local:.1f}% das tiras)[/cyan]")
-    
-    console.print(f"[bold]Vídeos Remotos: {total_remoto}[/bold]")
-    console.print(f"  ├─ Transcrições: [cyan]{transcritos_remoto_count} ({pct_trans_remoto:.1f}%)[/cyan]")
-    console.print(f"  ├─ Comentários: [cyan]{comments_remoto_count} ({pct_comm_remoto:.1f}%)[/cyan]")
-    console.print(f"  ├─ Análises de Coment.: [cyan]{analysis_remoto_count} ({pct_anal_remoto:.1f}%)[/cyan]")
-    console.print(f"  └─ Tiras de Vídeo: [cyan]{tiras_remoto_count} ({pct_tiras_remoto:.1f}%)[/cyan]")
-    console.print(f"     ├─ c/ Detoxify: [cyan]{tox_remoto_count} ({pct_tox_remoto:.1f}% das tiras)[/cyan]")
-    console.print(f"     └─ c/ Perspective: [cyan]{ptox_remoto_count} ({pct_ptox_remoto:.1f}% das tiras)[/cyan]")
+    # Contagens Remoto
+    t_rem = len(df_remoto)
+    trans_rem = df_remoto['has_transcript'].sum() if 'has_transcript' in df_remoto.columns else 0
+    comm_rem = df_remoto['has_comments'].sum() if 'has_comments' in df_remoto.columns else 0
+    anal_rem = df_remoto['has_analysis'].sum() if 'has_analysis' in df_remoto.columns else 0
+    tiras_rem = df_remoto['has_tiras'].sum() if 'has_tiras' in df_remoto.columns else 0
+    tox_rem = df_remoto['has_toxicity'].sum() if 'has_toxicity' in df_remoto.columns else 0
+    ptox_rem = df_remoto['has_perspective'].sum() if 'has_perspective' in df_remoto.columns else 0
+
+    # Exibição (Com Porcentagens Globais)
+    console.print(f"[bold]Local: {t_loc} vídeos[/bold]")
+    console.print(f"  ├─ Transcrições: [cyan]{trans_loc} ({(trans_loc/t_loc*100) if t_loc>0 else 0:.1f}%)[/cyan]")
+    console.print(f"  ├─ Comentários: [cyan]{comm_loc} ({(comm_loc/t_loc*100) if t_loc>0 else 0:.1f}%)[/cyan]")
+    console.print(f"  ├─ Análises: [cyan]{anal_loc} ({(anal_loc/t_loc*100) if t_loc>0 else 0:.1f}%)[/cyan]")
+    console.print(f"  └─ Tiras: [cyan]{tiras_loc} ({(tiras_loc/t_loc*100) if t_loc>0 else 0:.1f}%)[/cyan]")
+    console.print(f"     ├─ c/ Detoxify: [cyan]{tox_loc} ({(tox_loc/tiras_loc*100) if tiras_loc>0 else 0:.1f}% das tiras)[/cyan]")
+    console.print(f"     └─ c/ Perspective: [cyan]{ptox_loc} ({(ptox_loc/tiras_loc*100) if tiras_loc>0 else 0:.1f}% das tiras)[/cyan]")
+
+    console.print(f"[bold]Remoto: {t_rem} vídeos[/bold]")
+    console.print(f"  ├─ Transcrições: [cyan]{trans_rem} ({(trans_rem/t_rem*100) if t_rem>0 else 0:.1f}%)[/cyan]")
+    console.print(f"  ├─ Comentários: [cyan]{comm_rem} ({(comm_rem/t_rem*100) if t_rem>0 else 0:.1f}%)[/cyan]")
+    console.print(f"  ├─ Análises: [cyan]{anal_rem} ({(anal_rem/t_rem*100) if t_rem>0 else 0:.1f}%)[/cyan]")
+    console.print(f"  └─ Tiras: [cyan]{tiras_rem} ({(tiras_rem/t_rem*100) if t_rem>0 else 0:.1f}%)[/cyan]")
+    console.print(f"     ├─ c/ Detoxify: [cyan]{tox_rem} ({(tox_rem/tiras_rem*100) if tiras_rem>0 else 0:.1f}% das tiras)[/cyan]")
+    console.print(f"     └─ c/ Perspective: [cyan]{ptox_rem} ({(ptox_rem/tiras_rem*100) if tiras_rem>0 else 0:.1f}% das tiras)[/cyan]")
     console.print("-" * 40)
-    
-    # Diff de Arquivos Físicos
-    if novos_locais:
-        console.print(f"[yellow]Novos Locais (Falta Encode):[/yellow] {len(novos_locais)}")
-        console.print(f"  Ex: {list(novos_locais)[:3]}...")
-    else:
-        console.print("[green]Sincronizado: Nenhum novo local pendente.[/green]")
-    
-    if apenas_remoto:
-        console.print(f"[red]Faltando Local (Necessário Decode):[/red] {len(apenas_remoto)}")
 
-    # Diff de Conteúdo Interno
+    # 2. Diff de Arquivos Físicos (Vídeos Inteiros)
+    if novos_locais: 
+        console.print(f"[yellow]Vídeos Novos no Local (Falta Encode): {len(novos_locais)}[/yellow]")
+        console.print(f"  Ex: {list(novos_locais)[:3]}...")
+    else: 
+        console.print("[green]Sincronizado: Nenhum novo vídeo local pendente.[/green]")
+        
+    if apenas_remoto: 
+        console.print(f"[red]Faltando no Local (Necessário Decode): {len(apenas_remoto)}[/red]")
+
+    # 3. Diff de Conteúdo Interno (Aborda Requisitos 2, 3 e 4)
     atualizacao_local_trans = []
     atualizacao_remota_trans = []
     atualizacao_local_comm = []
     atualizacao_remota_comm = []
-    atualizacao_local_tox = []
-    atualizacao_remota_tox = []
+    atualizacao_local_analy = []
+    atualizacao_remota_anal = []
 
-    if em_ambos and not df_local.empty and not df_parquet.empty:
-        df_l_check = df_local[df_local['video_id'].isin(em_ambos)].set_index('video_id')
-        df_r_check = df_parquet[df_parquet['video_id'].isin(em_ambos)].set_index('video_id')
+    if em_ambos and not df_local.empty and not df_remoto.empty:
+        df_l_check = df_local.set_index('video_id')
+        df_r_check = df_remoto.set_index('video_id')
 
         for vid in em_ambos:
-            # 1. Verifica Transcrição
-            has_l_trans = tem_conteudo_valido(df_l_check.at[vid, 'transcript']) if 'transcript' in df_l_check.columns else False
-            has_r_trans = tem_conteudo_valido(df_r_check.at[vid, 'transcript']) if 'transcript' in df_r_check.columns else False
+            # Requisito 4: Diferença de video_text.json (Transcrição)
+            has_l_trans = df_l_check.at[vid, 'has_transcript'] if 'has_transcript' in df_l_check.columns else False
+            has_r_trans = df_r_check.at[vid, 'has_transcript'] if 'has_transcript' in df_r_check.columns else False
             
             if has_l_trans and not has_r_trans: atualizacao_local_trans.append(vid)
             elif has_r_trans and not has_l_trans: atualizacao_remota_trans.append(vid)
 
-            # 2. Verifica Comentários
-            has_l_comm = tem_conteudo_valido(df_l_check.at[vid, 'comment_data']) if 'comment_data' in df_l_check.columns else False
-            has_r_comm = tem_conteudo_valido(df_r_check.at[vid, 'comment_data']) if 'comment_data' in df_r_check.columns else False
+            # Requisito 2: Diferença de comments_info.csv (Comentários)
+            has_l_comm = df_l_check.at[vid, 'has_comments'] if 'has_comments' in df_l_check.columns else False
+            has_r_comm = df_r_check.at[vid, 'has_comments'] if 'has_comments' in df_r_check.columns else False
 
             if has_l_comm and not has_r_comm: atualizacao_local_comm.append(vid)
             elif has_r_comm and not has_l_comm: atualizacao_remota_comm.append(vid)
             
-            # 3. Verifica Toxicidade
-            has_l_tox = verifica_coluna_interna(df_l_check.at[vid, 'tiras_data'], 'toxicity') if 'tiras_data' in df_l_check.columns else False
-            has_r_tox = verifica_coluna_interna(df_r_check.at[vid, 'tiras_data'], 'toxicity') if 'tiras_data' in df_r_check.columns else False
-            
-            if has_l_tox and not has_r_tox: 
-                atualizacao_local_tox.append(vid)
-            elif has_r_tox and not has_l_tox: 
-                atualizacao_remota_tox.append(vid)
+            # Requisito 3: Diferença de comments_analysis.csv (Análises)
+            has_l_anal = df_l_check.at[vid, 'has_analysis'] if 'has_analysis' in df_l_check.columns else False
+            has_r_anal = df_r_check.at[vid, 'has_analysis'] if 'has_analysis' in df_r_check.columns else False
 
-    # Exibição das atualizações de conteúdo
+            if has_l_anal and not has_r_anal: atualizacao_local_analy.append(vid)
+            elif has_r_anal and not has_l_anal: atualizacao_remota_anal.append(vid)
+
+    # Exibição dos Alertas Granulares
     if atualizacao_local_trans:
-        console.print(f"\n[cyan]Transcrição Nova no Local (Falta Encode):[/cyan] {len(atualizacao_local_trans)}")
+        console.print(f"\n[cyan]video_text.json (Transcrição) Novo no Local (Falta Encode):[/cyan] {len(atualizacao_local_trans)}")
+        console.print(f"  Ex: {atualizacao_local_trans[:3]}...")
     if atualizacao_remota_trans:
-        console.print(f"[magenta]Transcrição Nova no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_trans)}")
+        console.print(f"[magenta]video_text.json (Transcrição) Novo no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_trans)}")
 
     if atualizacao_local_comm:
-        console.print(f"\n[cyan]Comentários Novos no Local (Falta Encode):[/cyan] {len(atualizacao_local_comm)}")
+        console.print(f"\n[cyan]comments_info.csv (Comentários) Novos no Local (Falta Encode):[/cyan] {len(atualizacao_local_comm)}")
+        console.print(f"  Ex: {atualizacao_local_comm[:3]}...")
     if atualizacao_remota_comm:
-        console.print(f"[magenta]Comentários Novos no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_comm)}")
+        console.print(f"[magenta]comments_info.csv (Comentários) Novos no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_comm)}")
         
-    if atualizacao_local_tox:
-        console.print(f"\n[cyan]Análise de Toxicidade Nova no Local (Falta Encode):[/cyan] {len(atualizacao_local_tox)}")
-    if atualizacao_remota_tox:
-        console.print(f"[magenta]Análise de Toxicidade Nova no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_tox)}")
+    if atualizacao_local_analy:
+        console.print(f"\n[cyan]comments_analysis.csv (Análises) Novas no Local (Falta Encode):[/cyan] {len(atualizacao_local_analy)}")
+        console.print(f"  Ex: {atualizacao_local_analy[:3]}...")
+    if atualizacao_remota_anal:
+        console.print(f"[magenta]comments_analysis.csv (Análises) Novas no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_anal)}")
         
     console.print("")
-
-'''
-    Descobre lista de youtubers baseado nos diretórios ou arquivos existentes
-'''
+    
 def obter_todos_youtubers(acao: str, dir_files="files", dir_data="data") -> list:
     lista = []
-    if acao in ["encode", "diff"]:
-        # Olha para as pastas em files/
-        if os.path.exists(dir_files):
-            lista = [d for d in os.listdir(dir_files) if os.path.isdir(os.path.join(dir_files, d))]
+    if acao in ["encode", "diff"] and os.path.exists(dir_files):
+        lista = [d for d in os.listdir(dir_files) if os.path.isdir(os.path.join(dir_files, d))]
     
-    if acao in ["decode", "diff"]:
-        # Se for decode, olha os parquets. Se for diff, junta os dois.
-        if os.path.exists(dir_data):
-            parquets = [f.replace(".parquet", "") for f in os.listdir(dir_data) if f.endswith(".parquet")]
-            lista.extend(parquets)
+    if acao in ["decode", "diff"] and os.path.exists(dir_data):
+        parquets = [f.replace("_index.parquet", "") for f in os.listdir(dir_data) if f.endswith("_index.parquet")]
+        lista.extend(parquets)
     
     return sorted(list(set(lista)))
 
 if __name__ == "__main__":
     if len(sys.argv) < 3:
         console.print("\n[bold red]Uso: python parquet_converter.py [acao] [nome_youtuber | 'all'][/bold red]")
-        console.print("  [cyan]encode[/cyan] [all|nome] -> Transforma Pastas Locais em Arquivo Parquet")
-        console.print("  [cyan]decode[/cyan] [all|nome] -> Explode Arquivo Parquet em Pastas Locais")
-        console.print("  [cyan]diff[/cyan]   [all|nome] -> Relatório de Diferença entre Local e Remoto")
         sys.exit(1)
 
     acao = sys.argv[1].lower()
     alvo = sys.argv[2]
     
-    lista_youtubers = []
+    lista_youtubers = obter_todos_youtubers(acao) if alvo.lower() in ["all", "todos"] else [alvo]
 
-    # Modo Batch: Se usuário digitar "all", processa todos encontrados
-    if alvo.lower() in ["all", "todos"]:
-        console.print(f"[bold yellow]Modo Batch ativado: Processando TODOS para ação '{acao}'...[/bold yellow]")
-        lista_youtubers = obter_todos_youtubers(acao)
-        if not lista_youtubers:
-            console.print("[red]Nenhum youtuber encontrado nos diretórios.[/red]")
-    else:
-        # Modo Individual
-        lista_youtubers = [alvo]
+    if not lista_youtubers:
+        console.print("[red]Nenhum youtuber encontrado.[/red]")
 
-    # Execução
     for youtuber in lista_youtubers:
-        if acao == "encode":
-            atualizar_parquet_com_locais(youtuber)
-        elif acao == "decode":
-            recriar_pastas_do_parquet(youtuber)
-        elif acao == "diff":
-            calcular_diferenca(youtuber)
-        else:
-            console.print(f"[bold red]Ação '{acao}' inválida.[/bold red]")
-            break
+        if acao == "encode": encode(youtuber)
+        elif acao == "decode": decode(youtuber)
+        elif acao == "diff": diff(youtuber)
+        else: console.print(f"[bold red]Ação '{acao}' inválida.[/bold red]"); break
