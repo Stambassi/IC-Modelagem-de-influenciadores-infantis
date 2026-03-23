@@ -1,9 +1,10 @@
 # Para ignorar os arquivos coletados
 /Coletor/crawler/files/*
-/Coletor/crawler/dados/*
+/Coletor/crawler/data/*
 
 # Para ignorar as configurações de máquina
 /Coletor/crawler/.venv
+/Coletor/crawler/venv
 /Coletor/crawler/__pycache__
 /Coletor/crawler/scripts/__pycache__
 
