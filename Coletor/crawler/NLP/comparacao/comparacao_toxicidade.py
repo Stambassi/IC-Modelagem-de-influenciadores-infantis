@@ -34,15 +34,19 @@ def discretizar_toxicidade(score):
 
 '''
     Função que varre os arquivos tiras_video.csv e calcula métricas comparativas 
-    entre Detoxify e Perspective API, incluindo quantidades absolutas e proporções
+    entre Detoxify e Perspective API, permitindo thresholds customizados.
+
+    @param d_limiar_inf - Threshold inferior do Detoxify (NT -> GZ)
+    @param d_limiar_sup - Threshold superior do Detoxify (GZ -> T)
+    @param p_limiar_inf - Threshold inferior do Perspective (NT -> GZ)
+    @param p_limiar_sup - Threshold superior do Perspective (GZ -> T)
 '''
-def gerar_estatisticas_iniciais():
-    console.print("[bold cyan]Iniciando levantamento estatístico de comparação...[/bold cyan]")
+def gerar_estatisticas_iniciais(d_limiar_inf=0.20, d_limiar_sup=0.80, p_limiar_inf=0.20, p_limiar_sup=0.40):
+    console.print(f"[bold cyan]Iniciando levantamento estatístico (Thresholds: D[{d_limiar_inf}/{d_limiar_sup}] P[{p_limiar_inf}/{p_limiar_sup}])...[/bold cyan]")
     
     dados_acumulados = []
     videos_processados = 0
     
-    # Buscar todos os vídeos que tem as duas colunas de toxicidade
     for csv_path in BASE_DIR.rglob("tiras_video.csv"):
         try:
             df = pd.read_csv(csv_path)
@@ -61,12 +65,17 @@ def gerar_estatisticas_iniciais():
 
     df_total = pd.concat(dados_acumulados, ignore_index=True)
 
-    df_total['cat_detox'] = df_total['toxicity'].apply(discretizar_toxicidade)
-    df_total['cat_persp'] = df_total['p_toxicity'].apply(discretizar_toxicidade)
+    # Discretização customizada baseada nos parâmetros da função
+    def discretizar_custom(score, inf, sup):
+        if score < inf: return "NT"
+        elif score < sup: return "GZ"
+        else: return "T"
+
+    df_total['cat_detox'] = df_total['toxicity'].apply(lambda x: discretizar_custom(x, d_limiar_inf, d_limiar_sup))
+    df_total['cat_persp'] = df_total['p_toxicity'].apply(lambda x: discretizar_custom(x, p_limiar_inf, p_limiar_sup))
 
     stats = []
 
-    # Analisar proporções e quantidades
     for ferramenta, col in [("Detoxify", "toxicity"), ("Perspective", "p_toxicity")]:
         cat_col = 'cat_detox' if ferramenta == "Detoxify" else 'cat_persp'
         proporcoes = df_total[cat_col].value_counts(normalize=True).to_dict()
@@ -87,28 +96,27 @@ def gerar_estatisticas_iniciais():
 
     df_stats = pd.DataFrame(stats)
     
-    # 1. Salvar CSV
+    # Salvar CSV
     csv_path = OUTPUT_FOLDER / "estatisticas_iniciais_comparacao.csv"
     df_stats.to_csv(csv_path, index=False)
     
-    # 2. Gerar Tabela em Imagem (PNG)
-    fig, ax = plt.subplots(figsize=(12, 2))
+    # Gerar Imagem
+    fig, ax = plt.subplots(figsize=(12, 3))
     ax.axis('tight')
     ax.axis('off')
     
-    # Criando a tabela visual
     tabela_visual = ax.table(
         cellText=df_stats.values, 
         colLabels=df_stats.columns, 
         cellLoc='center', 
         loc='center',
-        colColours=["#d1e7dd"] * len(df_stats.columns) # Verde claro
+        colColours=["#d1e7dd"] * len(df_stats.columns)
     )
     tabela_visual.auto_set_font_size(False)
     tabela_visual.set_fontsize(10)
-    tabela_visual.scale(1.2, 1.5)
+    tabela_visual.scale(1.2, 1.8)
     
-    plt.title("Estatísticas Iniciais: Comparação Detoxify vs Perspective API", fontsize=14, pad=20)
+    plt.title(f"Estatísticas Iniciais: Detoxify vs Perspective\n(Limiares Customizados)", fontsize=14, pad=25)
     
     image_path = OUTPUT_FOLDER / "estatisticas_iniciais_comparacao.png"
     plt.savefig(image_path, bbox_inches='tight', dpi=300)
@@ -493,8 +501,95 @@ def persistir_casos_criticos_perspective(threshold_alvo: float = 0.70):
     else:
         console.print("[yellow]Nenhuma tira encontrada com score da Perspective acima do limiar informado.[/yellow]")
 
+'''
+    Função para calcular a intersecção de labels entre os modelos variando o threshold
+    da Perspective API para encontrar um critério de combinação (Ensemble) otimizado.
+'''
+def gerar_tabela_interseccao_modelos():
+    console.print("[bold cyan]Iniciando análise de intersecção com múltiplos thresholds para Perspective...[/bold cyan]")
+    
+    dados_acumulados = []
+    for csv_path in BASE_DIR.rglob("tiras_video.csv"):
+        try:
+            df = pd.read_csv(csv_path)
+            if 'toxicity' in df.columns and 'p_toxicity' in df.columns:
+                dados_acumulados.append(df[['toxicity', 'p_toxicity']])
+        except:
+            continue
+
+    if not dados_acumulados:
+        console.print("[red]Nenhum dado encontrado.[/red]")
+        return
+
+    df_total = pd.concat(dados_acumulados, ignore_index=True).dropna()
+    total = len(df_total)
+
+    # Thresholds do Perspective para testar o Consenso com Detoxify (> 0.80)
+    thresholds_persp = [0.20, 0.30, .40, 0.50, 0.60, 0.70, 0.80]
+    cenarios = []
+
+    # 1. Testar variações de Consenso (Ambos identificam como potencial Toxicidade)
+    for t_persp in thresholds_persp:
+        qtd = len(df_total[(df_total['toxicity'] > 0.80) & (df_total['p_toxicity'] > t_persp)])
+        cenarios.append({
+            "Cenário": f"Consenso entre Detox e Persp",
+            "Regra": f"Detox > 0.80 E Persp > {t_persp}",
+            "Quantidade": qtd,
+            "Tipo": "Consenso"
+        })
+
+    # 2. Testar Filtro Conservador
+    cenarios.append({
+        "Cenário": "Filtro Conservador Base",
+        "Regra": "Detox > 0.80 E Persp > 0.20",
+        "Quantidade": len(df_total[(df_total['toxicity'] > 0.80) & (df_total['p_toxicity'] > 0.20)]),
+        "Tipo": "Filtro"
+    })
+
+    # 3. Testar Divergências
+    for t_persp in thresholds_persp:
+        qtd = len(df_total[(df_total['toxicity'] > 0.80) & (df_total['p_toxicity'] < t_persp)])
+        cenarios.append({
+            "Cenário": f"Divergência (Persp ignora T)",
+            "Regra": f"Detox > 0.80 E Persp < {t_persp}",
+            "Quantidade": qtd,
+            "Tipo": "Divergência"
+        })
+
+    df_cenarios = pd.DataFrame(cenarios)
+    df_cenarios['% do Total'] = (df_cenarios['Quantidade'] / total).map('{:.2%}'.format)
+
+    # 1. Salvar CSV
+    csv_path = OUTPUT_FOLDER / "interseccao_modelos_variacao.csv"
+    df_cenarios.to_csv(csv_path, index=False)
+
+    # 2. Gerar Tabela Visual
+    # Aumentando o tamanho para comportar mais linhas
+    fig, ax = plt.subplots(figsize=(14, 8))
+    ax.axis('tight')
+    ax.axis('off')
+    
+    tabela = ax.table(
+        cellText=df_cenarios.values,
+        colLabels=df_cenarios.columns,
+        cellLoc='center',
+        loc='center',
+        colColours=["#d1e7dd"] * len(df_cenarios.columns)
+    )
+    tabela.auto_set_font_size(False)
+    tabela.set_fontsize(9)
+    tabela.scale(1.0, 2.0)
+    
+    plt.title("Estratégias de Ensemble: Variação de Threshold Perspective (Detoxify fixo em 0.80)", fontsize=14, pad=20)
+    
+    image_path = OUTPUT_FOLDER / "interseccao_modelos_variacao.png"
+    plt.savefig(image_path, bbox_inches='tight', dpi=300)
+    plt.close()
+
+    console.print(f"[green]Análise de intersecção com variações concluída![/green]\n - {csv_path.name}\n - {image_path.name}")
+
 if __name__ == "__main__":
-    # gerar_estatisticas_iniciais()
+    gerar_estatisticas_iniciais()
 
     # gerar_metricas_concordancia()
 
@@ -504,4 +599,6 @@ if __name__ == "__main__":
 
     # encontrar_threshold_por_concordancia(0.9)
 
-    persistir_casos_criticos_perspective()
+    # persistir_casos_criticos_perspective(0.50)
+
+    # gerar_tabela_interseccao_modelos()
