@@ -1,4 +1,4 @@
 Métrica,Valor,Interpretação
-Pearson (r),0.4977,Força da relação linear
-MAE,0.1808,Divergência média de score
-Cohen's Kappa,0.1661,Concordância além do acaso
+Pearson (r),0.5016,Força da relação linear
+MAE,0.1818,Divergência média de score
+Cohen's Kappa,0.1684,Concordância além do acaso

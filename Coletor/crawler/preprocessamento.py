@@ -56,17 +56,22 @@ BASE_DIR = Path("files")
 
 # Mapeia cada youtuber para sua categoria principal (Minecraft, Roblox, etc.)
 MAPA_YOUTUBERS_CATEGORIA = {
+    'Julia MineGirl': 'Roblox',
+    'Papile': 'Roblox',
+    'Tex HS': 'Roblox',
     'Amy Scarlet': 'Roblox',
+    'Luluca Games': 'Roblox',
+    'meu nome é david': 'Roblox',
+    'Lokis': 'Roblox',
+
+    'Robin Hood Gamer': 'Minecraft',
     'AuthenticGames': 'Minecraft',
     'Cadres': 'Minecraft',
-    'Julia MineGirl': 'Roblox',
+    'Athos': 'Minecraft',
+    'JP Plays': 'Minecraft',
+    'Marcelodrv': 'Minecraft',
+    'Geleia': 'Minecraft',
     'Kass e KR': 'Minecraft',
-    'Lokis': 'Roblox',
-    'Luluca Games': 'Roblox',
-    'Papile': 'Roblox',
-    'Robin Hood Gamer': 'Minecraft',
-    'TazerCraft': 'Minecraft',
-    'Tex HS': 'Misto'
 }
 
 '''

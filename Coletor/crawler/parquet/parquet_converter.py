@@ -86,6 +86,7 @@ def extrair_payload_externo(video_id: str, video_data: dict, base_path: str) -> 
     paths = {}
     dirs = {
         "transcript": os.path.join(base_path, "transcripts"),
+        "audios": os.path.join(base_path, "audios"),
         "comments": os.path.join(base_path, "comments"),
         "tiras": os.path.join(base_path, "tiras"),
         "analysis": os.path.join(base_path, "analysis"),
@@ -104,6 +105,16 @@ def extrair_payload_externo(video_id: str, video_data: dict, base_path: str) -> 
             paths["transcript_path"] = path.replace("\\", "/") # Padrão universal
         except Exception as e:
             console.print(f"[red]Erro ao salvar transcript {video_id}: {e}[/red]")
+
+    # Áudio (MP3)
+    audio_src = video_data.get("audio_local_path")
+    if audio_src and os.path.exists(audio_src):
+        path = os.path.join(dirs["audios"], f"{video_id}.mp3")
+        try:
+            shutil.copy2(audio_src, path)
+            paths["audio_path"] = path.replace("\\", "/")
+        except Exception as e:
+            console.print(f"[red]Erro ao salvar áudio {video_id}: {e}[/red]")
 
     # Comments (CSV)
     comments = video_data.get("comment_data")
@@ -155,6 +166,7 @@ def extrair_metricas_video(video_data: dict) -> dict:
     metrics["has_comments"] = isinstance(comments, list) and len(comments) > 0
     metrics["has_tiras"] = isinstance(tiras, list) and len(tiras) > 0
     metrics["has_analysis"] = isinstance(analysis, list) and len(analysis) > 0
+    metrics["has_audio"] = video_data.get("has_audio", False)
     
     # Sonda interna para Toxicidade nas tiras
     has_tox = has_ptox = False
@@ -181,10 +193,12 @@ def extrair_metricas_video(video_data: dict) -> dict:
     @return dict - Registro leve para armazenamento em Parquet
 ''' 
 def gerar_indice_video(video_data: dict, payload_paths: dict) -> dict:
-    campos_pesados = ["transcript", "comment_data", "tiras_data", "comment_analysis"]
+    campos_pesados = ["transcript", "comment_data", "tiras_data", "comment_analysis", "audio_local_path"]
+    
     indice = {k: v for k, v in video_data.items() if k not in campos_pesados}
     indice.update(payload_paths)
     indice.update(extrair_metricas_video(video_data))
+    
     return indice
 
 '''
@@ -255,6 +269,14 @@ def ler_dados_locais(caminho_youtuber: str, nome_youtuber: str = None, salvar_pa
                 else:
                     video_data['transcript'] = None
 
+                # Lê [ID].mp3
+                path_audio = os.path.join(root, f"{video_data['video_id']}.mp3")
+                if os.path.exists(path_audio):
+                    video_data['audio_local_path'] = path_audio
+                    video_data['has_audio'] = True
+                else:
+                    video_data['has_audio'] = False
+
                 if channel_data:
                     video_data.update(channel_data)
 
@@ -299,7 +321,7 @@ def encode(nome_youtuber: str, dir_files="files", dir_data="data"):
     # Garante tipagem segura do ID para o merge
     df_indices_local['video_id'] = df_indices_local['video_id'].astype(str).str.strip()
 
-    # Smart Merge
+    # SMART MERGE: Resgatar dados do índice remoto
     if os.path.exists(path_index):
         console.print("[dim]Índice remoto encontrado. Iniciando cruzamento de dados...[/dim]")
         try:
@@ -316,6 +338,7 @@ def encode(nome_youtuber: str, dir_files="files", dir_data="data"):
                 # Mapeamento de quais colunas copiar se a flag principal estiver faltando localmente
                 conjuntos_payload = [
                     ('has_transcript', ['transcript_path']),
+                    ('has_audio', ['audio_path']),
                     ('has_comments', ['comments_path', 'num_comments']),
                     ('has_tiras', ['tiras_path', 'num_tiras', 'has_toxicity', 'has_perspective']),
                     ('has_analysis', ['analysis_path'])
@@ -323,16 +346,21 @@ def encode(nome_youtuber: str, dir_files="files", dir_data="data"):
                 
                 for vid in ids_comuns:
                     for has_flag, colunas in conjuntos_payload:
-                        # Regra: Se Local NÃO tem o dado, mas Remoto TEM, resgatamos o mapeamento remoto!
+                        # Se Local NÃO tem o dado, mas Remoto TEM, resgata apenas o mapeamento remoto
                         if (has_flag in df_local_idx.columns and not df_local_idx.at[vid, has_flag]) and \
                            (has_flag in df_remoto_idx.columns and df_remoto_idx.at[vid, has_flag]):
                             
+                            # Se está avaliando resgatar o áudio, mas o local já tem a transcrição, 
+                            # ignora o áudio (pois ele já cumpriu seu propósito e foi deletado).
+                            if has_flag == 'has_audio' and df_local_idx.get('has_transcript', pd.Series()).get(vid, False):
+                                continue
+                                
                             df_local_idx.at[vid, has_flag] = True
                             for col in colunas:
                                 if col in df_remoto_idx.columns:
                                     df_local_idx.at[vid, col] = df_remoto_idx.at[vid, col]
                 
-                # Resgatar vídeos exclusivos do remoto (que não existiam na pasta local)
+                # 2. Resgatar vídeos exclusivos do remoto (que não existiam na pasta local)
                 ids_exclusivos = df_remoto_idx.index.difference(df_local_idx.index)
                 df_exclusivos = df_remoto_idx.loc[ids_exclusivos]
                 
@@ -399,17 +427,17 @@ def decode(nome_youtuber: str, dir_files="files", dir_data="data"):
             path_video = os.path.join(path_destino_base, ano, mes, nome_pasta)
             os.makedirs(path_video, exist_ok=True)
 
-            # Reconstrói videos_info.csv (sempre sobrescreve com a versão do remoto)
+            # Reconstrói videos_info.csv (sempre sobrescreve com a versão do Remoto)
             dados_dict = row._asdict()
             campos_excluir = [
-                "transcript_path", "comments_path", "tiras_path", "analysis_path",
-                "has_transcript", "has_comments", "has_tiras", "has_analysis",
+                "transcript_path", "comments_path", "tiras_path", "analysis_path", "audio_path",
+                "has_transcript", "has_comments", "has_tiras", "has_analysis", "has_audio",
                 "has_toxicity", "has_perspective", "num_comments", "num_tiras", "published_at_dt"
             ]
             dados_info = {k: v for k, v in dados_dict.items() if k not in campos_excluir and not k.startswith(PREFIXO_CANAL)}
             pd.DataFrame([dados_info]).to_csv(os.path.join(path_video, "videos_info.csv"), index=False, escapechar='\\')
 
-            # --- SMART MERGE ---
+            # SMART MERGE: Restaurar arquivos pesados apenas se não existirem localmente
             
             # Transcrição
             transcript_path = getattr(row, "transcript_path", None)
@@ -417,6 +445,17 @@ def decode(nome_youtuber: str, dir_files="files", dir_data="data"):
             if transcript_path and os.path.exists(transcript_path):
                 if not os.path.exists(target_transcript):
                     shutil.copy2(transcript_path, target_transcript)
+                    arquivos_baixados += 1
+                else:
+                    arquivos_preservados += 1
+
+            # Áudio (MP3)
+            audio_path = getattr(row, "audio_path", None)
+            target_audio = os.path.join(path_video, f"{video_id}.mp3")
+            if audio_path and os.path.exists(audio_path):
+                # Só baixa o áudio se a máquina não tiver a transcrição E não tiver o áudio
+                if not os.path.exists(target_transcript) and not os.path.exists(target_audio):
+                    shutil.copy2(audio_path, target_audio)
                     arquivos_baixados += 1
                 else:
                     arquivos_preservados += 1
@@ -450,7 +489,6 @@ def decode(nome_youtuber: str, dir_files="files", dir_data="data"):
                     arquivos_baixados += 1
                 else:
                     arquivos_preservados += 1
-                    arquivos_preservados += 1
 
         except Exception as e:
             console.print(f"[red]Erro no vídeo {getattr(row, 'video_id', '???')}: {e}[/red]")
@@ -476,7 +514,7 @@ def diff(nome_youtuber: str, dir_files="files", dir_data="data"):
     path_files = os.path.join(dir_files, nome_youtuber)
     path_index = os.path.join(dir_data, f"{nome_youtuber}_index.parquet")
 
-    # Ler dados locais (salvar_payload=False garante que não persiste nada no disco)
+    # Ler dados locais (salvar_payload=False garante que não escreve nada no disco)
     df_local = ler_dados_locais(path_files, nome_youtuber, salvar_payload=False)
 
     if df_local.empty:
@@ -500,6 +538,7 @@ def diff(nome_youtuber: str, dir_files="files", dir_data="data"):
     # Contagens Local
     t_loc = len(df_local)
     trans_loc = df_local['has_transcript'].sum() if 'has_transcript' in df_local.columns else 0
+    audio_loc = df_local['has_audio'].sum() if 'has_audio' in df_local.columns else 0
     comm_loc = df_local['has_comments'].sum() if 'has_comments' in df_local.columns else 0
     anal_loc = df_local['has_analysis'].sum() if 'has_analysis' in df_local.columns else 0
     tiras_loc = df_local['has_tiras'].sum() if 'has_tiras' in df_local.columns else 0
@@ -509,6 +548,7 @@ def diff(nome_youtuber: str, dir_files="files", dir_data="data"):
     # Contagens Remoto
     t_rem = len(df_remoto)
     trans_rem = df_remoto['has_transcript'].sum() if 'has_transcript' in df_remoto.columns else 0
+    audio_rem = df_remoto['has_audio'].sum() if 'has_audio' in df_remoto.columns else 0
     comm_rem = df_remoto['has_comments'].sum() if 'has_comments' in df_remoto.columns else 0
     anal_rem = df_remoto['has_analysis'].sum() if 'has_analysis' in df_remoto.columns else 0
     tiras_rem = df_remoto['has_tiras'].sum() if 'has_tiras' in df_remoto.columns else 0
@@ -518,6 +558,7 @@ def diff(nome_youtuber: str, dir_files="files", dir_data="data"):
     # Exibição (Com Porcentagens Globais)
     console.print(f"[bold]Local: {t_loc} vídeos[/bold]")
     console.print(f"  ├─ Transcrições: [cyan]{trans_loc} ({(trans_loc/t_loc*100) if t_loc>0 else 0:.1f}%)[/cyan]")
+    console.print(f"  ├─ Áudios: [cyan]{audio_loc} ({(audio_loc/t_loc*100) if t_loc>0 else 0:.1f}%)[/cyan]")
     console.print(f"  ├─ Comentários: [cyan]{comm_loc} ({(comm_loc/t_loc*100) if t_loc>0 else 0:.1f}%)[/cyan]")
     console.print(f"  ├─ Análises: [cyan]{anal_loc} ({(anal_loc/t_loc*100) if t_loc>0 else 0:.1f}%)[/cyan]")
     console.print(f"  └─ Tiras: [cyan]{tiras_loc} ({(tiras_loc/t_loc*100) if t_loc>0 else 0:.1f}%)[/cyan]")
@@ -526,6 +567,7 @@ def diff(nome_youtuber: str, dir_files="files", dir_data="data"):
 
     console.print(f"[bold]Remoto: {t_rem} vídeos[/bold]")
     console.print(f"  ├─ Transcrições: [cyan]{trans_rem} ({(trans_rem/t_rem*100) if t_rem>0 else 0:.1f}%)[/cyan]")
+    console.print(f"  ├─ Áudios: [cyan]{audio_rem} ({(audio_rem/t_rem*100) if t_rem>0 else 0:.1f}%)[/cyan]")
     console.print(f"  ├─ Comentários: [cyan]{comm_rem} ({(comm_rem/t_rem*100) if t_rem>0 else 0:.1f}%)[/cyan]")
     console.print(f"  ├─ Análises: [cyan]{anal_rem} ({(anal_rem/t_rem*100) if t_rem>0 else 0:.1f}%)[/cyan]")
     console.print(f"  └─ Tiras: [cyan]{tiras_rem} ({(tiras_rem/t_rem*100) if t_rem>0 else 0:.1f}%)[/cyan]")
@@ -533,7 +575,7 @@ def diff(nome_youtuber: str, dir_files="files", dir_data="data"):
     console.print(f"     └─ c/ Perspective: [cyan]{ptox_rem} ({(ptox_rem/tiras_rem*100) if tiras_rem>0 else 0:.1f}% das tiras)[/cyan]")
     console.print("-" * 40)
 
-    # 2. Diff de Arquivos Físicos (Vídeos Inteiros)
+    # 2. Diff de arquivos físicos (vídeos inteiros)
     if novos_locais: 
         console.print(f"[yellow]Vídeos Novos no Local (Falta Encode): {len(novos_locais)}[/yellow]")
         console.print(f"  Ex: {list(novos_locais)[:3]}...")
@@ -543,12 +585,14 @@ def diff(nome_youtuber: str, dir_files="files", dir_data="data"):
     if apenas_remoto: 
         console.print(f"[red]Faltando no Local (Necessário Decode): {len(apenas_remoto)}[/red]")
 
-    # 3. Diff de Conteúdo Interno (Aborda Requisitos 2, 3 e 4)
+    # 3. Diff de Conteúdo Interno
     atualizacao_local_trans = []
     atualizacao_remota_trans = []
+    atualizacao_local_audio = []
+    atualizacao_remota_audio = []
     atualizacao_local_comm = []
     atualizacao_remota_comm = []
-    atualizacao_local_analy = []
+    atualizacao_local_anal = []
     atualizacao_remota_anal = []
 
     if em_ambos and not df_local.empty and not df_remoto.empty:
@@ -556,48 +600,58 @@ def diff(nome_youtuber: str, dir_files="files", dir_data="data"):
         df_r_check = df_remoto.set_index('video_id')
 
         for vid in em_ambos:
-            # Requisito 4: Diferença de video_text.json (Transcrição)
+            # Transcrição
             has_l_trans = df_l_check.at[vid, 'has_transcript'] if 'has_transcript' in df_l_check.columns else False
             has_r_trans = df_r_check.at[vid, 'has_transcript'] if 'has_transcript' in df_r_check.columns else False
             
             if has_l_trans and not has_r_trans: atualizacao_local_trans.append(vid)
             elif has_r_trans and not has_l_trans: atualizacao_remota_trans.append(vid)
 
-            # Requisito 2: Diferença de comments_info.csv (Comentários)
+            # Áudio
+            has_l_audio = df_l_check.at[vid, 'has_audio'] if 'has_audio' in df_l_check.columns else False
+            has_r_audio = df_r_check.at[vid, 'has_audio'] if 'has_audio' in df_r_check.columns else False
+            
+            # Se a transcrição já existe localmente, o áudio local foi deletado de propósito, então não consideramos pendência remota
+            if has_l_audio and not has_r_audio: atualizacao_local_audio.append(vid)
+            elif has_r_audio and not has_l_audio and not has_l_trans: atualizacao_remota_audio.append(vid)
+
+            # Comentários
             has_l_comm = df_l_check.at[vid, 'has_comments'] if 'has_comments' in df_l_check.columns else False
             has_r_comm = df_r_check.at[vid, 'has_comments'] if 'has_comments' in df_r_check.columns else False
 
             if has_l_comm and not has_r_comm: atualizacao_local_comm.append(vid)
             elif has_r_comm and not has_l_comm: atualizacao_remota_comm.append(vid)
             
-            # Requisito 3: Diferença de comments_analysis.csv (Análises)
+            # Análises
             has_l_anal = df_l_check.at[vid, 'has_analysis'] if 'has_analysis' in df_l_check.columns else False
             has_r_anal = df_r_check.at[vid, 'has_analysis'] if 'has_analysis' in df_r_check.columns else False
 
-            if has_l_anal and not has_r_anal: atualizacao_local_analy.append(vid)
+            if has_l_anal and not has_r_anal: atualizacao_local_anal.append(vid)
             elif has_r_anal and not has_l_anal: atualizacao_remota_anal.append(vid)
 
     # Exibição dos Alertas Granulares
     if atualizacao_local_trans:
         console.print(f"\n[cyan]video_text.json (Transcrição) Novo no Local (Falta Encode):[/cyan] {len(atualizacao_local_trans)}")
-        console.print(f"  Ex: {atualizacao_local_trans[:3]}...")
     if atualizacao_remota_trans:
         console.print(f"[magenta]video_text.json (Transcrição) Novo no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_trans)}")
 
+    if atualizacao_local_audio:
+        console.print(f"\n[cyan][ID].mp3 (Áudio) Novo no Local (Falta Encode):[/cyan] {len(atualizacao_local_audio)}")
+    if atualizacao_remota_audio:
+        console.print(f"[magenta][ID].mp3 (Áudio) Novo no Remoto aguardando transcrição (Pode fazer Decode):[/magenta] {len(atualizacao_remota_audio)}")
+
     if atualizacao_local_comm:
         console.print(f"\n[cyan]comments_info.csv (Comentários) Novos no Local (Falta Encode):[/cyan] {len(atualizacao_local_comm)}")
-        console.print(f"  Ex: {atualizacao_local_comm[:3]}...")
     if atualizacao_remota_comm:
         console.print(f"[magenta]comments_info.csv (Comentários) Novos no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_comm)}")
         
-    if atualizacao_local_analy:
-        console.print(f"\n[cyan]comments_analysis.csv (Análises) Novas no Local (Falta Encode):[/cyan] {len(atualizacao_local_analy)}")
-        console.print(f"  Ex: {atualizacao_local_analy[:3]}...")
+    if atualizacao_local_anal:
+        console.print(f"\n[cyan]comments_analysis.csv (Análises) Novas no Local (Falta Encode):[/cyan] {len(atualizacao_local_anal)}")
     if atualizacao_remota_anal:
         console.print(f"[magenta]comments_analysis.csv (Análises) Novas no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_anal)}")
         
-    console.print("")
-    
+    console.print("")  
+
 def obter_todos_youtubers(acao: str, dir_files="files", dir_data="data") -> list:
     lista = []
     if acao in ["encode", "diff"] and os.path.exists(dir_files):

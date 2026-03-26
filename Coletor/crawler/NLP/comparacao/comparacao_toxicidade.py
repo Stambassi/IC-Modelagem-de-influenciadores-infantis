@@ -460,7 +460,7 @@ def persistir_casos_criticos_perspective(threshold_alvo: float = 0.70):
             df = pd.read_csv(csv_path)
             
             # Verificar se as colunas necessárias existem
-            if 'p_toxicity' in df.columns:
+            if 'p_toxicity' in df.columns and 'toxicity' in df.columns:
                 # Filtrar apenas onde a Perspective foi agressiva
                 df_filtrado = df[df['p_toxicity'] > threshold_alvo].copy()
                 
