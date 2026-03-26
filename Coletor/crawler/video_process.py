@@ -1,3 +1,5 @@
+import importlib
+
 import yt_dlp
 import os
 import json
@@ -5,6 +7,8 @@ import csv
 import time
 import pandas as pd
 import whisper 
+import sys
+import subprocess
 from rich.console import Console
 from pathlib import Path
 from typing import List
@@ -113,19 +117,32 @@ def atualizar_video_total_transcritos(youtuber: str) -> int:
     @param output_folder - Caminho da pasta onde o áudio será salvo
 '''
 def acao_baixar_audio(video_id: str, output_folder: str) -> str:
+    transcript_path = os.path.join(output_folder, "video_text.json")
     audio_path = os.path.join(output_folder, f"{video_id}.mp3")
     
+    # Se a transcrição já existe, o áudio é inútil, então pula o download
+    if os.path.exists(transcript_path):
+        console.print(f"> [dim]Áudio ignorado (Transcrição já existe)[/] | video_id({video_id})")
+        return None
+        
+    # Se o áudio já existe (ainda não foi transcrito), então pula o download
     if os.path.exists(audio_path): 
         return audio_path
-        
+      
     console.print(f"> [yellow]Baixando audio[/] | video_id({video_id})")
     
+    # Filtro interno para limitar vídeos a no máximo 2 horas (7200 segundos)
+    def filtro_duracao(info, *, incomplete):
+        duracao = info.get('duration')
+        if duracao and duracao > 7200:
+            return "O vídeo excede o limite de 2 horas."
+        return None  # Retornar None significa que o download pode prosseguir
+    
     ydl_opts = {
-        # 'bestaudio' busca a melhor qualidade de áudio independente do container
         'format': 'bestaudio/best',
         'outtmpl': f'{output_folder}/%(id)s.%(ext)s',
-        # Noplaylist garante que não tente baixar uma playlist inteira se o ID vier de uma
         'noplaylist': True,
+        'match_filter': filtro_duracao, # Aplica o filtro de duração antes de baixar
         'postprocessors': [{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -133,20 +150,46 @@ def acao_baixar_audio(video_id: str, output_folder: str) -> str:
         }],
         'quiet': True, 
         'no_warnings': True,
-        # Adicionar cabeçalhos de navegador ajuda a evitar blocos e erros de formato
         'user_agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     }
     
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Tenta extrair as informações antes para validar a existência
-            ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
-        
-        console.print(f"> Download do audio foi um [green]sucesso[/] | video_id({video_id})")
-        return audio_path
-    except Exception as e:
-        console.print(f"   └── [red]Erro download: {str(e).split(';')[0]}[/red]")
-        return None
+    tentativas = 0
+    while tentativas < 2:
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+            
+            # Valida se o arquivo de fato foi gerado (pois o filtro de duração pula silenciosamente)
+            if os.path.exists(audio_path):
+                console.print(f"> Download do audio foi um [green]sucesso[/] | video_id({video_id})")
+                return audio_path
+            else:
+                console.print(f"> [yellow]Vídeo ignorado (Mais de 2 horas)[/] | video_id({video_id})")
+                return None
+                
+        except Exception as e:
+            erro_msg = str(e).lower()
+            console.print(f"   └── [red]Erro download: {str(e).split(';')[0]}[/red]")
+            
+            # Se for a 1ª tentativa e ocorrer erro de assinatura ou 403 Forbidden
+            if tentativas == 0 and ("403" in erro_msg or "sign" in erro_msg or "extract" in erro_msg):
+                console.print("[yellow]🔄 Bloqueio detectado. Atualizando o yt-dlp automaticamente...[/yellow]")
+                
+                try:
+                    # Roda o pip install -U via terminal sem parar o script
+                    subprocess.check_call([sys.executable, "-m", "pip", "install", "-U", "yt-dlp"])
+                    # Força o Python a ler a nova versão recém-instalada
+                    importlib.reload(yt_dlp)
+                    
+                    console.print("[green]✅ yt-dlp atualizado! Tentando baixar novamente...[/green]")
+                    tentativas += 1
+                except Exception as update_err:
+                    console.print(f"[bold red]Falha ao atualizar o yt-dlp: {update_err}[/bold red]")
+                    break # Se não conseguir atualizar, interrompe as tentativas
+            else:
+                break # Sai do loop se for outro tipo de erro ou se a 2ª tentativa falhar
+                
+    return None
 
 '''
     Executa a transcrição do áudio via Whisper, salva o JSON e remove o arquivo de áudio
@@ -342,6 +385,10 @@ def processar_diretorios(youtuber: str, acao_escolhida: str, model_obj=None):
                     acao_transcrever_audio(audio_path, str(folder_path), model_obj, video_id, youtuber)
                     
             elif acao_escolhida == 'transcrever_local':
+                if video_ja_processado(video_id):
+                    console.print("[i]Video ja transcrito![/] Passando para o proximo...")
+                    continue
+
                 audio_path = os.path.join(folder_path, f"{video_id}.mp3")
                 if os.path.exists(audio_path): 
                     acao_transcrever_audio(audio_path, str(folder_path), model_obj, video_id, youtuber)
@@ -356,7 +403,7 @@ def processar_diretorios(youtuber: str, acao_escolhida: str, model_obj=None):
     Ponto de entrada que gerencia a carga do modelo e o loop de execução entre múltiplos influenciadores
 
     @param grupo_alvo - Critério de seleção ('Geral', categoria ou nome individual)
-    @param acao - Nome da ação a ser executada em massa
+    @param acao - Nome da ação a ser executada em massa (baixar, transcrever, transcrever local e dividir)
     @param nome_modelo - Tamanho do modelo Whisper a ser carregado (tiny, base, small, etc.)
 '''
 def orquestrar_processamento(grupo_alvo: str, acao: str, nome_modelo: str = "tiny"):

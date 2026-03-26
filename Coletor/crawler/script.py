@@ -500,12 +500,12 @@ def atualizarUltimaDatadeColeta(nmCanal, mesPublicacaoVideo, anoPublicacaoVideo)
 # Função para processar um único vídeo
 def process_video(video_id, processed_videos, nmCanal, video_details, anoPublicacaoVideo, mesPublicacaoVideo):
     global channels_info
-    tituloVideo = video_details['title']
+    tituloOriginal = video_details['title']
+    tituloVideo = f"{limparTitulos(tituloOriginal)} [{video_id}]"
     resposta = create_filesVideo_path(nmCanal, anoPublicacaoVideo, mesPublicacaoVideo, tituloVideo, video_id)
     #print(f"Conseguiu criar arquivo para o video: {resposta}")
     if(resposta == True):
         #console.log("antes de limpar",log_locals=True)
-        tituloVideo = limparTitulos(tituloVideo)
         # console.log("depois de limpar",log_locals=True)
         print(">> processando vídeos")
         videos_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/videos_info.csv')
@@ -659,7 +659,6 @@ def sentiment_analisys(text):
     return scores
 
 def coletar_videos_youtuber(lista_youtuber: list[str]):
-
    # Configurar com aspas duplas os termos chaves -> testar primeiro....
     youtuberListPath = "youtuberslist.csv"
     channel_data  = pd.read_csv(youtuberListPath)

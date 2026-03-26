@@ -5,6 +5,7 @@ import pandas as pd
 from pathlib import Path
 from langdetect import detect, DetectorFactory, LangDetectException
 from rich.console import Console
+from rich.rule import Rule
 
 # Garante resultados determinísticos
 DetectorFactory.seed = 0
@@ -124,6 +125,88 @@ def gerenciar_transcricoes_erradas(remover_arquivos: bool = False):
     else:
         console.print("[bold yellow]Modo de Teste.[/bold yellow] Mude 'remover_arquivos = True' no final do script para executar a faxina.")
 
+def limpar_nome_arquivo(nome: str) -> str:
+    if pd.isna(nome) or nome.strip().lower() == "nan":
+        return "SemTitulo"
+    return "".join([c for c in str(nome) if c.isalpha() or c.isdigit() or c in " .-_"]).strip()
+
+def padronizar_nomes_pastas(remover_arquivos: bool = False):
+    acao_texto = "[bold red]RENOMEANDO[/bold red]" if remover_arquivos else "[bold yellow]IDENTIFICADO (Modo Teste)[/bold yellow]"
+    
+    console.print(Rule(f"[orange]Padronizador de Pastas (Remover arquivos: {remover_arquivos})[/orange]"))
+    console.print(f"[dim]Varrendo diretório base: {BASE_DIR}...[/dim]\n")
+
+    pastas_para_analisar = []
+
+    # Passo 1: Coletar todos os caminhos
+    for root, dirs, files in os.walk(BASE_DIR):
+        if "videos_info.csv" in files:
+            pastas_para_analisar.append(root)
+
+    total_analisado = len(pastas_para_analisar)
+    pastas_corrigidas = 0
+    pastas_ignoradas_conflito = 0
+
+    # Passo 2: Analisar e renomear
+    for pasta in pastas_para_analisar:
+        nome_atual = os.path.basename(pasta)
+        
+        try:
+            # Lê a identidade do vídeo
+            path_info = os.path.join(pasta, "videos_info.csv")
+            df_info = pd.read_csv(path_info, dtype=str)
+            
+            if df_info.empty or 'video_id' not in df_info.columns:
+                continue
+                
+            video_id = str(df_info.iloc[0]['video_id']).strip()
+            
+            # Se o ID já está no nome da pasta, ela está correta
+            if f"[{video_id}]" in nome_atual:
+                continue
+                
+            # Descobre o título para montar o nome ideal
+            titulo_bruto = df_info.iloc[0].get('title', 'SemTitulo')
+            titulo_safe = limpar_nome_arquivo(titulo_bruto)
+            
+            nome_esperado = f"{titulo_safe} [{video_id}]" if titulo_safe else f"[{video_id}]"
+            
+            pasta_pai = os.path.dirname(pasta)
+            caminho_esperado = os.path.join(pasta_pai, nome_esperado)
+            
+            # Avalia se a pasta com o nome correto já existe (evita esmagar dados)
+            if os.path.exists(caminho_esperado):
+                console.print(f"[magenta]⚠️ CONFLITO:[/magenta] A pasta [cyan]{nome_atual}[/cyan] está fora do padrão, mas a correta já existe!")
+                console.print(f"   └── Sugestão: Rode seu script de 'limpar_pastas_duplicadas' para resolver isso.")
+                pastas_ignoradas_conflito += 1
+                continue
+            
+            # Executa a renomeação
+            console.print(f"{acao_texto}: [dim]{nome_atual}[/dim] -> [green]{nome_esperado}[/green]")
+            
+            if remover_arquivos:
+                os.rename(pasta, caminho_esperado)
+                pastas_corrigidas += 1
+
+        except Exception as e:
+            console.print(f"[bold red]Erro ao processar a pasta {pasta}: {e}[/bold red]")
+
+    # Relatório Final
+    console.print("")
+    console.print(Rule("Resumo da Operação"))
+    console.print(f"Total de pastas de vídeos verificadas: [cyan]{total_analisado}[/cyan]")
+    console.print(f"Pastas fora do padrão e sem conflito: [cyan]{pastas_corrigidas if remover_arquivos else 'Aguardando execução'}[/cyan]")
+    
+    if pastas_ignoradas_conflito > 0:
+        console.print(f"Pastas ignoradas por já existir a versão correta: [yellow]{pastas_ignoradas_conflito}[/yellow]")
+        
+    if not remover_arquivos:
+        console.print("\n[bold yellow]Isso foi apenas um teste![/bold yellow] Nenhuma pasta foi alterada.")
+        console.print("Altere [cyan]padronizar_nomes_pastas(remover_arquivos=True)[/cyan] no final do script para aplicar as mudanças de verdade.")
+    else:
+        console.print("\n[bold green]Faxina concluída com sucesso![/bold green]")
+
 if __name__ == "__main__":
-    limpar_pastas_duplicadas(remover_arquivos=True)
-    gerenciar_transcricoes_erradas(remover_arquivos=True)
+    limpar_pastas_duplicadas(remover_arquivos=False)
+    gerenciar_transcricoes_erradas(remover_arquivos=False)
+    padronizar_nomes_pastas(remover_arquivos=False)
