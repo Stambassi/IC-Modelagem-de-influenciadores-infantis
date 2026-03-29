@@ -503,32 +503,38 @@ def process_video(video_id, processed_videos, nmCanal, video_details, anoPublica
     tituloOriginal = video_details['title']
     tituloVideo = f"{limparTitulos(tituloOriginal)} [{video_id}]"
     resposta = create_filesVideo_path(nmCanal, anoPublicacaoVideo, mesPublicacaoVideo, tituloVideo, video_id)
+    
     #print(f"Conseguiu criar arquivo para o video: {resposta}")
     if(resposta == True):
-        #console.log("antes de limpar",log_locals=True)
-        # console.log("depois de limpar",log_locals=True)
         print(">> processando vídeos")
         videos_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/videos_info.csv')
-        #channels_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/channels_info.csv')
         comments_file_exists = os.path.isfile(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/comments_info.csv')
 
-        #video_details = get_video_details(video_id)
         if video_details == None:
             print("Erro por causa de autorização")
             return
+            
         total_comment_count = video_details['comment_count']  # Assumindo que 'comment_count' é o total de comentários disponíveis
 
         if total_comment_count > 0 and total_comment_count < 10000000000000: #Sentinel 
+            # 1. Salva metadados do vídeo
             pd.DataFrame([video_details]).to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/videos_info.csv', mode='a', header=not videos_file_exists, index=False)
             
-            # channel_details = get_channel_details(video_details['channel_id'])
-            # pd.DataFrame([channel_details]).to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/channels_info.csv', mode='a', header=not channels_file_exists, index=False)
-            
+            # 2. Salva os comentários
             comments = get_comments(video_id, total_comment_count)
             comments_df = pd.DataFrame(comments)
             comments_df['channel_id'] = video_details['channel_id']
             
             comments_df.to_csv(f'files/{nmCanal}/{anoPublicacaoVideo}/{mesPublicacaoVideo}/{tituloVideo}/comments_info.csv', mode='a', header=not comments_file_exists, index=False, quoting=csv.QUOTE_MINIMAL)
+
+            # Atualiza a memória (evita reprocessar na mesma execução)
+            processed_videos.add(video_id)
+            
+            # Salva fisicamente para execuções futuras
+            caminho_processados = f'files/{nmCanal}/processed_videos.csv'
+            with open(caminho_processados, 'a', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                writer.writerow([video_id])
 
 def make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE, channel_id):    
     api_manager = YouTubeAPIManager.get_instance()  # Obtendo a instância do objeto
@@ -659,97 +665,79 @@ def sentiment_analisys(text):
     return scores
 
 def coletar_videos_youtuber(lista_youtuber: list[str]):
-   # Configurar com aspas duplas os termos chaves -> testar primeiro....
     youtuberListPath = "youtuberslist.csv"
     channel_data  = pd.read_csv(youtuberListPath)
     queries = config["queries"]
 
-    df_atual_date = pd.read_csv('files/atual_date.csv', header=None)
-
     GlobalState.get_instance().set_state("status", "working")
 
-    # Captura a data atual de busca do dataframe atual_date (year, month, day)
-    atual_date = {
-        "year": df_atual_date.iloc[0, 0],
-        "month": df_atual_date.iloc[0, 1],
-        "day": df_atual_date.iloc[0, 2],
-    }
-
     start_date = datetime(config['start_date'][0], config['start_date'][1], config['start_date'][2]) #Data inicial da coleta
-    #end_date = datetime(config['end_date'][0], config['end_date'][1], config['end_date'][2])
-    end_date = datetime(atual_date["year"], atual_date["month"], atual_date["day"]) #Data final 
     interval_type = "monthly" #Intervalo da busca, se é mensal(monthtly), ou semanal (weekly)
     REGION_CODE = config['region_code']
     RELEVANCE_LANGUAGE = config['relevance_language']
-    TOP_COMMENTED = False #Pegar os vídeos mais comentados? Não vale a pena porque está retornando vídeo do tema...
+    TOP_COMMENTED = False 
     number_of_videos_to_process = 0
-    REQUIRE_TITLE_KEYWORDS = False # Forçar o processamento dos vídeos e comentários com determinadas keywords nos títulos...
-    
-    processed_videos = set()
+    REQUIRE_TITLE_KEYWORDS = False 
 
-    # Tenta carregar vídeos já processados
-    try:
-        with open('files/processed_videos.csv', 'r') as file:
-            processed_videos = {row[0] for row in csv.reader(file)}
-    except FileNotFoundError:
-        pass  # Continua com o conjunto vazio se o arquivo não existir
+    api_manager = YouTubeAPIManager.get_instance()  
+    connectCheckAPI() 
 
-    api_manager = YouTubeAPIManager.get_instance()  # Obtendo a instância do objeto
-    
-    connectCheckAPI() # Conecta com a API de status -> Caso não configurou, ignore
+    # 1. Loop de youtubers (Apenas os selecionados no parâmetro da função)
+    for youtuber in lista_youtuber:
+        channel_id = channel_data.loc[channel_data['nome'] == youtuber, 'channel_id'].item()
+        create_files_path(youtuber) 
 
+        # Recupera a memória de vídeos já processados do youtuber 
+        processed_videos = recuperar_videos_processados(youtuber)
+        console.print(f"[dim]Memória restaurada: {len(processed_videos)} vídeos já garantidos para {youtuber}.[/dim]")
 
-    # Comeco da coleta de dados, implementação funciona com 3 repeticoes: A maior sobre intervalo de datas, determinado pelo arquivo atual_date
-    # e as datas no config, depois por cada youtuber e por ultimo pelas querys
+        # 2. Captura a data individual do youtuber
+        caminho_data_youtuber = f"files/{youtuber}/atual_date.csv"
+        if os.path.exists(caminho_data_youtuber):
+            df_atual_date = pd.read_csv(caminho_data_youtuber, header=None)
+            end_date_youtuber = datetime(int(df_atual_date.iloc[0, 0]), int(df_atual_date.iloc[0, 1]), int(df_atual_date.iloc[0, 2]))
+        else:
+            end_date_youtuber = datetime(config['end_date'][0], config['end_date'][1], config['end_date'][2])
 
-    for start_interval, end_interval in generate_date_intervals(start_date, end_date, interval_type):
-        # Atualiza o atual_date.csv para cada iteração do gerador de intervalos
-        with open("files/atual_date.csv", "w", newline="") as csvfile:
-            fieldnames = ["year", "month", "day"]
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        # 3. Loop de datas para esse youtuber em específico
+        for start_interval, end_interval in generate_date_intervals(start_date, end_date_youtuber, interval_type):
+            
+            # Atualiza o atual_date.csv individual para cada iteração do gerador de intervalos
+            with open(caminho_data_youtuber, "w", newline="") as csvfile:
+                fieldnames = ["year", "month", "day"]
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writerow({
+                    "year": end_interval.year,
+                    "month": end_interval.month,
+                    "day": end_interval.day
+                })
 
-            writer.writerow({
-                "year": end_interval.year,
-                "month": end_interval.month,
-                "day": end_interval.day
-            })
+            console.rule(f"Youtuber: {youtuber} ({start_interval.date()} - {end_interval.date()})")
 
-        # Aqui ocorre o loop para a coleta de dados (Realiza uma vez para cada query com um youtuber 
-        # depois muda o youtuber dentro da lista passada como parametro)     
-        for youtuber in lista_youtuber:
-
-            console.rule(f"Youtuber: {youtuber} ({start_interval} - {end_interval})")
-            channel_id = channel_data.loc[channel_data['nome'] == youtuber, 'channel_id'].item()
-            create_files_path(youtuber) # Cria diretório files para armazenar saidas
-
+            # 4. Loop de queries
             for query in queries:
-    
                 print(f">>> Query: {query}")
                 GlobalState.get_instance().set_state("atual_query", query)
-                #GlobalState.get_instance().set_state("query_progress", f"{queries.index(query) + 1}/{quantidadeQuerys}")
             
                 published_after = start_interval.isoformat() + "Z"
                 published_before = end_interval.isoformat() + "Z"
-                video_details_list = []
-                #print(channel_data)
-                search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE,channel_id) 
+                
+                search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE, channel_id) 
                 videos = search_response.get("items", [])
                 total_videos = len(videos)
                     
-                if total_videos == 0:  # Verifica se search_response foi obtido com sucesso
+                if total_videos == 0:  
                     console.log("[red]Não foi possível obter uma resposta da API.[/] Movendo para a próxima consulta.")
                     continue
                 
                 for index, item in enumerate(videos, start=1):
-                    
                     VIDEO_TITLE = item['snippet']['title'].lower()
-
                     key_words = config['key_words']
 
-                    # Verifica se o título possui as palavras chave
                     if any((word.lower() in VIDEO_TITLE for word in key_words) or len(key_words) == 0):
                         video_id = item['id']['videoId']
                         print(f"Processando vídeo {index} de {total_videos}: ID = {video_id}")
+                        
                         if video_id not in processed_videos:
                             video_details = get_video_details(video_id)
                             comment_count = video_details['comment_count']
@@ -758,42 +746,72 @@ def coletar_videos_youtuber(lista_youtuber: list[str]):
                             anoPublicacaoVideo = data_publicacao_Video[0:4]
                             mesPublicacaoVideo = nomeMesAno(data_publicacao_Video[5:7])
 
-                            
-                            #a = input('').split("")[0]
-                            #print(a)
-                        
                             console.print(f"[cyan]Título[/]: {video_details['title']}, Quantidade de comentários: [bold green]{video_details['comment_count']}[/]")
-                            atualizarUltimaDatadeColeta(youtuber,mesPublicacaoVideo,anoPublicacaoVideo)
+                            atualizarUltimaDatadeColeta(youtuber, mesPublicacaoVideo, anoPublicacaoVideo)
+                            
                             if comment_count > 0:
                                 process_video(video_id, processed_videos, youtuber, video_details, anoPublicacaoVideo, mesPublicacaoVideo)
 
-                console.log(f"Coleta concluída para a consulta: {query} entre {start_interval} e {end_interval}")
-                console.print(">> Canal analisado foi: [bold green]"+youtuber+"[/]")
+                console.log(f"Coleta concluída para a consulta: {query} entre {start_interval.date()} e {end_interval.date()}")
+        
+        console.print(">> Canal analisado foi: [bold green]"+youtuber+"[/]")
+
+def recuperar_videos_processados(youtuber: str) -> set:
+    """
+    Varre a pasta local do youtuber, extrai todos os IDs já baixados
+    e reconstrói o arquivo de memória (processed_videos.csv) individual.
+    """
+    from pathlib import Path
+    import csv
+    
+    caminho_youtuber = Path(f"files/{youtuber}")
+    caminho_processados = caminho_youtuber / "processed_videos.csv"
+    
+    ids_processados = set()
+    
+    # 1. Varre a pasta buscando os vídeos que já foram baixados fisicamente
+    if caminho_youtuber.exists():
+        for root, _, files in os.walk(caminho_youtuber):
+            if "videos_info.csv" in files:
+                try:
+                    df_info = pd.read_csv(Path(root) / "videos_info.csv", dtype=str)
+                    if not df_info.empty and 'video_id' in df_info.columns:
+                        vid = str(df_info.iloc[0]['video_id']).strip()
+                        ids_processados.add(vid)
+                except:
+                    pass
+    
+    # 2. Resgata IDs que já estivessem no CSV (caso o arquivo exista mas a pasta tenha sido zipada/excluída no DVC)
+    if caminho_processados.exists():
+        try:
+            with open(caminho_processados, 'r', encoding='utf-8') as file:
+                for row in csv.reader(file):
+                    if row:
+                        ids_processados.add(str(row[0]).strip())
+        except Exception as e:
+            console.print(f"[yellow]Aviso: Não foi possível ler {caminho_processados}: {e}[/yellow]")
+
+    # 3. Salva a lista consolidada de volta na pasta do youtuber
+    if ids_processados:
+        caminho_youtuber.mkdir(parents=True, exist_ok=True)
+        with open(caminho_processados, 'w', newline='', encoding='utf-8') as file:
+            writer = csv.writer(file)
+            for vid in ids_processados:
+                writer.writerow([vid])
                 
+    return ids_processados
 
 def main():
 
-   # Configurar com aspas duplas os termos chaves -> testar primeiro....
-
+    # Configurar com aspas duplas os termos chaves -> testar primeiro....
     youtuberListPath = "youtuberslist.csv"
     channel_data  = pd.read_csv(youtuberListPath)
     queries = config["queries"]
     youtubers = channel_data['nome']
 
-    df_atual_date = pd.read_csv('files/atual_date.csv', header=None)
-
     GlobalState.get_instance().set_state("status", "working")
 
-    # Captura a data atual de busca do dataframe atual_date (year, month, day)
-    atual_date = {
-        "year": df_atual_date.iloc[0, 0],
-        "month": df_atual_date.iloc[0, 1],
-        "day": df_atual_date.iloc[0, 2],
-    }
-
     start_date = datetime(config['start_date'][0], config['start_date'][1], config['start_date'][2]) #Data inicial da coleta
-    #end_date = datetime(config['end_date'][0], config['end_date'][1], config['end_date'][2])
-    end_date = datetime(atual_date["year"], atual_date["month"], atual_date["day"]) #Data final 
     interval_type = "monthly" #Intervalo da busca, se é mensal(monthtly), ou semanal (weekly)
     REGION_CODE = config['region_code']
     RELEVANCE_LANGUAGE = config['relevance_language']
@@ -814,57 +832,65 @@ def main():
     
     connectCheckAPI() # Conecta com a API de status -> Caso não configurou, ignore
 
+    # 1. Loop principal por youtubers (a coleta é individualizada)
+    for youtuber in youtubers:
+        channel_id = channel_data.loc[channel_data['nome'] == youtuber, 'channel_id'].item()
+        create_files_path(youtuber) # Cria diretório files/youtuber para armazenar saidas
 
-    # Comeco da coleta de dados, implementação funciona com 3 repeticoes: A maior sobre intervalo de datas, determinado pelo arquivo atual_date
-    # e as datas no config, depois por cada youtuber e por ultimo pelas querys
+        # Recupera a memória de vídeos já processados do youtuber
+        processed_videos = recuperar_videos_processados(youtuber)
+        console.print(f"[dim]Memória restaurada: {len(processed_videos)} vídeos já garantidos para {youtuber}.[/dim]")
 
-    for start_interval, end_interval in generate_date_intervals(start_date, end_date, interval_type):
-        # Atualiza o atual_date.csv para cada iteração do gerador de intervalos
-        with open("files/atual_date.csv", "w", newline="") as csvfile:
-            fieldnames = ["year", "month", "day"]
-            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        # 2. Captura a data individual do youtuber
+        caminho_data_youtuber = f"files/{youtuber}/atual_date.csv"
+        if os.path.exists(caminho_data_youtuber):
+            df_atual_date = pd.read_csv(caminho_data_youtuber, header=None)
+            end_date_youtuber = datetime(int(df_atual_date.iloc[0, 0]), int(df_atual_date.iloc[0, 1]), int(df_atual_date.iloc[0, 2]))
+        else:
+            # Se a pasta é nova ou foi resetada, usa o limite do config
+            end_date_youtuber = datetime(config['end_date'][0], config['end_date'][1], config['end_date'][2])
 
-            writer.writerow({
-                "year": end_interval.year,
-                "month": end_interval.month,
-                "day": end_interval.day
-            })
+        # 3. Loop de datas fica contido dentro do youtuber
+        for start_interval, end_interval in generate_date_intervals(start_date, end_date_youtuber, interval_type):
+            
+            # Atualiza o atual_date.csv específico de cada youtuber para cada iteração
+            with open(caminho_data_youtuber, "w", newline="") as csvfile:
+                fieldnames = ["year", "month", "day"]
+                writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                writer.writerow({
+                    "year": end_interval.year,
+                    "month": end_interval.month,
+                    "day": end_interval.day
+                })
 
-        # Aqui ocorre o loop para a coleta de dados (Realiza uma vez para cada query com um youtuber depois muda o youtuber)     
-        for youtuber in youtubers:
+            console.rule(f"Youtuber: {youtuber} ({start_interval.date()} - {end_interval.date()})")
 
-            console.rule(f"Youtuber: {youtuber} ({start_interval} - {end_interval})")
-            channel_id = channel_data.loc[channel_data['nome'] == youtuber, 'channel_id'].item()
-            create_files_path(youtuber) # Cria diretório files para armazenar saidas
-
+            # 4. Loop de queries
             for query in queries:
-    
                 print(f">>> Query: {query}")
                 GlobalState.get_instance().set_state("atual_query", query)
-                #GlobalState.get_instance().set_state("query_progress", f"{queries.index(query) + 1}/{quantidadeQuerys}")
             
                 published_after = start_interval.isoformat() + "Z"
                 published_before = end_interval.isoformat() + "Z"
                 video_details_list = []
-                #print(channel_data)
-                search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE,channel_id) 
+                
+                search_response = make_search_request(query, published_after, published_before, REGION_CODE, RELEVANCE_LANGUAGE, channel_id) 
                 videos = search_response.get("items", [])
                 total_videos = len(videos)
                     
-                if total_videos == 0:  # Verifica se search_response foi obtido com sucesso
+                if total_videos == 0:  
                     console.log("[red]Não foi possível obter uma resposta da API.[/] Movendo para a próxima consulta.")
                     continue
                 
                 for index, item in enumerate(videos, start=1):
-                    
                     VIDEO_TITLE = item['snippet']['title'].lower()
-
                     key_words = config['key_words']
 
                     # Verifica se o título possui as palavras chave
                     if any((word.lower() in VIDEO_TITLE for word in key_words) or len(key_words) == 0):
                         video_id = item['id']['videoId']
                         print(f"Processando vídeo {index} de {total_videos}: ID = {video_id}")
+                        
                         if video_id not in processed_videos:
                             video_details = get_video_details(video_id)
                             comment_count = video_details['comment_count']
@@ -873,18 +899,18 @@ def main():
                             anoPublicacaoVideo = data_publicacao_Video[0:4]
                             mesPublicacaoVideo = nomeMesAno(data_publicacao_Video[5:7])
 
-                            
-                            #a = input('').split("")[0]
-                            #print(a)
-                        
                             console.print(f"[cyan]Título[/]: {video_details['title']}, Quantidade de comentários: [bold green]{video_details['comment_count']}[/]")
-                            atualizarUltimaDatadeColeta(youtuber,mesPublicacaoVideo,anoPublicacaoVideo)
+                            
+                            # Atualiza a tabela geral do dashboard
+                            atualizarUltimaDatadeColeta(youtuber, mesPublicacaoVideo, anoPublicacaoVideo)
+                            
                             if comment_count > 0:
                                 process_video(video_id, processed_videos, youtuber, video_details, anoPublicacaoVideo, mesPublicacaoVideo)
 
-                console.log(f"Coleta concluída para a consulta: {query} entre {start_interval} e {end_interval}")
-                console.print(">> Canal analisado foi: [bold green]"+youtuber+"[/]")
-                
+                console.log(f"Coleta concluída para a consulta: {query} entre {start_interval.date()} e {end_interval.date()}")
+        
+        # Conclusão por Youtuber
+        console.print(f">> Canal analisado com sucesso: [bold green]{youtuber}[/]")               
 
 if __name__ == "__main__":
     main()

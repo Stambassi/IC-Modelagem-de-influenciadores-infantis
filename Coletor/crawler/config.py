@@ -7,7 +7,7 @@ config = {
 
   # A coleta ocorre da data final para a data inicial -> [ano, mês, dia]
   'start_date': [2020, 1, 1], 
-  'end_date': [2025, 1, 10],
+  'end_date': [2023, 1, 31],
 
   # API que receberá uma requisição PATCH com payload de um JSON contendo informações acerca da coleta
   # Mantenha uma string vazia '' Caso não tenha configurado

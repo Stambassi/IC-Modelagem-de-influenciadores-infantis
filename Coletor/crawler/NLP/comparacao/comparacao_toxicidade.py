@@ -591,14 +591,14 @@ def gerar_tabela_interseccao_modelos():
 if __name__ == "__main__":
     gerar_estatisticas_iniciais()
 
-    # gerar_metricas_concordancia()
+    gerar_metricas_concordancia()
 
-    # gerar_matriz_confusao()
+    gerar_matriz_confusao()
 
-    # analisar_sensibilidade_threshold()
+    analisar_sensibilidade_threshold()
 
-    # encontrar_threshold_por_concordancia(0.9)
+    encontrar_threshold_por_concordancia(0.9)
 
-    # persistir_casos_criticos_perspective(0.50)
+    persistir_casos_criticos_perspective(0.50)
 
-    # gerar_tabela_interseccao_modelos()
+    gerar_tabela_interseccao_modelos()

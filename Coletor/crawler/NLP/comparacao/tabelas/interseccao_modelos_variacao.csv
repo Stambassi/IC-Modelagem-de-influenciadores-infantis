@@ -1,16 +1,16 @@
-Cenário,Regra,Qtd,Tipo,% do Total
-Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.2,1227,Consenso,3.77%
-Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.3,1034,Consenso,3.17%
-Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.4,610,Consenso,1.87%
-Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.5,276,Consenso,0.85%
-Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.6,83,Consenso,0.25%
-Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.7,10,Consenso,0.03%
-Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.8,1,Consenso,0.00%
-Filtro Conservador Base,Detox > 0.80 E Persp > 0.20,1227,Filtro,3.77%
-Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.2,65,Divergência,0.20%
-Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.3,258,Divergência,0.79%
-Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.4,682,Divergência,2.09%
-Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.5,1016,Divergência,3.12%
-Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.6,1209,Divergência,3.71%
-Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.7,1282,Divergência,3.94%
-Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.8,1291,Divergência,3.96%
+Cenário,Regra,Quantidade,Tipo,% do Total
+Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.2,583,Consenso,3.36%
+Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.3,484,Consenso,2.79%
+Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.4,280,Consenso,1.61%
+Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.5,125,Consenso,0.72%
+Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.6,37,Consenso,0.21%
+Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.7,2,Consenso,0.01%
+Consenso entre Detox e Persp,Detox > 0.80 E Persp > 0.8,0,Consenso,0.00%
+Filtro Conservador Base,Detox > 0.80 E Persp > 0.20,583,Filtro,3.36%
+Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.2,38,Divergência,0.22%
+Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.3,137,Divergência,0.79%
+Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.4,341,Divergência,1.96%
+Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.5,496,Divergência,2.86%
+Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.6,584,Divergência,3.36%
+Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.7,619,Divergência,3.57%
+Divergência (Persp ignora T),Detox > 0.80 E Persp < 0.8,621,Divergência,3.58%

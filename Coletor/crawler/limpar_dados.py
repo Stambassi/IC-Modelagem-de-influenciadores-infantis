@@ -206,7 +206,75 @@ def padronizar_nomes_pastas(remover_arquivos: bool = False):
     else:
         console.print("\n[bold green]Faxina concluída com sucesso![/bold green]")
 
+'''
+    Remove pastas de vídeos que foram publicados fora do intervalo especificado.
+    O formato da data deve ser 'YYYY-MM-DD' ou 'YYYY-MM-DD HH:MM:SS'.
+'''
+def filtrar_por_data(data_inicio: str, data_fim: str, remover_arquivos: bool = False):
+    console.print(Rule(f"[bold cyan]Filtrando por Data: {data_inicio} até {data_fim} (Remover: {remover_arquivos})[/bold cyan]"))
+    
+    try:
+        # Converter as datas para o padrão de tempo contendo timezone (UTC)
+        inicio_dt = pd.to_datetime(data_inicio, utc=True)
+        # O .replace para garantir que vá até o final do último dia do limite superior
+        fim_dt = pd.to_datetime(data_fim, utc=True).replace(hour=23, minute=59, second=59)
+    except Exception as e:
+        console.print(f"[bold red]Erro ao interpretar as datas fornecidas: {e}[/bold red]")
+        return
+
+    pastas_removidas = 0
+    total_analisado = 0
+    
+    for root, dirs, files in os.walk(BASE_DIR):
+        if "videos_info.csv" in files:
+            caminho_pasta = Path(root)
+            total_analisado += 1
+            
+            try:
+                # Carregar o CSV como string para evitar conversões indesejadas, depois processa a data
+                df_info = pd.read_csv(caminho_pasta / "videos_info.csv", dtype=str)
+                
+                if not df_info.empty and 'published_at' in df_info.columns:
+                    pub_str = df_info.iloc[0]['published_at']
+                    pub_dt = pd.to_datetime(pub_str, errors='coerce', utc=True)
+                    
+                    if pd.notna(pub_dt):
+                        # Condição: se a data do vídeo é MENOR que o início ou MAIOR que o fim
+                        if pub_dt < inicio_dt or pub_dt > fim_dt:
+                            acao = "[bold red]DELETANDO[/bold red]" if remover_arquivos else "[bold yellow]FORA DO INTERVALO (Teste)[/bold yellow]"
+                            data_legivel = pub_dt.strftime('%d/%m/%Y')
+                            
+                            console.print(f"{acao} Data: {data_legivel} | Pasta: {caminho_pasta.relative_to(BASE_DIR)}")
+                            
+                            if remover_arquivos:
+                                try:
+                                    shutil.rmtree(caminho_pasta)
+                                    pastas_removidas += 1
+                                except Exception as e:
+                                    console.print(f"   └── [red]Erro ao deletar: {e}[/red]")
+                            else:
+                                pastas_removidas += 1
+            except Exception as e:
+                console.print(f"[red]Erro ao processar o CSV na pasta {caminho_pasta}: {e}[/red]")
+
+    # Relatório Final
+    console.print("")
+    console.print(f"Total de vídeos avaliados: [cyan]{total_analisado}[/cyan]")
+    if remover_arquivos:
+        console.print(f"Pastas deletadas (fora do limite): [green]{pastas_removidas}[/green]")
+    else:
+        console.print(f"Vídeos encontrados fora do limite: [yellow]{pastas_removidas}[/yellow]")
+        console.print("\n[bold yellow]Isso foi apenas um teste![/bold yellow] Nenhuma pasta foi deletada.")
+
 if __name__ == "__main__":
-    limpar_pastas_duplicadas(remover_arquivos=False)
-    gerenciar_transcricoes_erradas(remover_arquivos=False)
-    padronizar_nomes_pastas(remover_arquivos=False)
+    # Testes base - Mantenha remover_arquivos=False inicialmente para visualizar os impactos
+    # limpar_pastas_duplicadas(remover_arquivos=False)
+    # gerenciar_transcricoes_erradas(remover_arquivos=False)
+    # padronizar_nomes_pastas(remover_arquivos=False)
+    
+    # Novo script para recorte temporal: Janeiro de 2020 a Janeiro de 2023
+    filtrar_por_data(
+        data_inicio="2020-01-01", 
+        data_fim="2023-01-31", 
+        remover_arquivos=True
+    )

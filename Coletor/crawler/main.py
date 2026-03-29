@@ -92,7 +92,7 @@ def adicionar_influenciador():
             nome_oficial = script.nomeCanal(c_id)
             novos_dados.append({
                 'nome': nome_oficial, 'channel_id': c_id, 'subscribers': subs,
-                'ultimoAnoColetado': "2019", 'ultimoMesColetado': "Janeiro",
+                'ultimoAnoColetado': "2020", 'ultimoMesColetado': "Janeiro",
                 'videosColetados': 0, 'comentariosColetados': 0, 'videosTranscritos': 0
             })
             console.print(f"[green]Sucesso[/] ao inserir {nome_oficial}")
