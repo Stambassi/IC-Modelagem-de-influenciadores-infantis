@@ -22,18 +22,22 @@ YOUTUBER_LIST_PATH = "youtuberslist.csv"
 BASE_DIR = Path("files")
 
 MAPA_YOUTUBERS_CATEGORIA = {
-    'Amy Scarlet': 'Roblox',
-    'AuthenticGames': 'Minecraft',
-    'Athos': 'Minecraft',
-    'Cadres': 'Minecraft',
     'Julia MineGirl': 'Roblox',
-    'Kass e KR': 'Minecraft',
-    'Lokis': 'Roblox',
-    'Luluca Games': 'Roblox',
     'Papile': 'Roblox',
+    'Tex HS': 'Roblox',
+    'Amy Scarlet': 'Roblox',
+    'Luluca Games': 'Roblox',
+    'meu nome é david': 'Roblox',
+    'Lokis': 'Roblox',
+
     'Robin Hood Gamer': 'Minecraft',
-    'TazerCraft': 'Minecraft',
-    'Tex HS': 'Misto'
+    'AuthenticGames': 'Minecraft',
+    'Cadres': 'Minecraft',
+    'Athos': 'Minecraft',
+    'JP Plays': 'Minecraft',
+    'Marcelodrv': 'Minecraft',
+    'Geleia': 'Minecraft',
+    'Kass e KR': 'Minecraft',
 }
 
 # -------------------------------------------------------------------

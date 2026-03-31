@@ -540,17 +540,22 @@ def rodar_pipeline_vmg(youtubers_list: list[str], mapa_categorias: dict, config_
 if __name__ == '__main__':
     # Mapeia cada youtuber para sua categoria principal (Minecraft, Roblox, etc.)
     mapa_youtubers_categoria = {
+        'Julia MineGirl': 'Roblox',
+        'Papile': 'Roblox',
+        'Tex HS': 'Roblox',
         'Amy Scarlet': 'Roblox',
+        'Luluca Games': 'Roblox',
+        'meu nome é david': 'Roblox',
+        'Lokis': 'Roblox',
+
+        'Robin Hood Gamer': 'Minecraft',
         'AuthenticGames': 'Minecraft',
         'Cadres': 'Minecraft',
-        'Julia MineGirl': 'Roblox',
+        'Athos': 'Minecraft',
+        'JP Plays': 'Minecraft',
+        'Marcelodrv': 'Minecraft',
+        'Geleia': 'Minecraft',
         'Kass e KR': 'Minecraft',
-        'Lokis': 'Roblox',
-        'Luluca Games': 'Roblox',
-        'Papile': 'Roblox',
-        'Robin Hood Gamer': 'Minecraft',
-        'TazerCraft': 'Minecraft',
-        # 'Tex HS': 'Misto'
     }
 
     lista_youtubers = list(mapa_youtubers_categoria.keys())

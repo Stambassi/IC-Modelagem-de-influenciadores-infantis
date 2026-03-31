@@ -19,9 +19,8 @@ config = {
   'try_again_timeout': 60,                                              
 
   # Palavras que serão utilizadas para filtrar os títulos dos vídeos
-  'key_words': [
-      'minecraft',
-      'Minecraft'],
+  # 'key_words': ['minecraft', 'roblox'],
+  'key_words': [],
 
   # KEYs da API v3 do YouTube
   'youtube_keys': [
@@ -33,15 +32,16 @@ config = {
     'AIzaSyCuAKpgB5Q38PUbIrstFfU5ZQEr4xb13q0',
     'AIzaSyDy3ioPkbzXVQ2EaDDjGGc3vYgxCIBtrJg',
     'AIzaSyCmyWHJ7UM9i2Vb6_X3QSy1D_QgAlkY3Oo',
-    'AIzaSyBlnJKHNU3Z_7UUmFmzRWVxVjldOQNkrvw'
+    'AIzaSyBlnJKHNU3Z_7UUmFmzRWVxVjldOQNkrvw',
+    'AIzaSyBSOeQLpD-p0jT3TybCR48iC_RiOVthqvc',
+    'AIzaSyCNMB2P4un_omAsI6yu6AZeWtICyyuGCBM'
   ],
 
 
   # Queries que serão utilizadas na pesquisa
 'queries': [
       'minecraft',
-      'Minecraft',
-      'mine'
+      'roblox',
 ],
 
 # ID do canal para restringir a busca

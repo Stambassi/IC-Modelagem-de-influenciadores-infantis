@@ -46,6 +46,26 @@ console = Console()
 
 # Configuração do timeout
 import socket
+
+MAPA_YOUTUBERS_CATEGORIA = {
+    'Julia MineGirl': 'Roblox',
+    'Papile': 'Roblox',
+    'Tex HS': 'Roblox',
+    'Amy Scarlet': 'Roblox',
+    'Luluca Games': 'Roblox',
+    'meu nome é david': 'Roblox',
+    'Lokis': 'Roblox',
+
+    'Robin Hood Gamer': 'Minecraft',
+    'AuthenticGames': 'Minecraft',
+    'Cadres': 'Minecraft',
+    'Athos': 'Minecraft',
+    'JP Plays': 'Minecraft',
+    'Marcelodrv': 'Minecraft',
+    'Geleia': 'Minecraft',
+    'Kass e KR': 'Minecraft',
+}
+
 # timeout_in_sec = 15
 timeout_in_sec = 60*3 # 3 minutes timeout limit
 socket.setdefaulttimeout(timeout_in_sec)
@@ -667,7 +687,6 @@ def sentiment_analisys(text):
 def coletar_videos_youtuber(lista_youtuber: list[str]):
     youtuberListPath = "youtuberslist.csv"
     channel_data  = pd.read_csv(youtuberListPath)
-    queries = config["queries"]
 
     GlobalState.get_instance().set_state("status", "working")
 
@@ -691,6 +710,19 @@ def coletar_videos_youtuber(lista_youtuber: list[str]):
         processed_videos = recuperar_videos_processados(youtuber)
         console.print(f"[dim]Memória restaurada: {len(processed_videos)} vídeos já garantidos para {youtuber}.[/dim]")
 
+        categoria_youtuber = MAPA_YOUTUBERS_CATEGORIA.get(youtuber)
+        
+        if categoria_youtuber == 'Minecraft':
+            queries = ['minecraft']
+            console.print(f"[bold green]Categoria identificada:[/] Minecraft")
+        elif categoria_youtuber == 'Roblox':
+            queries = ['roblox']
+            console.print(f"[bold blue]Categoria identificada:[/] Roblox")
+        else:
+            # Fallback: Se esquecer de mapear algum youtuber novo, puxa do config
+            queries = config.get("queries", ['minecraft', 'roblox'])
+            console.print(f"[bold yellow]Categoria não mapeada![/] Usando queries padrão do config.")
+            
         # 2. Captura a data individual do youtuber
         caminho_data_youtuber = f"files/{youtuber}/atual_date.csv"
         if os.path.exists(caminho_data_youtuber):
@@ -731,22 +763,50 @@ def coletar_videos_youtuber(lista_youtuber: list[str]):
                     continue
                 
                 for index, item in enumerate(videos, start=1):
+                    
                     VIDEO_TITLE = item['snippet']['title'].lower()
+                    VIDEO_DESC = item['snippet'].get('description', '').lower()
+                    video_id = item['id']['videoId']
                     key_words = config['key_words']
 
-                    if any((word.lower() in VIDEO_TITLE for word in key_words) or len(key_words) == 0):
-                        video_id = item['id']['videoId']
-                        print(f"Processando vídeo {index} de {total_videos}: ID = {video_id}")
-                        
-                        if video_id not in processed_videos:
+                    print(f"Avaliando vídeo {index} de {total_videos}: ID = {video_id}")
+                    
+                    # Pula se já foi processado
+                    if video_id in processed_videos:
+                        continue
+
+                    aprovado = False
+                    video_details = None # Começa nulo para não gastar cota à toa
+
+                    # Se a lista estiver vazia, aprova direto
+                    if len(key_words) == 0:
+                        aprovado = True
+                    else:
+                        # 1º Fila do Funil (Grátis): Checa Título ou Descrição
+                        if any(word.lower() in VIDEO_TITLE or word.lower() in VIDEO_DESC for word in key_words):
+                            aprovado = True
+                        else:
+                            # 2º Fila do Funil (Custa Cota): Checa as tags
+                            # Se não achou no título/descrição, puxa os detalhes do vídeo para olhar as tags
                             video_details = get_video_details(video_id)
-                            comment_count = video_details['comment_count']
+                            if video_details:
+                                VIDEO_TAGS = str(video_details.get('tags', '')).lower()
+                                if any(word.lower() in VIDEO_TAGS for word in key_words):
+                                    aprovado = True
+
+                    if aprovado:
+                        # Se foi aprovado pelo Snippet na 1ª fila (ou lista vazia), puxs os detalhes agora
+                        if video_details is None:
+                            video_details = get_video_details(video_id)
+                        
+                        if video_details:
+                            comment_count = video_details.get('comment_count', 0)
                             data_publicacao_Video = video_details['published_at']
                             
                             anoPublicacaoVideo = data_publicacao_Video[0:4]
                             mesPublicacaoVideo = nomeMesAno(data_publicacao_Video[5:7])
 
-                            console.print(f"[cyan]Título[/]: {video_details['title']}, Quantidade de comentários: [bold green]{video_details['comment_count']}[/]")
+                            console.print(f"[cyan]Título[/]: {video_details['title']}, Quantidade de comentários: [bold green]{comment_count}[/]")
                             atualizarUltimaDatadeColeta(youtuber, mesPublicacaoVideo, anoPublicacaoVideo)
                             
                             if comment_count > 0:
@@ -806,7 +866,7 @@ def main():
     # Configurar com aspas duplas os termos chaves -> testar primeiro....
     youtuberListPath = "youtuberslist.csv"
     channel_data  = pd.read_csv(youtuberListPath)
-    queries = config["queries"]
+    # queries = config["queries"]
     youtubers = channel_data['nome']
 
     GlobalState.get_instance().set_state("status", "working")
@@ -841,6 +901,19 @@ def main():
         processed_videos = recuperar_videos_processados(youtuber)
         console.print(f"[dim]Memória restaurada: {len(processed_videos)} vídeos já garantidos para {youtuber}.[/dim]")
 
+        categoria_youtuber = MAPA_YOUTUBERS_CATEGORIA.get(youtuber)
+        
+        if categoria_youtuber == 'Minecraft':
+            queries = ['minecraft']
+            console.print(f"[bold green]Categoria identificada:[/] Minecraft")
+        elif categoria_youtuber == 'Roblox':
+            queries = ['roblox']
+            console.print(f"[bold blue]Categoria identificada:[/] Roblox")
+        else:
+            # Fallback: Se esquecer de mapear algum youtuber novo, puxa do config
+            queries = config.get("queries", ['minecraft', 'roblox'])
+            console.print(f"[bold yellow]Categoria não mapeada![/] Usando queries padrão do config.")
+            
         # 2. Captura a data individual do youtuber
         caminho_data_youtuber = f"files/{youtuber}/atual_date.csv"
         if os.path.exists(caminho_data_youtuber):
@@ -881,27 +954,52 @@ def main():
                 if total_videos == 0:  
                     console.log("[red]Não foi possível obter uma resposta da API.[/] Movendo para a próxima consulta.")
                     continue
-                
+
                 for index, item in enumerate(videos, start=1):
+                    
                     VIDEO_TITLE = item['snippet']['title'].lower()
+                    VIDEO_DESC = item['snippet'].get('description', '').lower()
+                    video_id = item['id']['videoId']
                     key_words = config['key_words']
 
-                    # Verifica se o título possui as palavras chave
-                    if any((word.lower() in VIDEO_TITLE for word in key_words) or len(key_words) == 0):
-                        video_id = item['id']['videoId']
-                        print(f"Processando vídeo {index} de {total_videos}: ID = {video_id}")
-                        
-                        if video_id not in processed_videos:
+                    print(f"Avaliando vídeo {index} de {total_videos}: ID = {video_id}")
+                    
+                    # Pula se já foi processado
+                    if video_id in processed_videos:
+                        continue
+
+                    aprovado = False
+                    video_details = None # Começa nulo para não gastar cota à toa
+
+                    # Se a lista estiver vazia, aprova direto
+                    if len(key_words) == 0:
+                        aprovado = True
+                    else:
+                        # 1º Fila do Funil (Grátis): Checa Título ou Descrição
+                        if any(word.lower() in VIDEO_TITLE or word.lower() in VIDEO_DESC for word in key_words):
+                            aprovado = True
+                        else:
+                            # 2º Fila do Funil (Custa Cota): Checa as tags
+                            # Se não achou no título/descrição, puxa os detalhes do vídeo para olhar as tags
                             video_details = get_video_details(video_id)
-                            comment_count = video_details['comment_count']
+                            if video_details:
+                                VIDEO_TAGS = str(video_details.get('tags', '')).lower()
+                                if any(word.lower() in VIDEO_TAGS for word in key_words):
+                                    aprovado = True
+
+                    if aprovado:
+                        # Se foi aprovado pelo Snippet na 1ª fila (ou lista vazia), puxs os detalhes agora
+                        if video_details is None:
+                            video_details = get_video_details(video_id)
+                        
+                        if video_details:
+                            comment_count = video_details.get('comment_count', 0)
                             data_publicacao_Video = video_details['published_at']
                             
                             anoPublicacaoVideo = data_publicacao_Video[0:4]
                             mesPublicacaoVideo = nomeMesAno(data_publicacao_Video[5:7])
 
-                            console.print(f"[cyan]Título[/]: {video_details['title']}, Quantidade de comentários: [bold green]{video_details['comment_count']}[/]")
-                            
-                            # Atualiza a tabela geral do dashboard
+                            console.print(f"[cyan]Título[/]: {video_details['title']}, Quantidade de comentários: [bold green]{comment_count}[/]")
                             atualizarUltimaDatadeColeta(youtuber, mesPublicacaoVideo, anoPublicacaoVideo)
                             
                             if comment_count > 0:
