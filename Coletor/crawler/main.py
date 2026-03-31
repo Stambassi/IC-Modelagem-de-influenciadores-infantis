@@ -20,6 +20,11 @@ console.print("=================================================================
 
 csv_path = "youtuberslist.csv"
 
+MAPA_MESES = {
+    1: "Janeiro", 2: "Fevereiro", 3: "Marco", 4: "Abril", 5: "Maio", 6: "Junho",
+    7: "Julho", 8: "Agosto", 9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+}
+
 # -------------------------------------------------------------------
 # CONFIGURAÇÃO DE PERGUNTAS (INQUIRER)
 # -------------------------------------------------------------------
@@ -109,35 +114,63 @@ def obter_youtubers_csv():
     return pd.read_csv(csv_path)['nome'].tolist()
 
 def atualizar_lista_influenciadores():
-    """Sincroniza os dados locais com o CSV principal"""
-    if not os.path.exists(csv_path): return
+    csv_path = "youtuberslist.csv"
+    dir_data = Path("data")
     
-    df = pd.read_csv(csv_path)
-    base_dir = Path("files")
+    if not os.path.exists(csv_path):
+        console.print("[red]Erro: youtuberslist.csv não encontrado.[/red]")
+        return
     
-    for index, row in df.iterrows():
+    df_dashboard = pd.read_csv(csv_path)
+    
+    console.print("[bold blue]Sincronizando Dashboard com a pasta 'data' (Parquet)...[/bold blue]")
+
+    for index, row in df_dashboard.iterrows():
         youtuber = row['nome']
-        ytb_path = base_dir / youtuber
-        v_col, c_col = 0, 0
         
-        if ytb_path.exists():
-            for csv_info in ytb_path.rglob("videos_info.csv"):
-                v_col += 1
-                comm_path = csv_info.parent / "comments_analysis.csv"
-                if comm_path.exists():
-                    try: 
-                        c_col += pd.read_csv(comm_path).loc[0, 'comments_total']
-                    except: pass
-            
-            # Chama a função de contagem do video_process
-            v_trans = video_process.atualizar_video_total_transcritos(youtuber)
-            
-            df.at[index, 'videosColetados'] = v_col
-            df.at[index, 'comentariosColetados'] = c_col
-            df.at[index, 'videosTranscritos'] = v_trans
-            
-    df.to_csv(csv_path, index=False)
-    console.print("[dim]Dashboard sincronizado com sucesso.[/]")
+        # Caminhos dos arquivos de índice e de data
+        path_index = dir_data / f"{youtuber}_index.parquet"
+        path_atual_date = dir_data / youtuber / "atual_date.csv"
+        
+        # 1. Atualizar Contagens (Vídeos, Comentários, Transcrições) via Parquet
+        if path_index.exists():
+            try:
+                df_idx = pd.read_parquet(path_index)
+                
+                # Total de vídeos mapeados no índice
+                total_videos = len(df_idx)
+                
+                # Soma de comentários (baseado na coluna num_comments do índice)
+                # Se a coluna não existir, usa 0
+                total_comments = int(df_idx['num_comments'].sum()) if 'num_comments' in df_idx.columns else 0
+                
+                # Total de transcritos (onde has_transcript é True)
+                total_transcritos = int(df_idx['has_transcript'].sum()) if 'has_transcript' in df_idx.columns else 0
+                
+                df_dashboard.at[index, 'videosColetados'] = total_videos
+                df_dashboard.at[index, 'comentariosColetados'] = total_comments
+                df_dashboard.at[index, 'videosTranscritos'] = total_transcritos
+                
+            except Exception as e:
+                console.print(f"[red]Erro ao ler índice de {youtuber}: {e}[/red]")
+        
+        # 2. Atualizar Datas de Progresso via atual_date.csv individual
+        if path_atual_date.exists():
+            try:
+                # O arquivo atual_date não tem header, então lê os valores diretamente
+                df_date = pd.read_csv(path_atual_date)
+                if not df_date.empty:
+                    ano = df_date.iloc[0]['year']
+                    mes_num = df_date.iloc[0]['month']
+                    
+                    df_dashboard.at[index, 'ultimoAnoColetado'] = str(ano)
+                    df_dashboard.at[index, 'ultimoMesColetado'] = MAPA_MESES.get(mes_num, "Janeiro")
+            except Exception as e:
+                console.print(f"[yellow]Aviso: Falha ao sincronizar data de {youtuber}: {e}[/yellow]")
+
+    # Salva o resultado final no CSV do Dashboard
+    df_dashboard.to_csv(csv_path, index=False)
+    console.print("[bold green]✔ Dashboard reconstruído e sincronizado com sucesso![/bold green]")
 
 def mostrar_lista_influenciadores():
     if not os.path.exists(csv_path):
