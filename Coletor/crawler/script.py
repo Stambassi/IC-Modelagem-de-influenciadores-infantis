@@ -568,7 +568,7 @@ def make_search_request(query, published_after, published_before, REGION_CODE, R
     q=query,
     maxResults=50,
     type="video",
-    order="relevance",
+    order="date",
     publishedAfter=published_after,
     publishedBefore=published_before,
     regionCode=REGION_CODE,
@@ -726,8 +726,17 @@ def coletar_videos_youtuber(lista_youtuber: list[str]):
         # 2. Captura a data individual do youtuber
         caminho_data_youtuber = f"files/{youtuber}/atual_date.csv"
         if os.path.exists(caminho_data_youtuber):
-            df_atual_date = pd.read_csv(caminho_data_youtuber, header=None)
-            end_date_youtuber = datetime(int(df_atual_date.iloc[0, 0]), int(df_atual_date.iloc[0, 1]), int(df_atual_date.iloc[0, 2]))
+            df_atual_date = pd.read_csv(caminho_data_youtuber)
+
+            if 'year' not in df_atual_date.columns:
+                # Re-lê forçando os nomes das colunas
+                df_atual_date = pd.read_csv(caminho_data_youtuber, names=['year', 'month', 'day'])
+
+            end_date_youtuber = datetime(
+                int(df_atual_date.iloc[0]['year']), 
+                int(df_atual_date.iloc[0]['month']), 
+                int(df_atual_date.iloc[0]['day'])
+            )
         else:
             end_date_youtuber = datetime(config['end_date'][0], config['end_date'][1], config['end_date'][2])
 
@@ -738,10 +747,12 @@ def coletar_videos_youtuber(lista_youtuber: list[str]):
             with open(caminho_data_youtuber, "w", newline="") as csvfile:
                 fieldnames = ["year", "month", "day"]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+                writer.writeheader()
                 writer.writerow({
-                    "year": end_interval.year,
-                    "month": end_interval.month,
-                    "day": end_interval.day
+                    "year": start_interval.year,
+                    "month": start_interval.month,
+                    "day": start_interval.day
                 })
 
             console.rule(f"Youtuber: {youtuber} ({start_interval.date()} - {end_interval.date()})")
@@ -759,7 +770,7 @@ def coletar_videos_youtuber(lista_youtuber: list[str]):
                 total_videos = len(videos)
                     
                 if total_videos == 0:  
-                    console.log("[red]Não foi possível obter uma resposta da API.[/] Movendo para a próxima consulta.")
+                    console.log("[red]Nenhum vídeo encontrado para esta query neste período.[/] Movendo para a próxima consulta.")
                     continue
                 
                 for index, item in enumerate(videos, start=1):
@@ -917,8 +928,17 @@ def main():
         # 2. Captura a data individual do youtuber
         caminho_data_youtuber = f"files/{youtuber}/atual_date.csv"
         if os.path.exists(caminho_data_youtuber):
-            df_atual_date = pd.read_csv(caminho_data_youtuber, header=None)
-            end_date_youtuber = datetime(int(df_atual_date.iloc[0, 0]), int(df_atual_date.iloc[0, 1]), int(df_atual_date.iloc[0, 2]))
+            df_atual_date = pd.read_csv(caminho_data_youtuber)
+
+            if 'year' not in df_atual_date.columns:
+                # Re-lê forçando os nomes das colunas
+                df_atual_date = pd.read_csv(caminho_data_youtuber, names=['year', 'month', 'day'])
+
+            end_date_youtuber = datetime(
+                int(df_atual_date.iloc[0]['year']), 
+                int(df_atual_date.iloc[0]['month']), 
+                int(df_atual_date.iloc[0]['day'])
+            )
         else:
             # Se a pasta é nova ou foi resetada, usa o limite do config
             end_date_youtuber = datetime(config['end_date'][0], config['end_date'][1], config['end_date'][2])
@@ -930,10 +950,12 @@ def main():
             with open(caminho_data_youtuber, "w", newline="") as csvfile:
                 fieldnames = ["year", "month", "day"]
                 writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+
+                writer.writeheader()
                 writer.writerow({
-                    "year": end_interval.year,
-                    "month": end_interval.month,
-                    "day": end_interval.day
+                    "year": start_interval.year,
+                    "month": start_interval.month,
+                    "day": start_interval.day
                 })
 
             console.rule(f"Youtuber: {youtuber} ({start_interval.date()} - {end_interval.date()})")
@@ -952,7 +974,7 @@ def main():
                 total_videos = len(videos)
                     
                 if total_videos == 0:  
-                    console.log("[red]Não foi possível obter uma resposta da API.[/] Movendo para a próxima consulta.")
+                    console.log("[red]Nenhum vídeo encontrado para esta query neste período.[/] Movendo para a próxima consulta.")
                     continue
 
                 for index, item in enumerate(videos, start=1):

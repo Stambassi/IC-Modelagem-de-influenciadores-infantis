@@ -116,6 +116,7 @@ def obter_youtubers_csv():
 def atualizar_lista_influenciadores():
     csv_path = "youtuberslist.csv"
     dir_data = Path("data")
+
     
     if not os.path.exists(csv_path):
         console.print("[red]Erro: youtuberslist.csv não encontrado.[/red]")
@@ -159,6 +160,7 @@ def atualizar_lista_influenciadores():
             try:
                 # O arquivo atual_date não tem header, então lê os valores diretamente
                 df_date = pd.read_csv(path_atual_date)
+
                 if not df_date.empty:
                     ano = df_date.iloc[0]['year']
                     mes_num = df_date.iloc[0]['month']

@@ -341,6 +341,8 @@ def sincronizar_datas_dashboard():
         
         with open(caminho_atual_date, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=["year", "month", "day"])
+
+            writer.writeheader()
             writer.writerow({
                 "year": data_alvo.year,
                 "month": data_alvo.month,
@@ -448,6 +450,6 @@ if __name__ == "__main__":
     #     remover_arquivos=False
     # )
 
-    # sincronizar_datas_dashboard()
+    sincronizar_datas_dashboard()
 
-    filtrar_por_palavras_chave(remover_arquivos=False)
+    # filtrar_por_palavras_chave(remover_arquivos=False)

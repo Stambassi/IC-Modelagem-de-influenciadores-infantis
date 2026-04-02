@@ -346,19 +346,24 @@ def encode(nome_youtuber: str, dir_files="files", dir_data="data"):
                 
                 for vid in ids_comuns:
                     for has_flag, colunas in conjuntos_payload:
-                        # Se Local NÃO tem o dado, mas Remoto TEM, resgata apenas o mapeamento remoto
-                        if (has_flag in df_local_idx.columns and not df_local_idx.at[vid, has_flag]) and \
-                           (has_flag in df_remoto_idx.columns and df_remoto_idx.at[vid, has_flag]):
+                        local_tem = df_local_idx.at[vid, has_flag] if has_flag in df_local_idx.columns else False
+                        remoto_tem = df_remoto_idx.at[vid, has_flag] if has_flag in df_remoto_idx.columns else False
+
+                        # 1. Local tem o dado e o Remoto não tem (Update para o Remoto)
+                        if local_tem and not remoto_tem:
+                            df_local_idx.at[vid, has_flag] = True # Mantém True
+                        
+                        # 2. Se for o caso de tiras, o Local tem a análise (Toxicity/Perspective) e o Remoto não
+                        elif has_flag == 'has_tiras' and local_tem and remoto_tem:
+                            tox_l = df_local_idx.at[vid, 'has_toxicity']
+                            tox_r = df_remoto_idx.at[vid, 'has_toxicity']
+                            per_l = df_local_idx.at[vid, 'has_perspective']
+                            per_r = df_remoto_idx.at[vid, 'has_perspective']
                             
-                            # Se está avaliando resgatar o áudio, mas o local já tem a transcrição, 
-                            # ignora o áudio (pois ele já cumpriu seu propósito e foi deletado).
-                            if has_flag == 'has_audio' and df_local_idx.get('has_transcript', pd.Series()).get(vid, False):
-                                continue
-                                
-                            df_local_idx.at[vid, has_flag] = True
-                            for col in colunas:
-                                if col in df_remoto_idx.columns:
-                                    df_local_idx.at[vid, col] = df_remoto_idx.at[vid, col]
+                            if (tox_l and not tox_r) or (per_l and not per_r):
+                                # Força a atualização dos metadados de análise no índice
+                                df_local_idx.at[vid, 'has_toxicity'] = tox_l
+                                df_local_idx.at[vid, 'has_perspective'] = per_l
                 
                 # 2. Resgatar vídeos exclusivos do remoto (que não existiam na pasta local)
                 ids_exclusivos = df_remoto_idx.index.difference(df_local_idx.index)
@@ -376,12 +381,15 @@ def encode(nome_youtuber: str, dir_files="files", dir_data="data"):
     else:
         df_final = df_indices_local
 
-    # Sincroniza o channel_info.csv
-    path_channel_src = os.path.join(path_files, "channel_info.csv")
-        
-    if os.path.exists(path_channel_src):
-        os.makedirs(os.path.join(dir_data, nome_youtuber), exist_ok=True)
-        shutil.copy2(path_channel_src, os.path.join(dir_data, nome_youtuber, "channel_info.csv"))
+    # Sincronização de metadados globais (channel_info e atual_date)
+    metadados_globais = ["channel_info.csv", "atual_date.csv"]
+
+    for arquivo in metadados_globais:
+        path_src = os.path.join(path_files, arquivo)
+        if os.path.exists(path_src):
+            os.makedirs(os.path.join(dir_data, nome_youtuber), exist_ok=True)
+            shutil.copy2(path_src, os.path.join(dir_data, nome_youtuber, arquivo))
+            console.print(f"[dim]Metadado '{arquivo}' sincronizado para a pasta 'data'.[/dim]")
 
     # Salva o Índice Master Definitivo
     try:
@@ -439,9 +447,15 @@ def decode(nome_youtuber: str, dir_files="files", dir_data="data"):
 
             # SMART MERGE: Restaurar arquivos pesados apenas se não existirem localmente
             
-            # Transcrição
-            transcript_path = getattr(row, "transcript_path", None)
+            # Transcrição            
             target_transcript = os.path.join(path_video, "video_text.json")
+            target_audio = os.path.join(path_video, f"{video_id}.mp3")
+            
+            transcript_path = getattr(row, "transcript_path", None)
+            audio_path = getattr(row, "audio_path", None)
+            has_transcript = getattr(row, "has_transcript", False)
+
+            # Lógica de Transcrição
             if transcript_path and os.path.exists(transcript_path):
                 if not os.path.exists(target_transcript):
                     shutil.copy2(transcript_path, target_transcript)
@@ -449,16 +463,27 @@ def decode(nome_youtuber: str, dir_files="files", dir_data="data"):
                 else:
                     arquivos_preservados += 1
 
-            # Áudio (MP3)
-            audio_path = getattr(row, "audio_path", None)
-            target_audio = os.path.join(path_video, f"{video_id}.mp3")
-            if audio_path and os.path.exists(audio_path):
-                # Só baixa o áudio se a máquina não tiver a transcrição E não tiver o áudio
-                if not os.path.exists(target_transcript) and not os.path.exists(target_audio):
-                    shutil.copy2(audio_path, target_audio)
-                    arquivos_baixados += 1
-                else:
-                    arquivos_preservados += 1
+            # Lógica de Áudio
+            # Se a transcrição existe no payload e está marcada no índice, deleta o áudio
+            if has_transcript and transcript_path and os.path.exists(transcript_path):         
+                # 1. Remove da pasta local (files/)
+                if os.path.exists(target_audio):
+                    os.remove(target_audio)
+                    console.print(f"[dim]   └── Áudio local removido (transcrição confirmada para {video_id})[/dim]")
+                
+                # 2. Remove do Payload (data/)
+                if audio_path and os.path.exists(audio_path):
+                    os.remove(audio_path)
+                    audios_expurgados += 1
+                    console.print(f"[bold red]   └── Payload de áudio deletado (Economia de Nuvem): {video_id}[/bold red]")  
+            else:
+                # Se ainda não tem transcrição, tenta manter/restaurar o áudio para processamento futuro
+                if audio_path and os.path.exists(audio_path):
+                    if not os.path.exists(target_audio):
+                        shutil.copy2(audio_path, target_audio)
+                        arquivos_baixados += 1
+                    else:
+                        arquivos_preservados += 1
 
             # Tiras
             tiras_path = getattr(row, "tiras_path", None)
@@ -497,10 +522,14 @@ def decode(nome_youtuber: str, dir_files="files", dir_data="data"):
     with open(os.path.join(path_destino_base, "videoProcessados.txt"), 'w', encoding='utf-8') as f:
         f.write("\n".join(set(lista_ids_processados)))
 
-    # Reconstrói o channel_info.csv na raiz do youtuber
-    path_channel_dl = os.path.join(dir_data, nome_youtuber, "channel_info.csv")
-    if os.path.exists(path_channel_dl):
-        shutil.copy2(path_channel_dl, os.path.join(path_destino_base, "channel_info.csv"))
+    # Reconstrói metadados globais (channel_info e atual_date)
+    metadados_globais = ["channel_info.csv", "atual_date.csv"]
+
+    for arquivo in metadados_globais:
+        path_src = os.path.join(dir_data, nome_youtuber, arquivo)
+        if os.path.exists(path_src):
+            shutil.copy2(path_src, os.path.join(path_destino_base, arquivo))
+            console.print(f"[dim]Metadado '{arquivo}' restaurado para a pasta local.[/dim]")
 
     console.print(f"[bold green]Decoder finalizado com sucesso para {nome_youtuber}[/bold green]")
     console.print(f"[dim]Relatório Smart Merge: {arquivos_baixados} novos arquivos baixados | {arquivos_preservados} arquivos locais preservados.[/dim]\n")
@@ -586,14 +615,11 @@ def diff(nome_youtuber: str, dir_files="files", dir_data="data"):
         console.print(f"[red]Faltando no Local (Necessário Decode): {len(apenas_remoto)}[/red]")
 
     # 3. Diff de Conteúdo Interno
-    atualizacao_local_trans = []
-    atualizacao_remota_trans = []
-    atualizacao_local_audio = []
-    atualizacao_remota_audio = []
-    atualizacao_local_comm = []
-    atualizacao_remota_comm = []
-    atualizacao_local_anal = []
-    atualizacao_remota_anal = []
+    atualizacao_local_trans, atualizacao_remota_trans = [], []
+    atualizacao_local_audio, atualizacao_remota_audio = [], []
+    atualizacao_local_comm, atualizacao_remota_comm = [], []
+    atualizacao_local_anal, atualizacao_remota_anal = [], []
+    atualizacao_local_tiras, atualizacao_remota_tiras = [], []
 
     if em_ambos and not df_local.empty and not df_remoto.empty:
         df_l_check = df_local.set_index('video_id')
@@ -629,6 +655,18 @@ def diff(nome_youtuber: str, dir_files="files", dir_data="data"):
             if has_l_anal and not has_r_anal: atualizacao_local_anal.append(vid)
             elif has_r_anal and not has_l_anal: atualizacao_remota_anal.append(vid)
 
+            has_l_tox = df_l_check.at[vid, 'has_toxicity'] if 'has_toxicity' in df_l_check.columns else False
+            has_r_tox = df_r_check.at[vid, 'has_toxicity'] if 'has_toxicity' in df_r_check.columns else False
+            has_l_per = df_l_check.at[vid, 'has_perspective'] if 'has_perspective' in df_l_check.columns else False
+            has_r_per = df_r_check.at[vid, 'has_perspective'] if 'has_perspective' in df_r_check.columns else False
+            
+            # Se o local tem análise que o remoto não tem (Falta Encode)
+            if (has_l_tox and not has_r_tox) or (has_l_per and not has_r_per):
+                atualizacao_local_tiras.append(vid)
+            # Se o remoto tem análise que o local não tem (Falta Decode)
+            elif (has_r_tox and not has_l_tox) or (has_r_per and not has_l_per):
+                atualizacao_remota_tiras.append(vid)
+
     # Exibição dos Alertas Granulares
     if atualizacao_local_trans:
         console.print(f"\n[cyan]video_text.json (Transcrição) Novo no Local (Falta Encode):[/cyan] {len(atualizacao_local_trans)}")
@@ -649,6 +687,11 @@ def diff(nome_youtuber: str, dir_files="files", dir_data="data"):
         console.print(f"\n[cyan]comments_analysis.csv (Análises) Novas no Local (Falta Encode):[/cyan] {len(atualizacao_local_anal)}")
     if atualizacao_remota_anal:
         console.print(f"[magenta]comments_analysis.csv (Análises) Novas no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_anal)}")
+        
+    if atualizacao_local_tiras:
+        console.print(f"\n[cyan]tiras_video.csv (Toxicidade) Nova no Local (Falta Encode):[/cyan] {len(atualizacao_local_tiras)}")
+    if atualizacao_remota_tiras:
+        console.print(f"[magenta]tiras_video.csv (Toxicidade) Nova no Remoto (Pode fazer Decode):[/magenta] {len(atualizacao_remota_trans)}")
         
     console.print("")  
 
