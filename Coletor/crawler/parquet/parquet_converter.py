@@ -332,10 +332,9 @@ def encode(nome_youtuber: str, dir_files="files", dir_data="data"):
                 df_local_idx = df_indices_local.set_index('video_id')
                 df_remoto_idx = df_remoto.set_index('video_id')
                 
-                # 1. Preencher "buracos" dos vídeos que existem no local e no remoto
+                # IDs comuns entre o que está no disco agora e o que já estava no índice
                 ids_comuns = df_local_idx.index.intersection(df_remoto_idx.index)
                 
-                # Mapeamento de quais colunas copiar se a flag principal estiver faltando localmente
                 conjuntos_payload = [
                     ('has_transcript', ['transcript_path']),
                     ('has_audio', ['audio_path']),
@@ -344,35 +343,64 @@ def encode(nome_youtuber: str, dir_files="files", dir_data="data"):
                     ('has_analysis', ['analysis_path'])
                 ]
                 
+                audios_removidos_payload = 0
+
                 for vid in ids_comuns:
+                    # Se local OU remoto já possuem transcrição, o áudio no payload deve ser removido
+                    tem_trans_local = df_local_idx.at[vid, 'has_transcript'] if 'has_transcript' in df_local_idx.columns else False
+                    tem_trans_remoto = df_remoto_idx.at[vid, 'has_transcript'] if 'has_transcript' in df_remoto_idx.columns else False
+                    
+                    if tem_trans_local or tem_trans_remoto:
+                        # Verifica se o remoto aponta para um áudio que ainda existe no Payload
+                        path_audio_payload = df_remoto_idx.at[vid, 'audio_path'] if 'audio_path' in df_remoto_idx.columns else None
+                        
+                        if path_audio_payload and os.path.exists(path_audio_payload):
+                            try:
+                                os.remove(path_audio_payload)
+                                audios_removidos_payload += 1
+                                # Limpamos a referência no índice para que o DVC não tente buscar
+                                df_local_idx.at[vid, 'has_audio'] = False
+                                df_local_idx.at[vid, 'audio_path'] = None
+                            except Exception as e:
+                                console.print(f"[red]Erro ao remover áudio órfão no payload: {e}[/red]")
+
+                    # Merge de dados restantes
                     for has_flag, colunas in conjuntos_payload:
+                        # Se está processando áudio e ele acabou de ser removido acima, pula
+                        if has_flag == 'has_audio' and (tem_trans_local or tem_trans_remoto):
+                            continue
+
                         local_tem = df_local_idx.at[vid, has_flag] if has_flag in df_local_idx.columns else False
                         remoto_tem = df_remoto_idx.at[vid, has_flag] if has_flag in df_remoto_idx.columns else False
 
-                        # 1. Local tem o dado e o Remoto não tem (Update para o Remoto)
+                        # 1. Local tem algo novo (ex: toxicidade) e remoto não
                         if local_tem and not remoto_tem:
-                            df_local_idx.at[vid, has_flag] = True # Mantém True
+                            df_local_idx.at[vid, has_flag] = True
                         
-                        # 2. Se for o caso de tiras, o Local tem a análise (Toxicity/Perspective) e o Remoto não
+                        # 2. Resgate de dados (Remoto tem e Local não - ex: comentários antigos)
+                        elif remoto_tem and not local_tem:
+                            df_local_idx.at[vid, has_flag] = True
+                            for col in colunas:
+                                if col in df_remoto_idx.columns:
+                                    df_local_idx.at[vid, col] = df_remoto_idx.at[vid, col]
+
+                        # 3. Especial: Análise de Tiras (Detoxify/Perspective)
                         elif has_flag == 'has_tiras' and local_tem and remoto_tem:
-                            tox_l = df_local_idx.at[vid, 'has_toxicity']
-                            tox_r = df_remoto_idx.at[vid, 'has_toxicity']
-                            per_l = df_local_idx.at[vid, 'has_perspective']
-                            per_r = df_remoto_idx.at[vid, 'has_perspective']
-                            
-                            if (tox_l and not tox_r) or (per_l and not per_r):
-                                # Força a atualização dos metadados de análise no índice
-                                df_local_idx.at[vid, 'has_toxicity'] = tox_l
-                                df_local_idx.at[vid, 'has_perspective'] = per_l
+                            for col_tox in ['has_toxicity', 'has_perspective']:
+                                val_l = df_local_idx.at[vid, col_tox]
+                                val_r = df_remoto_idx.at[vid, col_tox]
+                                if val_l and not val_r:
+                                    df_local_idx.at[vid, col_tox] = True
                 
-                # 2. Resgatar vídeos exclusivos do remoto (que não existiam na pasta local)
+                # 2. Resgatar vídeos exclusivos do remoto
                 ids_exclusivos = df_remoto_idx.index.difference(df_local_idx.index)
                 df_exclusivos = df_remoto_idx.loc[ids_exclusivos]
                 
-                # Unifica o remoto exclusivo com o local enriquecido
                 df_final = pd.concat([df_exclusivos, df_local_idx]).reset_index()
                 
-                console.print(f"[dim]Merge concluído. {len(ids_exclusivos)} vídeos exclusivos do remoto foram preservados.[/dim]")
+                if audios_removidos_payload > 0:
+                    console.print(f"[bold red]🔥 {audios_removidos_payload} áudios removidos fisicamente do Payload (Transcrição detectada).[/bold red]")
+                console.print(f"[dim]Merge concluído. {len(ids_exclusivos)} vídeos exclusivos do remoto preservados.[/dim]")
             else:
                 df_final = df_indices_local
         except Exception as e:
@@ -383,22 +411,20 @@ def encode(nome_youtuber: str, dir_files="files", dir_data="data"):
 
     # Sincronização de metadados globais (channel_info e atual_date)
     metadados_globais = ["channel_info.csv", "atual_date.csv"]
-
     for arquivo in metadados_globais:
         path_src = os.path.join(path_files, arquivo)
         if os.path.exists(path_src):
-            os.makedirs(os.path.join(dir_data, nome_youtuber), exist_ok=True)
-            shutil.copy2(path_src, os.path.join(dir_data, nome_youtuber, arquivo))
-            console.print(f"[dim]Metadado '{arquivo}' sincronizado para a pasta 'data'.[/dim]")
+            dest_dir = os.path.join(dir_data, nome_youtuber)
+            os.makedirs(dest_dir, exist_ok=True)
+            shutil.copy2(path_src, os.path.join(dest_dir, arquivo))
 
-    # Salva o Índice Master Definitivo
+    # Salva o Índice Master
     try:
         df_final.to_parquet(path_index, index=False)
-        console.print(f"[bold green]✓ Índice salvo em {path_index} ({len(df_final)} vídeos mapeados)[/bold green]")
-        console.print(f"[bold green]✓ Payloads extraídos/atualizados para data/{nome_youtuber}/payload/[/bold green]\n")
+        console.print(f"[bold green]✓ Índice salvo ({len(df_final)} vídeos)[/bold green]\n")
     except Exception as e:
-        console.print(f"[bold red]Erro Fatal no Encoder ao salvar índice: {e}[/bold red]")
-
+        console.print(f"[bold red]Erro Fatal no Encoder: {e}[/bold red]")
+        
 '''
     DECODE: Reconstrói pastas locais com base no Índice Parquet e streaming de payloads
 '''
