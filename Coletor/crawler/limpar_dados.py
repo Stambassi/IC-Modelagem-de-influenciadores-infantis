@@ -480,32 +480,50 @@ def expurgar_audios_redundantes(alvo: str = "local", remover_arquivos: bool = Fa
         for parquet_file in Path('data').glob("*_index.parquet"):
             try:
                 df = pd.read_parquet(parquet_file)
-                # Filtra vídeos que têm transcrição E ainda têm áudio marcado
-                if 'has_transcript' in df.columns and 'has_audio' in df.columns:
-                    redundantes = df[(df['has_transcript'] == True) & (df['has_audio'] == True)]
-                    
-                    for _, row in redundantes.iterrows():
-                        total_analisado += 1
-                        path_audio_str = row.get('audio_path')
-                        
-                        if path_audio_str and pd.notna(path_audio_str):
-                            path_audio = Path(path_audio_str)
+                modificou_parquet = False
+                
+                # Garante que as colunas existam antes de iterar
+                if 'has_audio' in df.columns and 'has_transcript' in df.columns:
+                    for idx, row in df.iterrows():
+                        # Avalia apenas vídeos que o índice afirma ter áudio
+                        if pd.notna(row.get('has_audio')) and row['has_audio']:
+                            path_audio_str = row.get('audio_path')
+                            tem_transcricao = pd.notna(row.get('has_transcript')) and row['has_transcript']
                             
-                            if path_audio.exists():
+                            # CENÁRIO 1: O arquivo já foi apagado, mas o índice mente
+                            if not path_audio_str or pd.isna(path_audio_str) or not Path(path_audio_str).exists():
+                                if remover_arquivos:
+                                    df.at[idx, 'has_audio'] = False
+                                    df.at[idx, 'audio_path'] = None
+                                    modificou_parquet = True
+                                else:
+                                    console.print(f"[yellow]FANTASMA CORRIGÍVEL:[/yellow] ID {row['video_id']} não tem mais o .mp3 físico.")
+                            
+                            # CENÁRIO 2: Existe, mas a transcrição também existe
+                            elif tem_transcricao:
+                                path_audio = Path(path_audio_str)
                                 acao = "[bold red]EXPURGANDO PAYLOAD[/bold red]" if remover_arquivos else "[bold yellow]REDUNDANTE NO PAYLOAD (Teste)[/bold yellow]"
                                 console.print(f"{acao} ID: {row['video_id']} | Arquivo: {path_audio.name}")
                                 
                                 if remover_arquivos:
                                     try:
-                                        path_audio.unlink()
+                                        path_audio.unlink()  # Deleta o arquivo físico
+                                        df.at[idx, 'has_audio'] = False
+                                        df.at[idx, 'audio_path'] = None
+                                        modificou_parquet = True
                                         audios_removidos += 1
                                     except Exception as e:
                                         console.print(f"   └── [red]Erro ao deletar físico: {e}[/red]")
                                 else:
                                     audios_removidos += 1
+
+                # Se fizemos faxina ou curamos fantasmas, salvamos o índice atualizado
+                if remover_arquivos and modificou_parquet:
+                    df.to_parquet(parquet_file, index=False)
+                    console.print(f"[bold green]✓ Índice {parquet_file.name} atualizado e curado com sucesso![/bold green]")
+                    
             except Exception as e:
                 console.print(f"[red]Erro ao processar índice {parquet_file.name}: {e}[/red]")
-
     console.print(f"\n[bold]Resumo da Faxina ({alvo}):[/bold]")
     console.print(f"Vídeos com transcrição validados: {total_analisado}")
     console.print(f"Áudios removidos/identificados: {audios_removidos}")
