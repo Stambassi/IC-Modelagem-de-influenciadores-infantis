@@ -437,6 +437,86 @@ def filtrar_por_palavras_chave(remover_arquivos: bool = False):
         console.print(f"Vídeos encontrados sem a palavra-chave: [yellow]{pastas_removidas}[/yellow]")
         console.print("\n[bold yellow]Isso foi apenas um teste![/bold yellow] Nenhuma pasta foi deletada.")
 
+'''
+    Remove arquivos de áudio (.mp3) redundantes caso a transcrição correspondente já exista.
+    Pode atuar no 'local' (pasta files) ou no 'remoto' (pasta data via Parquet).
+'''
+def expurgar_audios_redundantes(alvo: str = "local", remover_arquivos: bool = False):
+    console.rule(f"[bold red]Expurgo de Áudios Redundantes - Alvo: {alvo.upper()} (Remoção: {remover_arquivos})[/bold red]")
+    
+    audios_removidos = 0
+    total_analisado = 0
+    acao_texto = "[bold red]DELETANDO[/bold red]" if remover_arquivos else "[bold yellow]REDUNDANTE (Teste)[/bold yellow]"
+
+    if alvo == "local":
+        # Lógica para a pasta 'files': Varre em busca de video_text.json
+        for json_path in BASE_DIR.rglob("video_text.json"):
+            total_analisado += 1
+            pasta_video = json_path.parent
+            
+            # Procura por qualquer arquivo .mp3 na mesma pasta da transcrição
+            audios_encontrados = list(pasta_video.glob("*.mp3"))
+            
+            for audio_path in audios_encontrados:
+                console.print(f"{acao_texto} Áudio Local: {audio_path.relative_to(BASE_DIR)}")
+                
+                if remover_arquivos:
+                    try:
+                        audio_path.unlink()
+                        audios_removidos += 1
+                        console.print("   └── [green]Arquivo de áudio removido com sucesso.[/green]")
+                    except Exception as e:
+                        console.print(f"   └── [red]Erro ao deletar áudio: {e}[/red]")
+                else:
+                    audios_removidos += 1
+
+    elif alvo == "remoto":
+        # Lógica para a pasta 'data': Lê os índices Parquet para encontrar caminhos de payload
+        if not BASE_DIR.exists():
+            console.print("[red]Pasta 'data' não encontrada.[/red]")
+            return
+
+        for parquet_path in BASE_DIR.glob("*_index.parquet"):
+            try:
+                df_idx = pd.read_parquet(parquet_path)
+                
+                # Filtra apenas vídeos que têm transcrição marcada E têm um caminho de áudio registrado
+                if 'has_transcript' in df_idx.columns and 'audio_path' in df_idx.columns:
+                    videos_com_audio_inutil = df_idx[
+                        (df_idx['has_transcript'] == True) & 
+                        (df_idx['audio_path'].notna())
+                    ]
+
+                    for _, row in videos_com_audio_inutil.iterrows():
+                        total_analisado += 1
+                        caminho_audio_str = row['audio_path']
+                        path_audio = Path(caminho_audio_str)
+                        
+                        if path_audio.exists():
+                            console.print(f"{acao_texto} Payload de Áudio: {path_audio.name} (Vídeo: {row.get('video_id')})")
+                            
+                            if remover_arquivos:
+                                try:
+                                    path_audio.unlink()
+                                    audios_removidos += 1
+                                except Exception as e:
+                                    console.print(f"   └── [red]Erro ao deletar no payload: {e}[/red]")
+                            else:
+                                audios_removidos += 1
+            except Exception as e:
+                console.print(f"[red]Erro ao ler índice {parquet_path.name}: {e}[/red]")
+
+    console.rule("[bold]Resumo do Expurgo[/bold]")
+    if alvo == "local":
+        console.print(f"Total de transcrições verificadas no disco: {total_analisado}")
+    else:
+        console.print(f"Total de registros de áudio com transcrição no índice: {total_analisado}")
+        
+    console.print(f"Arquivos de áudio redundantes identificados: {audios_removidos}")
+    
+    if not remover_arquivos:
+        console.print("\n[bold yellow]Modo de Teste.[/bold yellow] Execute com 'remover_arquivos=True' para liberar espaço real.")
+
 if __name__ == "__main__":
     # limpar_pastas_duplicadas(remover_arquivos=False)
 
@@ -453,3 +533,5 @@ if __name__ == "__main__":
     sincronizar_datas_dashboard()
 
     # filtrar_por_palavras_chave(remover_arquivos=False)
+
+    expurgar_audios_redundantes(alvo='local', remover_arquivos=False)
