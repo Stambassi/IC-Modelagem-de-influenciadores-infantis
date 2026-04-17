@@ -545,4 +545,4 @@ if __name__ == "__main__":
 
     # filtrar_por_palavras_chave(remover_arquivos=False)
 
-    expurgar_audios_redundantes(alvo='local', remover_arquivos=False)
+    expurgar_audios_redundantes(alvo='remoto', remover_arquivos=True)

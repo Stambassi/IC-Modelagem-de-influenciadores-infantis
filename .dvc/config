@@ -1,5 +1,8 @@
 [core]
     remote = meu_azure_storage
     autostage = true
+[cache]
+    type = hardlink
+    protected = true
 ['remote "meu_azure_storage"']
     url = azure://dados-dvc
