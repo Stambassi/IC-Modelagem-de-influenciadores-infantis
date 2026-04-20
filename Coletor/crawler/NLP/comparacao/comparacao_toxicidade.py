@@ -599,6 +599,6 @@ if __name__ == "__main__":
 
     # encontrar_threshold_por_concordancia(0.9)
 
-    # persistir_casos_criticos_perspective(0.50)
+    persistir_casos_criticos_perspective(0.50)
 
     # gerar_tabela_interseccao_modelos()

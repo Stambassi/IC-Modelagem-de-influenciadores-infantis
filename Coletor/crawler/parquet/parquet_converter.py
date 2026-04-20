@@ -399,7 +399,7 @@ def encode(nome_youtuber: str, dir_files="files", dir_data="data"):
                 df_final = pd.concat([df_exclusivos, df_local_idx]).reset_index()
                 
                 if audios_removidos_payload > 0:
-                    console.print(f"[bold red]🔥 {audios_removidos_payload} áudios removidos fisicamente do Payload (Transcrição detectada).[/bold red]")
+                    console.print(f"[bold red]{audios_removidos_payload} áudios removidos fisicamente do Payload (Transcrição detectada).[/bold red]")
                 console.print(f"[dim]Merge concluído. {len(ids_exclusivos)} vídeos exclusivos do remoto preservados.[/dim]")
             else:
                 df_final = df_indices_local

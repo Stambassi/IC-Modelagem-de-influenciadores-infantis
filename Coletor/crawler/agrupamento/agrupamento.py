@@ -37,10 +37,16 @@ METRICAS_CONFIG = {
     #     'tipo_estados': 'numerico',
     #     'n_estados': 3 # Número de 'bins' para dividir o score (ex: 3 estados)
     # },
-    'toxicidade': {
+    'detoxify': {
         'coluna_base': 'toxicity',
         'tipo_estados': 'numerico_categorizado', # Novo tipo de estado
-        'limiares': [0.0, 0.30, 0.70, 1.01], # 1.01 para garantir que 1.0 seja incluído
+        'limiares': [0.0, 0.20, 0.80, 1.01], # 1.01 para garantir que 1.0 seja incluído
+        'estados': ['NT', 'GZ', 'T'] # Nomes dos estados
+    },
+    'perspective': {
+        'coluna_base': 'p_toxicity',
+        'tipo_estados': 'numerico_categorizado', # Novo tipo de estado
+        'limiares': [0.0, 0.20, 0.40, 1.01], # 1.01 para garantir que 1.0 seja incluído
         'estados': ['NT', 'GZ', 'T'] # Nomes dos estados
     }
 }
@@ -127,10 +133,10 @@ def preparar_dados_agrupamento(youtuber: str, metrica: str, config_metrica) -> t
     # Salvar os arquivos na pasta 'agrupamento' de cada youtuber
     output_dir = base_path / 'agrupamento'
     output_dir.mkdir(parents=True, exist_ok=True)
-    output_csv_path = output_dir / f'vsmg_cluster_data_{metrica}.csv'
+    output_csv_path = output_dir / f'vmg_cluster_data_{metrica}.csv'
 
     # Coletar VSMG de cada vídeo
-    lista_vsmg_videos = [] # Lista para os dados numpy (para o clustering)
+    lista_vmg_videos = [] # Lista para os dados numpy (para o clustering)
     lista_info_videos = [] # Lista para os dados do DataFrame (para o CSV)
     
     # Definir o nome do arquivo de transições a ser procurado
@@ -158,7 +164,7 @@ def preparar_dados_agrupamento(youtuber: str, metrica: str, config_metrica) -> t
             
             # Gerar o vetor VSMG (ex: 9 elementos) para este vídeo
             vsmg_video_flat = gerar_vmg_flatten_video(transicoes_matriz, config_metrica['estados'])
-            lista_vsmg_videos.append(vsmg_video_flat)
+            lista_vmg_videos.append(vsmg_video_flat)
 
             # Carregar o 'video_id' do arquivo de informações do vídeo
             video_df = pd.read_csv(f"{video_data_path}/videos_info.csv")
@@ -191,12 +197,12 @@ def preparar_dados_agrupamento(youtuber: str, metrica: str, config_metrica) -> t
             console.print(f"[red]Erro ao processar {transicoes_csv_path}: {e} ({type(e)})[/red]")
 
     # Consolidar e salvar dados
-    if not lista_vsmg_videos:
+    if not lista_vmg_videos:
         console.print(f"[yellow]Nenhum dado de transição encontrado para {youtuber}.[/yellow]")
         return None, None, None
 
     # Converter as listas em numpy array e DataFrame
-    matriz_vsmg_youtuber = np.array(lista_vsmg_videos)
+    matriz_vsmg_youtuber = np.array(lista_vmg_videos)
     df_youtuber = pd.DataFrame(lista_info_videos, columns=colunas_df)
     
     # Salvar o DataFrame no caminho de saída
@@ -658,11 +664,15 @@ if __name__ == "__main__":
     youtubers_list = df['nome'].tolist()
     youtubers_list.remove('Robin Hood Gamer')
     # analise_alvo = 'negatividade'
-    analise_alvo = 'sentimento' 
-    # analise_alvo = 'toxicidade' 
+    # analise_alvo = 'sentimento' 
+    # analise_alvo = 'detoxify' 
+    analise_alvo = 'perspective' 
+
+    youtubers_list = ['Julia MineGirl']
+    # youtubers_list = ['Cadres']
 
     # pipeline_dbcsan(youtubers_list, analise_alvo)
-    pipeline_dbcsan_geral(youtubers_list,analise_alvo)
-    # pipeline_kmeans(youtubers_list, analise_alvo, max_k=10)
-    pipeline_kmeans_geral(youtubers_list,analise_alvo,10)
+    # pipeline_dbcsan_geral(youtubers_list,analise_alvo)
+    pipeline_kmeans(youtubers_list, analise_alvo, max_k=3)
+    # pipeline_kmeans_geral(youtubers_list,analise_alvo,10)
     
