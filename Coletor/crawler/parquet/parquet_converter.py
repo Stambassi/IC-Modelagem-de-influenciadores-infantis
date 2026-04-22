@@ -444,6 +444,7 @@ def decode(nome_youtuber: str, dir_files="files", dir_data="data"):
     lista_ids_processados = []
     arquivos_preservados = 0
     arquivos_baixados = 0
+    audios_expurgados = 0
 
     for row in df.itertuples(index=False):
         try:
