@@ -40,6 +40,8 @@ METRICAS_CONFIG = {
     }
 }
 
+console = Console()
+
 '''
     Função para armazenar as transições de estados (para uma métrica específica) de cada vídeo em um arquivo CSV
 
@@ -587,7 +589,7 @@ def rodar_pipeline_vmg(
     if 'video' in granularidade:
         console.print(f"[bold blue]--- Processando Nível: VÍDEO ---[/bold blue]")
         salvar_matriz_transicao_video(youtubers_list, config_metrica, nome_analise, metricas)
-        gerar_visualizacoes_video(youtubers_list, nome_analise, metricas)
+        # gerar_visualizacoes_video(youtubers_list, nome_analise, metricas)
 
     if 'youtuber' in granularidade:
         console.print(f"\n[bold blue]--- Processando Nível: YOUTUBER ---[/bold blue]")
@@ -651,7 +653,7 @@ if __name__ == '__main__':
         mapa_categorias=mapa_youtubers_categoria,
         config_metrica=METRICAS_CONFIG['detoxify'],
         nome_analise='detoxify',
-        granularidade=['youtuber', 'categoria', 'geral'],
+        granularidade=['video', 'youtuber', 'categoria', 'geral'],
         metricas=['probabilidade', 'media', 'desvio_padrao', 'coeficiente_variacao']
     )
 
@@ -660,6 +662,6 @@ if __name__ == '__main__':
         mapa_categorias=mapa_youtubers_categoria,
         config_metrica=METRICAS_CONFIG['perspective'],
         nome_analise='perspective',
-        granularidade=['youtuber', 'categoria', 'geral'],
+        granularidade=['video', 'youtuber', 'categoria', 'geral'],
         metricas=['probabilidade', 'media', 'desvio_padrao', 'coeficiente_variacao']
     )
