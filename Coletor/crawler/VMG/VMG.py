@@ -136,7 +136,7 @@ def salvar_transicoes_por_metrica(youtubers_list: list[str], metrica_config: dic
                 console.print(f'[bold red]Erro[/bold red] em {video_path.name} (salvar_transicoes_por_metrica): {e}')
 
 '''
-    Função para criar e persistir as Matrizes de Transição absolutas solicitadas para cada vídeo individual
+    Função para criar e persistir as Matrizes de Transição absolutas para cada vídeo individual
 
     @param youtubers_list - Lista de youtubers a serem analisados
     @param metrica_config - Dicionário de configuração da métrica (da METRICAS_CONFIG)
@@ -145,7 +145,7 @@ def salvar_transicoes_por_metrica(youtubers_list: list[str], metrica_config: dic
 '''
 def salvar_matriz_transicao_video(youtubers_list: list[str], metrica_config: dict, nome_analise: str, metricas: list[str]) -> None:
     # Filtra as métricas válidas para o nível "vídeo" (métricas que dependem de vários vídeos, como desvio padrão, são ignoradas aqui)
-    metricas_absolutas_validas = [m for m in metricas if m in ['probabilidade', 'suporte', 'confianca', 'lift']]
+    metricas_absolutas_validas = [m for m in metricas if m in ['contagem', 'probabilidade', 'suporte', 'confianca', 'lift']]
     if not metricas_absolutas_validas:
         return
 
@@ -178,7 +178,13 @@ def salvar_matriz_transicao_video(youtubers_list: list[str], metrica_config: dic
                 n_u = df_trans.groupby('estado', observed=False)['contagem'].transform('sum')
                 n_v = df_trans.groupby('proximo_estado', observed=False)['contagem'].transform('sum')
 
-                # --- CÁLCULO DINÂMICO DAS MÉTRICAS ---
+                # Cálculo dinâmico das métricas
+                if 'contagem' in metricas_absolutas_validas:
+                    df_trans['contagem'] = df_trans['contagem'].fillna(0)
+
+                if 'probabilidade' in metricas_absolutas_validas:
+                    df_trans['probabilidade'] = (df_trans['contagem'] / n_u).fillna(0)
+
                 if 'suporte' in metricas_absolutas_validas:
                     df_trans['suporte'] = (df_trans['contagem'] / n_total).fillna(0)
                 
@@ -186,9 +192,6 @@ def salvar_matriz_transicao_video(youtubers_list: list[str], metrica_config: dic
                 if 'confianca' in metricas_absolutas_validas:
                     df_trans['confianca'] = (df_trans['contagem'] / n_u).fillna(0)
                     
-                if 'probabilidade' in metricas_absolutas_validas:
-                    df_trans['probabilidade'] = (df_trans['contagem'] / n_u).fillna(0)
-                
                 if 'lift' in metricas_absolutas_validas:
                     confianca_base = (df_trans['contagem'] / n_u).fillna(0)
                     p_v = n_v / n_total
@@ -222,7 +225,7 @@ def salvar_matriz_transicao_youtuber(youtubers_list: list[str], metrica_config: 
     tipo_categorico = CategoricalDtype(categories=estados, ordered=True)
 
     # Separa os tipos de métricas para aplicar a lógica correta
-    metricas_absolutas = [m for m in metricas if m in ['probabilidade', 'suporte', 'confianca', 'lift']]
+    metricas_absolutas = [m for m in metricas if m in ['contagem', 'probabilidade', 'suporte', 'confianca', 'lift']]
     metricas_estatisticas = [m for m in metricas if m in ['media', 'desvio_padrao', 'coeficiente_variacao']]
 
     # Dicionário de funções para agregação estatística
@@ -243,8 +246,6 @@ def salvar_matriz_transicao_youtuber(youtubers_list: list[str], metrica_config: 
             for p in base_path.rglob(f'VMG/Matrizes/transicoes_{nome_analise}.csv'):
                 df = pd.read_csv(p)
                 if not df.empty:
-                    # Precisamos identificar o vídeo para as métricas estatísticas
-                    # Ex de path: files/Youtuber/Video/VMG/Matrizes/transicoes.csv
                     df['video_id'] = p.parent.parent.parent.name
                     lista_dfs.append(df)
             
@@ -254,7 +255,6 @@ def salvar_matriz_transicao_youtuber(youtubers_list: list[str], metrica_config: 
             df_agg['estado'] = df_agg['estado'].astype(tipo_categorico)
             df_agg['proximo_estado'] = df_agg['proximo_estado'].astype(tipo_categorico)
 
-            # Define a pasta de saída para o Youtuber
             output_folder = base_path / 'VMG' / 'Matrizes'
             output_folder.mkdir(parents=True, exist_ok=True)
 
@@ -266,12 +266,19 @@ def salvar_matriz_transicao_youtuber(youtubers_list: list[str], metrica_config: 
                 n_v = df_counts.groupby('proximo_estado', observed=False)['contagem'].transform('sum')
 
                 resultados_absolutos = {}
+
+                if 'contagem' in metricas_absolutas:
+                    resultados_absolutos['contagem'] = df_counts['contagem'].fillna(0)
+
                 if 'suporte' in metricas_absolutas:
                     resultados_absolutos['suporte'] = (df_counts['contagem'] / n_total).fillna(0)
+
                 if 'confianca' in metricas_absolutas:
                     resultados_absolutos['confianca'] = (df_counts['contagem'] / n_u).fillna(0)
+
                 if 'probabilidade' in metricas_absolutas:
                     resultados_absolutos['probabilidade'] = (df_counts['contagem'] / n_u).fillna(0)
+
                 if 'lift' in metricas_absolutas:
                     confianca_base = (df_counts['contagem'] / n_u).fillna(0)
                     p_v = n_v / n_total
@@ -284,11 +291,9 @@ def salvar_matriz_transicao_youtuber(youtubers_list: list[str], metrica_config: 
 
             # BLOCO 2: MÉTRICAS ESTATÍSTICAS
             if metricas_estatisticas:
-                # 1. Calcular a probabilidade base por VÍDEO
                 n_u_video = df_agg.groupby(['video_id', 'estado'], observed=False)['contagem'].transform('sum')
                 df_agg['prob_video'] = (df_agg['contagem'] / n_u_video).fillna(0)
 
-                # 2. Agregar as probabilidades entre os vídeos usando a função desejada
                 for m_name in metricas_estatisticas:
                     funcao = funcoes_estatisticas[m_name]
                     df_stat = df_agg.groupby(['estado', 'proximo_estado'], observed=False)['prob_video'].agg(funcao).reset_index()
@@ -315,7 +320,7 @@ def salvar_matriz_transicao_global(mapa_categorias: dict, metrica_config: dict, 
     
     tipo_categorico = CategoricalDtype(categories=estados, ordered=True)
     
-    metricas_absolutas = [m for m in metricas if m in ['probabilidade', 'suporte', 'confianca', 'lift']]
+    metricas_absolutas = [m for m in metricas if m in ['contagem', 'probabilidade', 'suporte', 'confianca', 'lift']]
     metricas_estatisticas = [m for m in metricas if m in ['media', 'desvio_padrao', 'coeficiente_variacao']]
 
     funcs_estatisticas = {
@@ -324,7 +329,6 @@ def salvar_matriz_transicao_global(mapa_categorias: dict, metrica_config: dict, 
         'coeficiente_variacao': lambda x: x.std() / x.mean() if x.mean() != 0 else 0
     }
 
-    # Coleta inicial de todos os dados
     lista_geral_transicoes = []
     for youtuber, categoria in mapa_categorias.items():
         base_path = Path(f'files/{youtuber}')
@@ -349,24 +353,20 @@ def salvar_matriz_transicao_global(mapa_categorias: dict, metrica_config: dict, 
     df_master['estado'] = df_master['estado'].astype(tipo_categorico)
     df_master['proximo_estado'] = df_master['proximo_estado'].astype(tipo_categorico)
 
-    # Definir os escopos de análise com base no que foi pedido no pipeline
     escopos = []
     if 'geral' in granularidade:
         escopos.append('Geral')
     if 'categoria' in granularidade:
-        # Pega as categorias únicas (ex: 'Minecraft', 'Roblox')
         escopos.extend(list(df_master['categoria'].unique()))
 
     for escopo in escopos:
         console.print(f'>>> Processando matrizes de "{nome_analise}" para o Escopo: [bold magenta]{escopo}[/bold magenta]')
         
-        # Filtra o dataframe conforme o escopo
         if escopo == 'Geral':
             df_escopo = df_master.copy()
         else:
             df_escopo = df_master[df_master['categoria'] == escopo].copy()
 
-        # Define a pasta de saída (Ex: files/VMG/Minecraft/Matrizes)
         output_folder = Path('files/VMG') / escopo / 'Matrizes'
         output_folder.mkdir(parents=True, exist_ok=True)
 
@@ -379,12 +379,19 @@ def salvar_matriz_transicao_global(mapa_categorias: dict, metrica_config: dict, 
                 n_v = df_counts.groupby('proximo_estado', observed=False)['contagem'].transform('sum')
 
                 resultados_absolutos = {}
+                
+                if 'contagem' in metricas_absolutas:
+                    resultados_absolutos['contagem'] = df_counts['contagem'].fillna(0)
+                    
                 if 'suporte' in metricas_absolutas:
                     resultados_absolutos['suporte'] = (df_counts['contagem'] / n_total).fillna(0)
+
                 if 'confianca' in metricas_absolutas:
                     resultados_absolutos['confianca'] = (df_counts['contagem'] / n_u).fillna(0)
+
                 if 'probabilidade' in metricas_absolutas:
                     resultados_absolutos['probabilidade'] = (df_counts['contagem'] / n_u).fillna(0)
+
                 if 'lift' in metricas_absolutas:
                     confianca_base = (df_counts['contagem'] / n_u).fillna(0)
                     p_v = n_v / n_total
@@ -397,7 +404,6 @@ def salvar_matriz_transicao_global(mapa_categorias: dict, metrica_config: dict, 
 
             # BLOCO 2: MÉTRICAS ESTATÍSTICAS
             if metricas_estatisticas:
-                # Calcula a probabilidade base individualmente por vídeo dentro deste escopo
                 n_u_video = df_escopo.groupby(['video_id_unique', 'estado'], observed=False)['contagem'].transform('sum')
                 df_escopo['prob_video'] = (df_escopo['contagem'] / n_u_video).fillna(0)
 
@@ -423,7 +429,9 @@ def gerar_heatmap_vmg(matrix_path: Path, output_path: Path, title: str, metrica:
         df_matrix = pd.read_csv(matrix_path, index_col=0)
         plt.figure(figsize=(10, 8))
         
-        # Ajuste dinâmico de escala e cores dependendo da natureza da métrica
+        # Ajuste dinâmico de escala, cores e formatação numérica
+        formato_numero = ".2f" # Padrão decimal
+        
         if metrica in ['probabilidade', 'confianca', 'suporte', 'media']:
             v_min, v_max = 0.0, 1.0
             cmap = "Blues"
@@ -432,10 +440,14 @@ def gerar_heatmap_vmg(matrix_path: Path, output_path: Path, title: str, metrica:
             cmap = "YlOrRd"
         elif metrica == 'desvio_padrao':
             v_min, v_max = 0.0, None
-            cmap = "Purples" # Roxo para dispersão absoluta
+            cmap = "Purples" 
         elif metrica == 'coeficiente_variacao':
             v_min, v_max = 0.0, None
-            cmap = "Oranges" # Laranja para variação relativa
+            cmap = "Oranges" 
+        elif metrica == 'contagem':
+            v_min, v_max = 0.0, None
+            cmap = "Greens"
+            formato_numero = ".0f"
         else:
             v_min, v_max = None, None
             cmap = "Greys"
@@ -443,7 +455,7 @@ def gerar_heatmap_vmg(matrix_path: Path, output_path: Path, title: str, metrica:
         ax = sns.heatmap(
             df_matrix, 
             annot=True, 
-            fmt=".2f", 
+            fmt=formato_numero, 
             cmap=cmap, 
             linewidths=.5,
             vmin=v_min, vmax=v_max,
@@ -471,7 +483,7 @@ def gerar_visualizacoes_video(youtubers_list: list[str], nome_analise: str, metr
     console.print(f"\n[bold magenta]===== GERANDO HEATMAPS DE VÍDEO ({nome_analise.upper()}) =====[/bold magenta]")
     
     # Filtra apenas as métricas absolutas, que são as únicas geradas no nível de vídeo
-    metricas_video = [m for m in metricas if m in ['probabilidade', 'suporte', 'confianca', 'lift']]
+    metricas_video = [m for m in metricas if m in ['contagem', 'probabilidade', 'suporte', 'confianca', 'lift']]
     
     for youtuber in youtubers_list:
         base_path = Path(f'files/{youtuber}')
@@ -654,7 +666,7 @@ if __name__ == '__main__':
         config_metrica=METRICAS_CONFIG['detoxify'],
         nome_analise='detoxify',
         granularidade=['video', 'youtuber', 'categoria', 'geral'],
-        metricas=['probabilidade', 'media', 'desvio_padrao', 'coeficiente_variacao']
+        metricas=['contagem', 'probabilidade', 'media', 'desvio_padrao', 'coeficiente_variacao']
     )
 
     rodar_pipeline_vmg(
@@ -663,5 +675,5 @@ if __name__ == '__main__':
         config_metrica=METRICAS_CONFIG['perspective'],
         nome_analise='perspective',
         granularidade=['video', 'youtuber', 'categoria', 'geral'],
-        metricas=['probabilidade', 'media', 'desvio_padrao', 'coeficiente_variacao']
+        metricas=['contagem', 'probabilidade', 'media', 'desvio_padrao', 'coeficiente_variacao']
     )

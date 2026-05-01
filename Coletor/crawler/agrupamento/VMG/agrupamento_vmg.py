@@ -171,9 +171,12 @@ def aplicar_agrupamento(
     nome_analise: str
 ) -> np.ndarray:    
     # Escalonamento
-    scaler = StandardScaler()
-    matriz_scaled = scaler.fit_transform(matriz_vmg)
-    
+    if not nome_analise == 'contagem': 
+        scaler = StandardScaler()
+        matriz_scaled = scaler.fit_transform(matriz_vmg)
+    else:
+        matriz_scaled = matriz_vmg
+
     # Treino e Predição
     labels = modelo_agrupamento.fit_predict(matriz_scaled)
 
@@ -269,7 +272,8 @@ if __name__ == "__main__":
     # Setup das escolhas
     # nome_analise = 'detoxify'
     nome_analise = 'perspective'
-    metrica_base = 'probabilidade'
+    # metrica_base = 'probabilidade'
+    metrica_base = 'contagem'
 
     # Setup do escopo
     # escopos = ["Geral", "Minecraft", "Roblox"]

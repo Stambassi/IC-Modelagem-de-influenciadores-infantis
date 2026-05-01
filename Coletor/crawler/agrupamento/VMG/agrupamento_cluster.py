@@ -34,7 +34,8 @@ METRICAS_CONFIG = {
 }
 
 '''
-    Função para calcular e persistir as Matrizes de Transição (VMG) para cada subgrupo (cluster) identificado por um algoritmo
+    Função para calcular e persistir as Matrizes de Transição (VMG) para cada subgrupo (cluster).
+    Contempla tanto a formulação baseada no Centroide (Matriz C e P) quanto métricas de dispersão estatística
     
     @param escopo - O alvo do agrupamento (ex: 'Geral', 'Minecraft', 'Julia MineGirl')
     @param mapa_categorias - Dicionário mapeando {nome_youtuber: categoria}
@@ -42,7 +43,7 @@ METRICAS_CONFIG = {
     @param nome_analise - O nome da análise (ex: 'detoxify', 'pysentimiento')
     @param metrica_agrupamento - A métrica que originou o agrupamento (ex: 'confianca')
     @param nome_algoritmo - O algoritmo utilizado (ex: 'KMeans', 'DBSCAN')
-    @param metricas_calculo - Lista de métricas a serem calculadas para o cluster (ex: ['lift', 'confianca', 'coeficiente_variacao'])
+    @param metricas_calculo - Lista parametrizada de métricas a gerar (ex: ['contagem', 'probabilidade', 'media', 'coeficiente_variacao'])
 '''
 def calcular_matrizes_dos_clusters(
     escopo: str, 
@@ -63,26 +64,38 @@ def calcular_matrizes_dos_clusters(
         base_dir_agrupamento = Path(f'files/{escopo}/VMG/Agrupamento')
         youtubers_alvo = [escopo]
 
-    # Arquivo de agrupamento gerado anteriormente
     csv_cluster_path = base_dir_agrupamento / f'cluster_{nome_analise}_{metrica_agrupamento}_{nome_algoritmo.lower()}.csv'
     
     if not csv_cluster_path.exists():
         console.print(f"[yellow]Aviso: Arquivo de clusters não encontrado em {csv_cluster_path}. Pulando.[/yellow]")
         return
 
-    # 2. Carregar os labels dos clusters
+    # Limpeza dos dados anteriores de agrupamento
+    dir_clusters_run = base_dir_agrupamento / 'Clusters' / f'{nome_algoritmo}_{nome_analise}_{metrica_agrupamento}'
+    if dir_clusters_run.is_dir():
+        arquivos_removidos = 0
+        for arquivo in dir_clusters_run.rglob('*'):
+            if arquivo.is_file():
+                try:
+                    arquivo.unlink()
+                    arquivos_removidos += 1
+                except Exception:
+                    pass
+        if arquivos_removidos > 0:
+            console.print(f"   [yellow]✓ Limpeza prévia: {arquivos_removidos} arquivos antigos removidos deste agrupamento.[/yellow]")
+
+    # 2. Carregar os labels
     df_clusters = pd.read_csv(csv_cluster_path)
     coluna_label = f'Cluster_{nome_algoritmo}'
     if coluna_label not in df_clusters.columns:
         console.print(f"[red]Erro: Coluna {coluna_label} não encontrada no CSV.[/red]")
         return
 
-    # 3. Carregar todas as transições brutas do escopo
+    # 3. Carregar transições brutas do escopo
     lista_transicoes = []
     for youtuber in youtubers_alvo:
         base_path_yt = Path(f'files/{youtuber}')
-        if not base_path_yt.is_dir(): 
-            continue
+        if not base_path_yt.is_dir(): continue
 
         for p in base_path_yt.rglob(f'VMG/Matrizes/transicoes_{nome_analise}.csv'):
             try:
@@ -91,15 +104,12 @@ def calcular_matrizes_dos_clusters(
                     df_t['youtuber'] = youtuber
                     df_t['video_id'] = p.parent.parent.parent.name
                     lista_transicoes.append(df_t)
-            except Exception:
-                continue
+            except Exception: continue
 
-    if not lista_transicoes:
-        return
-
+    if not lista_transicoes: return
     df_todas_transicoes = pd.concat(lista_transicoes, ignore_index=True)
 
-    # Definir os tipos categóricos
+    # Definir tipos categóricos
     if metrica_config['tipo_estados'] in ['categorico', 'numerico_categorizado']:
         estados = metrica_config['estados']
     else:
@@ -109,47 +119,51 @@ def calcular_matrizes_dos_clusters(
     df_todas_transicoes['estado'] = df_todas_transicoes['estado'].astype(tipo_categorico)
     df_todas_transicoes['proximo_estado'] = df_todas_transicoes['proximo_estado'].astype(tipo_categorico)
 
-    # 4. Separar as métricas solicitadas
-    metricas_absolutas = [m for m in metricas_calculo if m in ['probabilidade', 'suporte', 'confianca', 'lift']]
+    # 4. Parametrização robusta das métricas
+    metricas_absolutas = [m for m in metricas_calculo if m in ['contagem', 'probabilidade', 'suporte', 'confianca', 'lift']]
     metricas_estatisticas = [m for m in metricas_calculo if m in ['media', 'desvio_padrao', 'coeficiente_variacao']]
+    
     funcs_estatisticas = {
         'media': 'mean',
         'desvio_padrao': 'std',
         'coeficiente_variacao': lambda x: x.std() / x.mean() if x.mean() != 0 else 0
     }
 
-    # 5. Iterar sobre cada cluster único e calcular as matrizes
+    # 5. Iterar sobre clusters
     clusters_unicos = df_clusters[coluna_label].unique()
 
     for cluster_id in clusters_unicos:
-        # Nome da pasta do cluster
         nome_pasta_cluster = 'Outliers' if cluster_id == -1 else f'Cluster_{cluster_id}'
-        
-        # Filtra quais vídeos pertencem a este cluster
         videos_do_cluster = df_clusters[df_clusters[coluna_label] == cluster_id]
         
-        # Faz um merge/filtro para pegar apenas as transições dos vídeos deste cluster
-        # Usa 'youtuber' e 'video_id' como chave composta para evitar conflitos de nomes iguais em canais diferentes
         df_escopo = df_todas_transicoes.merge(videos_do_cluster[['youtuber', 'video_id']], on=['youtuber', 'video_id'], how='inner')
-        
         if df_escopo.empty: continue
 
-        # Diretório de saída
-        dir_saida_matrizes = base_dir_agrupamento / 'Clusters' / f'{nome_algoritmo}_{nome_analise}_{metrica_agrupamento}' / nome_pasta_cluster / 'Matrizes'
+        dir_saida_matrizes = dir_clusters_run / nome_pasta_cluster / 'Matrizes'
         dir_saida_matrizes.mkdir(parents=True, exist_ok=True)
 
         try:
-            # --- CÁLCULO DAS MÉTRICAS ABSOLUTAS ---
+            # Abordagem absoluta
             if metricas_absolutas:
                 df_counts = df_escopo.groupby(['estado', 'proximo_estado'], observed=False)['contagem'].sum().reset_index()
+                
                 n_total = df_counts['contagem'].sum()
-                n_u = df_counts.groupby('estado', observed=False)['contagem'].transform('sum')
+                n_u = df_counts.groupby('estado', observed=False)['contagem'].transform('sum') 
                 n_v = df_counts.groupby('proximo_estado', observed=False)['contagem'].transform('sum')
 
                 resultados = {}
-                if 'suporte' in metricas_absolutas: resultados['suporte'] = (df_counts['contagem'] / n_total).fillna(0)
-                if 'confianca' in metricas_absolutas: resultados['confianca'] = (df_counts['contagem'] / n_u).fillna(0)
-                if 'probabilidade' in metricas_absolutas: resultados['probabilidade'] = (df_counts['contagem'] / n_u).fillna(0)
+                if 'contagem' in metricas_absolutas: 
+                    resultados['contagem'] = df_counts['contagem'].fillna(0) # A Matriz C bruta
+
+                if 'suporte' in metricas_absolutas: 
+                    resultados['suporte'] = (df_counts['contagem'] / n_total).fillna(0)                
+                
+                if 'probabilidade' in metricas_absolutas: 
+                    resultados['probabilidade'] = (df_counts['contagem'] / n_u).fillna(0) 
+                
+                if 'confianca' in metricas_absolutas: 
+                    resultados['confianca'] = (df_counts['contagem'] / n_u).fillna(0)
+                
                 if 'lift' in metricas_absolutas:
                     confianca_base = (df_counts['contagem'] / n_u).fillna(0)
                     p_v = n_v / n_total
@@ -160,9 +174,8 @@ def calcular_matrizes_dos_clusters(
                     matriz = df_counts.pivot(index='estado', columns='proximo_estado', values=m_name).fillna(0)
                     matriz.to_csv(dir_saida_matrizes / f'VMG_{nome_analise}_{m_name}.csv')
 
-            # --- CÁLCULO DAS MÉTRICAS ESTATÍSTICAS ---
+            # Abordagem estatística
             if metricas_estatisticas:
-                # Cria um ID único combinando youtuber e video
                 df_escopo['video_id_unique'] = df_escopo['youtuber'] + '_' + df_escopo['video_id']
                 n_u_video = df_escopo.groupby(['video_id_unique', 'estado'], observed=False)['contagem'].transform('sum')
                 df_escopo['prob_video'] = (df_escopo['contagem'] / n_u_video).fillna(0)
@@ -191,7 +204,9 @@ def gerar_heatmap_vmg(matrix_path: Path, output_path: Path, title: str, metrica:
         df_matrix = pd.read_csv(matrix_path, index_col=0)
         plt.figure(figsize=(10, 8))
         
-        # Ajuste dinâmico de escala e cores dependendo da natureza da métrica
+        # Ajuste dinâmico de escala, cores e formatação numérica
+        formato_numero = ".2f" # Padrão decimal
+        
         if metrica in ['probabilidade', 'confianca', 'suporte', 'media']:
             v_min, v_max = 0.0, 1.0
             cmap = "Blues"
@@ -200,10 +215,14 @@ def gerar_heatmap_vmg(matrix_path: Path, output_path: Path, title: str, metrica:
             cmap = "YlOrRd"
         elif metrica == 'desvio_padrao':
             v_min, v_max = 0.0, None
-            cmap = "Purples" # Roxo para dispersão absoluta
+            cmap = "Purples" 
         elif metrica == 'coeficiente_variacao':
             v_min, v_max = 0.0, None
-            cmap = "Oranges" # Laranja para variação relativa
+            cmap = "Oranges" 
+        elif metrica == 'contagem':
+            v_min, v_max = 0.0, None
+            cmap = "Greens"
+            formato_numero = ".0f"
         else:
             v_min, v_max = None, None
             cmap = "Greys"
@@ -211,7 +230,7 @@ def gerar_heatmap_vmg(matrix_path: Path, output_path: Path, title: str, metrica:
         ax = sns.heatmap(
             df_matrix, 
             annot=True, 
-            fmt=".2f", 
+            fmt=formato_numero, 
             cmap=cmap, 
             linewidths=.5,
             vmin=v_min, vmax=v_max,
@@ -227,7 +246,7 @@ def gerar_heatmap_vmg(matrix_path: Path, output_path: Path, title: str, metrica:
         
     except Exception as e:
         console.print(f"[red]Erro no heatmap ({metrica}): {e}[/red]")
-
+ 
 '''
     Função para gerar Heatmaps das Matrizes de Transição (VMG) geradas internamente em cada cluster
     
@@ -305,9 +324,10 @@ if __name__ == "__main__":
     }
     
     # Setup das escolhas
-    nome_analise = 'detoxify'
-    # nome_analise = 'perspective'
-    metrica_base = 'probabilidade'
+    # nome_analise = 'detoxify'
+    nome_analise = 'perspective'
+    # metrica_base = 'probabilidade'
+    metrica_base = 'contagem'
     # nome_algoritmo = 'KMeans'
     nome_algoritmo = 'DBSCAN'
 
@@ -320,7 +340,13 @@ if __name__ == "__main__":
     if not isinstance(escopos, list):
         escopos = [escopos]
 
-    metricas_desejadas = ['probabilidade', 'media', 'desvio_padrao', 'coeficiente_variacao']
+    metricas_desejadas = [
+        'contagem',              # Matriz C (O Centroide de Volume do Cluster)
+        'probabilidade',         # Matriz P (O Fluxo Real do Grupo, validado pelo artigo CBMG)
+        'media',                 # A média das probabilidades individuais (visão estatística)
+        'coeficiente_variacao',  # Quão confiável é essa transição dentro desse grupo?
+        'lift'                   # Onde estão os gatilhos anormais desse grupo?
+    ]
 
     for escopo in escopos:
         console.print(f"[bold magenta]===== Processando Pipeline de Plotagem para: {escopo} =====[/bold magenta]")
