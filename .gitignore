@@ -7,6 +7,7 @@
 /Coletor/crawler/venv
 /Coletor/crawler/__pycache__
 /Coletor/crawler/scripts/__pycache__
+/Coletor/crawler/NLP/perspective/__pycache__
 
 .dvc/
 

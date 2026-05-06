@@ -19,7 +19,8 @@ API_KEY = ""
 def perspective_toxicity(text, client):
     analyze_request = {
         'comment': { 'text': text },
-        'requestedAttributes': {'TOXICITY': {}}
+        'requestedAttributes': {'TOXICITY': {}},
+        'languages': ['pt']
     }
 
     response = client.comments().analyze(body=analyze_request).execute()
@@ -70,17 +71,40 @@ def _processar_tiras_toxicidade(youtubers_list: list, client, nome_arquivo: str 
 
                 with alive_bar(len(textos_para_analise), bar="classic2", receipt=False, title=f"    >> Analisando {input_csv_path.name}") as bar:
                     for texto in textos_para_analise:
-                        if numero_tiras >= 60:
-                            console.print("[red] !! Limite da API alcançado. Esperando 60 segundos !![/]")
-                            time.sleep(60)
-                            resultados.append(perspective_toxicity(texto, client))
-                            numero_tiras = 1
-                        else:
-                            resultados.append(perspective_toxicity(texto, client))
-                            numero_tiras += 1
-                        bar()
+                        sucesso = False
+                        
+                        # Loop de retry: garante que uma tira só é avançada se processada (ou se houver erro grave)
+                        while not sucesso:
+                            try:
+                                # Controle preventivo com margem de segurança (55 requisições)
+                                if numero_tiras >= 55:
+                                    console.print("\n[yellow] !! Limite preventivo alcançado. Pausando 60s !![/yellow]")
+                                    time.sleep(60)
+                                    numero_tiras = 0
+                                    
+                                resultados.append(perspective_toxicity(texto, client))
+                                numero_tiras += 1
+                                sucesso = True
+                                bar()
+                                
+                            except HttpError as e:
+                                if e.resp.status == 429:
+                                    console.print("\n[red]    >> ERRO 429: Rate limit estourado. [/red]Aguardando 65 segundos...")
+                                    time.sleep(65) # Pausa estendida para garantir o reset da cota do Google
+                                    numero_tiras = 0
+                                    # O sucesso contínua False, o while repetirá a mesma tira
+                                else:
+                                    console.print(f"\n[red]Erro HTTP não recuperável: {e}[/red]")
+                                    resultados.append(None) # Mantém a simetria das linhas do CSV
+                                    sucesso = True
+                                    bar()
+                            except Exception as e:
+                                console.print(f"\n[red]Erro inesperado na análise da tira: {e}[/red]")
+                                resultados.append(None)
+                                sucesso = True
+                                bar()
                             
-                # Converte o dicionário de resultados em um DataFrame
+                # Converte a lista de resultados em um DataFrame
                 df_resultados_toxicidade = pd.DataFrame({'p_toxicity': resultados})
                 
                 # Juntar os resultados com os dados originais
@@ -90,13 +114,10 @@ def _processar_tiras_toxicidade(youtubers_list: list, client, nome_arquivo: str 
                 df_final.to_csv(input_csv_path, index=False, encoding='utf-8')
                 console.print(f"    [green]>> Colunas de toxicidade salvas em {input_csv_path.name}[/green]")
 
-            except HttpError as e:
-                if e.resp.status == 429:
-                    console.print("[red]    >> ERRO: Limite da API alcançado. [/]Esperando 60 segundos...")
-                    time.sleep(60)
             except Exception as e:
-                console.print(f"    [red]>> Ocorreu um erro inesperado ao processar {input_csv_path.name}: {e}[/red]")
-
+                # O try externo agora captura apenas erros de I/O ou falha na leitura do Pandas
+                console.print(f"    [red]>> Falha sistêmica ao processar arquivo {input_csv_path.name}: {e}[/red]")
+                
 '''
     Função principal (pública) para carregar o modelo e iniciar a análise de toxicidade.
     Esta é a função que deve ser importada por outros scripts.

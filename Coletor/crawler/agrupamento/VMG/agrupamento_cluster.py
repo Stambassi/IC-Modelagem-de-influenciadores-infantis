@@ -328,13 +328,13 @@ if __name__ == "__main__":
     nome_analise = 'perspective'
     # metrica_base = 'probabilidade'
     metrica_base = 'contagem'
-    # nome_algoritmo = 'KMeans'
-    nome_algoritmo = 'DBSCAN'
+    nome_algoritmo = 'KMeans'
+    # nome_algoritmo = 'DBSCAN'
 
     # Setup do escopo
-    # escopos = ["Geral", "Minecraft", "Roblox"]
+    escopos = ["Geral", "Minecraft", "Roblox"]
     # escopos = list(mapa_youtubers_categoria.keys())
-    escopos = ["Geral", "Minecraft", "Roblox"] + list(mapa_youtubers_categoria.keys())
+    # escopos = ["Geral", "Minecraft", "Roblox"] + list(mapa_youtubers_categoria.keys())
 
     # Garante que o iterador seja sempre uma lista
     if not isinstance(escopos, list):

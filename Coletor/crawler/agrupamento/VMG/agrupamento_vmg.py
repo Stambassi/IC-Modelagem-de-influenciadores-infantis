@@ -171,11 +171,8 @@ def aplicar_agrupamento(
     nome_analise: str
 ) -> np.ndarray:    
     # Escalonamento
-    if not nome_analise == 'contagem': 
-        scaler = StandardScaler()
-        matriz_scaled = scaler.fit_transform(matriz_vmg)
-    else:
-        matriz_scaled = matriz_vmg
+    scaler = StandardScaler()
+    matriz_scaled = scaler.fit_transform(matriz_vmg)
 
     # Treino e Predição
     labels = modelo_agrupamento.fit_predict(matriz_scaled)
@@ -270,15 +267,16 @@ if __name__ == "__main__":
     }
     
     # Setup das escolhas
-    # nome_analise = 'detoxify'
-    nome_analise = 'perspective'
+    nome_analise = 'detoxify'
+    # nome_analise = 'perspective'
     # metrica_base = 'probabilidade'
     metrica_base = 'contagem'
 
     # Setup do escopo
     # escopos = ["Geral", "Minecraft", "Roblox"]
     # escopos = list(mapa_youtubers_categoria.keys())
-    escopos = ["Geral", "Minecraft", "Roblox"] + list(mapa_youtubers_categoria.keys())
+    # escopos = ["Geral", "Minecraft", "Roblox"] + list(mapa_youtubers_categoria.keys())
+    escopos = "Julia MineGirl"
 
     # Garante que o iterador seja sempre uma lista
     if not isinstance(escopos, list):
@@ -305,12 +303,12 @@ if __name__ == "__main__":
             aplicar_agrupamento(matriz_vmg, df_vmg, csv_path, modelo_km, 'KMeans', escopo, nome_analise)
 
         # 4. Otimiza o DBSCAN utilizando diferentes parâmetros
-        grid_dbscan = {'eps': np.linspace(0.5, 3.0, 15), 'min_samples': [3, 4, 5]}
-        melhores_params_db = otimizar_parametros_agrupamento(matriz_vmg, DBSCAN, grid_dbscan)
+        # grid_dbscan = {'eps': np.linspace(0.5, 3.0, 15), 'min_samples': [3, 4, 5]}
+        # melhores_params_db = otimizar_parametros_agrupamento(matriz_vmg, DBSCAN, grid_dbscan)
 
-        # 5. Aplica com os melhores parâmetros e plota o gráfico
-        if melhores_params_db:
-            modelo_db = DBSCAN(**melhores_params_db)
-            aplicar_agrupamento(matriz_vmg, df_vmg, csv_path, modelo_db, 'DBSCAN', escopo, nome_analise)
+        # # 5. Aplica com os melhores parâmetros e plota o gráfico
+        # if melhores_params_db:
+        #     modelo_db = DBSCAN(**melhores_params_db)
+        #     aplicar_agrupamento(matriz_vmg, df_vmg, csv_path, modelo_db, 'DBSCAN', escopo, nome_analise)
 
         console.print(f"[bold magenta]===== Pipeline de Agrupamento Concluído para o escopo {escopo} =====[/bold magenta]\n")
