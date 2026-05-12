@@ -43,12 +43,23 @@ MAPA_YOUTUBERS_CATEGORIA = {
     'Kass e KR': 'Minecraft',
 }
 
+def remover_pasta(caminho, executar, motivo):
+    acao = "[bold red]DELETANDO[/bold red]" if executar else "[bold yellow]IDENTIFICADO (Modo Teste)[/bold yellow]"
+    console.print(f"{acao} {motivo}: {caminho.relative_to(BASE_DIR)}")
+    
+    if executar:
+        try:
+            shutil.rmtree(caminho)
+            console.print("   └── [green]Pasta física deletada com sucesso.[/green]")
+        except Exception as e:
+            console.print(f"   └── [red]Erro ao deletar pasta: {e}[/red]")
+
 def limpar_pastas_duplicadas(remover_arquivos: bool = False):
     console.rule(f"[bold blue]Buscando Pastas Duplicadas (Remoção: {remover_arquivos})[/bold blue]")
     
     mapa_videos = {}
     
-    # Vasculha todos os diretórios buscando a identidade real do vídeo
+    # 1. Mapeamento inicial
     for root, dirs, files in os.walk(BASE_DIR):
         if "videos_info.csv" in files:
             caminho_pasta = Path(root)
@@ -64,26 +75,28 @@ def limpar_pastas_duplicadas(remover_arquivos: bool = False):
     
     pastas_removidas = 0
     
-    # Analisa as duplicatas
+    # 2. Análise de duplicatas
     for vid, pastas in mapa_videos.items():
         if len(pastas) > 1:
-            # O padrão novo sempre tem o ID entre colchetes no nome da pasta
+            # Identifica quais pastas possuem JSON e quais possuem MP3
+            pastas_com_json = [p for p in pastas if list(p.glob("*.json"))]
+            pastas_apenas_audio = [p for p in pastas if list(p.glob("*.mp3")) and not list(p.glob("*.json"))]
+            
+            # Prioridade 1: Se existe uma pasta com JSON, a que tem apenas MP3 é obsoleta
+            if pastas_com_json and pastas_apenas_audio:
+                for pasta_velha in pastas_apenas_audio:
+                    remover_pasta(pasta_velha, remover_arquivos, "Obsoleta (JSON já existe)")
+                    if remover_arquivos: pastas_removidas += 1
+                continue # Pula para o próximo ID, pois este já foi resolvido
+
+            # Prioridade 2: Mantém a lógica original de nomes [ID] se não houver conflito JSON/MP3
             pastas_novas = [p for p in pastas if f"[{vid}]" in p.name]
             pastas_antigas = [p for p in pastas if f"[{vid}]" not in p.name]
             
-            # Só remove a antiga se a nova existir para assumir o lugar
             if pastas_novas and pastas_antigas:
                 for pasta_velha in pastas_antigas:
-                    acao = "[bold red]DELETANDO[/bold red]" if remover_arquivos else "[bold yellow]IDENTIFICADO (Modo Teste)[/bold yellow]"
-                    console.print(f"{acao} Pasta Obsoleta: {pasta_velha.relative_to(BASE_DIR)}")
-                    
-                    if remover_arquivos:
-                        try:
-                            shutil.rmtree(pasta_velha)
-                            pastas_removidas += 1
-                            console.print("   └── [green]Pasta física deletada com sucesso.[/green]")
-                        except Exception as e:
-                            console.print(f"   └── [red]Erro ao deletar pasta: {e}[/red]")
+                    remover_pasta(pasta_velha, remover_arquivos, "Obsoleta (Nomenclatura antiga)")
+                    if remover_arquivos: pastas_removidas += 1
                             
     console.print(f"\nTotal de pastas obsoletas resolvidas: {pastas_removidas}\n")
 
@@ -529,7 +542,7 @@ def expurgar_audios_redundantes(alvo: str = "local", remover_arquivos: bool = Fa
     console.print(f"Áudios removidos/identificados: {audios_removidos}")
 
 if __name__ == "__main__":
-    # limpar_pastas_duplicadas(remover_arquivos=False)
+    limpar_pastas_duplicadas(remover_arquivos=False)
 
     # gerenciar_transcricoes_erradas(remover_arquivos=False)
 
@@ -545,4 +558,4 @@ if __name__ == "__main__":
 
     # filtrar_por_palavras_chave(remover_arquivos=False)
 
-    expurgar_audios_redundantes(alvo='remoto', remover_arquivos=True)
+    # expurgar_audios_redundantes(alvo='remoto', remover_arquivos=True)
