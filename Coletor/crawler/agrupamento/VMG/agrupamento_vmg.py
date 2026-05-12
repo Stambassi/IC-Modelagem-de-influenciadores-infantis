@@ -267,7 +267,7 @@ if __name__ == "__main__":
     }
     
     # Setup das escolhas
-    nome_analise = 'detoxify'
+    analise = 'detoxify'
     # nome_analise = 'perspective'
     # metrica_base = 'probabilidade'
     metrica_base = 'contagem'
@@ -286,7 +286,7 @@ if __name__ == "__main__":
         console.print(f"[bold magenta]===== Processando Pipeline de Agrupamento para: {escopo} =====[/bold magenta]")
             
         # 1. Pega os vídeos de todos os youtubers do escopo
-        matriz_vmg, df_vmg, csv_path = preparar_dados_agrupamento(escopo, mapa_youtubers_categoria, nome_analise, metrica_base)
+        matriz_vmg, df_vmg, csv_path = preparar_dados_agrupamento(escopo, mapa_youtubers_categoria, analise, metrica_base)
 
         # Verifica se foram encontrados dados antes de aplicar os algoritmos
         if matriz_vmg is None:
@@ -300,7 +300,7 @@ if __name__ == "__main__":
         # 3. Aplica com os melhores parâmetros e plota o gráfico
         if melhor_config_km:
             modelo_km = KMeans(**melhor_config_km)
-            aplicar_agrupamento(matriz_vmg, df_vmg, csv_path, modelo_km, 'KMeans', escopo, nome_analise)
+            aplicar_agrupamento(matriz_vmg, df_vmg, csv_path, modelo_km, 'KMeans', escopo, analise)
 
         # 4. Otimiza o DBSCAN utilizando diferentes parâmetros
         # grid_dbscan = {'eps': np.linspace(0.5, 3.0, 15), 'min_samples': [3, 4, 5]}
@@ -309,6 +309,6 @@ if __name__ == "__main__":
         # # 5. Aplica com os melhores parâmetros e plota o gráfico
         # if melhores_params_db:
         #     modelo_db = DBSCAN(**melhores_params_db)
-        #     aplicar_agrupamento(matriz_vmg, df_vmg, csv_path, modelo_db, 'DBSCAN', escopo, nome_analise)
+        #     aplicar_agrupamento(matriz_vmg, df_vmg, csv_path, modelo_db, 'DBSCAN', escopo, analise)
 
         console.print(f"[bold magenta]===== Pipeline de Agrupamento Concluído para o escopo {escopo} =====[/bold magenta]\n")
