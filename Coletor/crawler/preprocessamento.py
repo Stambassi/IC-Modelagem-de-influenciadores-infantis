@@ -374,6 +374,7 @@ def executar_pipeline_processamento_multigranular(
 
 if __name__ == "__main__":
     lista_youtubers = list(MAPA_YOUTUBERS_CATEGORIA.keys())
+    # lista_youtubers = ['AuthenticGames']
     granularidade_padrao = [30, 60, 120, 180, 240, 300, -1]
 
     console.print("[bold cyan]Opções de Análise NLP:[/bold cyan]")
@@ -399,19 +400,19 @@ if __name__ == "__main__":
 
         salvar_tiras_monogranular()
 
-        executar_pipeline_processamento_monogranular(
-            lista_youtubers,
-            rodar_pysent=pysentimiento,
-            rodar_detox=detoxify,
-            rodar_persp=perspective
-        )
-
-        # executar_pipeline_processamento_multigranular(
-        #     lista_youtubers, 
-        #     granularidade_padrao,
+        # executar_pipeline_processamento_monogranular(
+        #     lista_youtubers,
         #     rodar_pysent=pysentimiento,
         #     rodar_detox=detoxify,
         #     rodar_persp=perspective
         # )
+
+        executar_pipeline_processamento_multigranular(
+            lista_youtubers, 
+            granularidade_padrao,
+            rodar_pysent=pysentimiento,
+            rodar_detox=detoxify,
+            rodar_persp=perspective
+        )
     else:
         console.print("[red]Opção inválida. Abortando.[/red]")

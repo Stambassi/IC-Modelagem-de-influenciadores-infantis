@@ -17,3 +17,5 @@
 
 # Para ignorar a chave do Perspective API
 /Coletor/crawler/NLP/perspective/api_key.txt
+
+GEMINI.md
