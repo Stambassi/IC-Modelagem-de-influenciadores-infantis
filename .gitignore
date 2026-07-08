@@ -2,9 +2,12 @@
 /Coletor/crawler/files/*
 /Coletor/crawler/data/*
 
+/Coletor/crawler/anotacao/dados/total_tiras.csv
+
 # Para ignorar as configurações de máquina
 /Coletor/crawler/.venv
 /Coletor/crawler/venv
+/Coletor/crawler/.label_studio_env
 /Coletor/crawler/__pycache__
 /Coletor/crawler/scripts/__pycache__
 /Coletor/crawler/NLP/perspective/__pycache__
