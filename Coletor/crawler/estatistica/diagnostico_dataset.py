@@ -113,7 +113,7 @@ def compilar_dados():
 def gerar_imagem_tabela(df, nome_saida="estatistica/tabela_diagnostico_dataset.png"):
     # Calcula a linha de Total
     total_row = {
-        'Creator Name': 'Total / Average',
+        'Creator Name': 'Total',
         'Game Environment': '-',
         'Total Videos': df['Total Videos'].sum(),
         'Total Video Duration': df['Total Video Duration'].sum(),
