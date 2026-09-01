@@ -10,14 +10,14 @@ plt.rcParams['font.family'] = 'serif'
 plt.rcParams['font.serif'] = ['Times New Roman'] + plt.rcParams['font.serif']
 
 # 1. PARAMETRIZAÇÃO DA ESCALA E VOLUME
-# TIPO_ESCALA = 'likert' # Opções válidas: 'likert', 'binario', 'ternario'
-TIPO_ESCALA = 'binario'
+TIPO_ESCALA = 'likert' # Opções válidas: 'likert', 'binario', 'ternario'
+# TIPO_ESCALA = 'binario'
 # TIPO_ESCALA = 'ternario'
 
 TOTAL_AMOSTRA = 600
 
 # 2. Configuração de Voluntários (Overlap Exato de 2 por SVT)
-CLASSIFICADORES = ['Avaliador_A', 'Avaliador_B', 'Avaliador_C', 'Avaliador_D']
+CLASSIFICADORES = ['Avaliador_A', 'Avaliador_B', 'Avaliador_C', 'Avaliador_D', 'Avaliador_E', 'Avaliador_F']
 
 # 3. Pesos da Amostragem para o Label Studio (Target de Validação)
 PESOS_AMOSTRAGEM = {
@@ -262,7 +262,7 @@ def gerar_amostra_estratificada(df_consenso):
         df_amostra_final['texto_exibicao'] = base_metadados + base_texto
 
     # 3. Distribuição Combinatória dos Avaliadores (2 por SVT)
-    # 4 avaliadores geram 6 pares exatos. 600 SVTs / 6 pares = 100 SVTs por par.
+    # 6 avaliadores geram 15 pares exatos. 600 SVTs / 15 pares = 40 SVTs por par.
     pares_avaliadores = list(itertools.combinations(CLASSIFICADORES, 2))
     tamanho_chunk = len(df_amostra_final) // len(pares_avaliadores)
     
@@ -275,12 +275,12 @@ def gerar_amostra_estratificada(df_consenso):
     df_amostra_final['Anotador_1'] = anotador_1
     df_amostra_final['Anotador_2'] = anotador_2
 
-    print(f"\n[SUCESSO] Amostra gerada: {len(df_amostra_final)} SVTs (300 tarefas exatas para cada classificador).")
+    print(f"\n[SUCESSO] Amostra gerada: {len(df_amostra_final)} SVTs (200 tarefas exatas para cada classificador).")
     return df_amostra_final
 
 '''
     Lê o DataFrame mestre e gera arquivos CSV separados para cada 
-    classificador contendo exclusivamente a carga de trabalho de 300 SVTs dele.
+    classificador contendo exclusivamente a carga de trabalho de 200 SVTs dele.
 '''
 def gerar_arquivos_individuais_avaliadores(df_master):
     print("\n--- Gerando Carga de Trabalho Individual ---")
