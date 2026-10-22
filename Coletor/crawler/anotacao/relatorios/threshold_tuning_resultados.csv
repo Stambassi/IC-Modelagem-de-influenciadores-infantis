@@ -1,6 +1,10 @@
 Anotador,Modelo,T1 (NT->GZ),T2 (GZ->T),Max Kappa
 11,Detoxify,0.1,0.75,0.3639
 11,Perspective API,0.25,0.4,0.3181
+16,Detoxify,0.25,0.8,0.3283
+16,Perspective API,0.3,0.45,0.3608
+13,Detoxify,0.45,0.7,0.3397
+13,Perspective API,0.2,0.5,0.3389
 9,Detoxify,0.8,0.95,0.2974
 9,Perspective API,0.4,0.55,0.3299
 8,Detoxify,0.25,0.65,0.1419
