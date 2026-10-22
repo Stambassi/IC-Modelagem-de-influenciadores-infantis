@@ -379,61 +379,117 @@ def gerar_matriz_confusao_agregada(df_raw):
 """
     Gera um Gráfico de Dispersão (Scatter Plot) correlacionando a 
     confiança das IAs (scores de 0 a 1) com a concordância humana.
-    Pontos verdes indicam que os humanos concordaram entre si, 
-    pontos vermelhos indicam discordância.
+    Classificado em 3 níveis (Total, Parcial, Discordância).
+    Inclui caixas de texto com a distribuição percentual de 
+    aderência humana dentro de cada zona estatística.
 """
 def gerar_grafico_dispersao_concordancia(df_raw, matriz_pivot):
-    print("\n--- Gerando Gráfico de Dispersão (Confiança da IA vs. Discordância) ---")
+    print("\n--- Gerando Gráfico de Dispersão (Confiança da IA vs. Discordância com Proporções) ---")
     
-    # 1. Determinar a concordância humana por SVT
-    # Como a matriz_pivot tem as SVTs nas linhas e as anotações nas colunas,
-    # contamos quantos rótulos únicos não-nulos cada SVT recebeu.
-    concordancia_dict = {}
-    for svt, row in matriz_pivot.iterrows():
-        respostas_validas = row.dropna().unique()
-        if len(respostas_validas) == 1:
-            concordancia_dict[svt] = 'Concordaram'
-        elif len(respostas_validas) > 1:
-            concordancia_dict[svt] = 'Discordaram'
-            
-    # 2. Resgatar os scores originais da IA por SVT
-    # Removemos as duplicatas baseando-se no ID da SVT para manter 1 score de IA por texto
+    # 1. Resgatar os scores originais da IA por SVT para reconstruir o gabarito
     df_scores = df_raw.drop_duplicates(subset=[COLUNA_ID_SVT])[[COLUNA_ID_SVT, COLUNA_TOXICITY, COLUNA_PTOXICITY]].copy()
     
+    # Reconstroi a classe original da IA baseada no score do Detoxify (Thresholds padrão do projeto)
+    t1_default = 0.20
+    t2_default = 0.80
+    
+    def reconstruir_classe_ia(score):
+        if score < t1_default: return LABEL_NT
+        elif score >= t2_default: return LABEL_T
+        else: return LABEL_GZ
+        
+    df_scores['Classe_IA'] = df_scores[COLUNA_TOXICITY].apply(reconstruir_classe_ia)
+    df_scores.set_index(COLUNA_ID_SVT, inplace=True)
+    
+    # 2. Determinar o nível de concordância humana COM a IA por SVT
+    concordancia_dict = {}
+    for svt, row in matriz_pivot.iterrows():
+        respostas_validas = row.dropna().tolist()
+        
+        if svt in df_scores.index and len(respostas_validas) > 0:
+            classe_ia = df_scores.loc[svt, 'Classe_IA']
+            
+            # Conta quantos avaliadores marcaram exatamente a mesma classe que a IA
+            acertos = respostas_validas.count(classe_ia)
+            total_avaliadores = len(respostas_validas)
+            
+            if acertos == total_avaliadores:
+                concordancia_dict[svt] = 'Concordância Total'
+            elif acertos == 0:
+                concordancia_dict[svt] = 'Discordância Total'
+            else:
+                concordancia_dict[svt] = 'Concordância Parcial'
+                
     # Mapeia a métrica de concordância para o dataframe de plotagem
-    df_scores['Concordancia'] = df_scores[COLUNA_ID_SVT].map(concordancia_dict)
+    df_scores['Concordancia'] = df_scores.index.map(concordancia_dict)
     df_plot = df_scores.dropna(subset=['Concordancia'])
     
     # 3. Plotagem em Alta Resolução
-    fig, ax = plt.subplots(figsize=(10, 8), dpi=300)
+    fig, ax = plt.subplots(figsize=(12, 8), dpi=300) # Ajustado a largura (12) para caber as caixas de texto confortavelmente
     
-    # Separa os grupos para marcações visuais distintas
-    grupo_concordam = df_plot[df_plot['Concordancia'] == 'Concordaram']
-    grupo_discordam = df_plot[df_plot['Concordancia'] == 'Discordaram']
+    grupo_total = df_plot[df_plot['Concordancia'] == 'Concordância Total']
+    grupo_parcial = df_plot[df_plot['Concordancia'] == 'Concordância Parcial']
+    grupo_discordam = df_plot[df_plot['Concordancia'] == 'Discordância Total']
     
-    # Plot dos pontos de concordância (Bolinhas Verdes)
-    ax.scatter(grupo_concordam[COLUNA_TOXICITY], grupo_concordam[COLUNA_PTOXICITY], 
-               color='#2ECC71', alpha=0.6, edgecolors='black', label='Humanos Concordaram', s=50)
+    # Plot 1: Concordância Total (Bolinhas Verdes)
+    ax.scatter(grupo_total[COLUNA_TOXICITY], grupo_total[COLUNA_PTOXICITY], 
+               color='#2ECC71', alpha=0.6, edgecolors='black', 
+               label='Concordância Total (Ambos = IA)', s=50, marker='o')
                
-    # Plot dos pontos de discordância (X Vermelhos)
+    # Plot 2: Concordância Parcial (Triângulos Amarelos)
+    ax.scatter(grupo_parcial[COLUNA_TOXICITY], grupo_parcial[COLUNA_PTOXICITY], 
+               color='#F1C40F', alpha=0.7, edgecolors='black', 
+               label='Concordância Parcial (Apenas 1 = IA)', s=55, marker='^')
+               
+    # Plot 3: Discordância Total (X Vermelhos)
     ax.scatter(grupo_discordam[COLUNA_TOXICITY], grupo_discordam[COLUNA_PTOXICITY], 
-               color='#E74C3C', alpha=0.7, edgecolors='black', label='Humanos Discordaram', s=60, marker='X')
+               color='#E74C3C', alpha=0.7, edgecolors='black', 
+               label='Discordância Total (Nenhum = IA)', s=60, marker='X')
                
-    # Adiciona linhas de referência dos Thresholds originais da sua metodologia
-    # Detoxify (Vertical): 0.20 (Max NT) e 0.80 (Min T)
+    # Adiciona linhas de referência dos Thresholds
     ax.axvline(x=0.20, color='gray', linestyle='--', alpha=0.5)
     ax.axvline(x=0.80, color='gray', linestyle='--', alpha=0.5)
-    # Perspective API (Horizontal): 0.20 (Max NT) e 0.40 (Min T)
     ax.axhline(y=0.20, color='gray', linestyle='--', alpha=0.5)
     ax.axhline(y=0.40, color='gray', linestyle='--', alpha=0.5)
     
+    # =================================================================
+    # 4. Cálculo e Plotagem das Proporções por Zona
+    # =================================================================
+    zonas = [
+        ('Classe IA: NÃO TÓXICO', 0.08, df_plot[df_plot[COLUNA_TOXICITY] < 0.20]),
+        ('Classe IA: ZONA CINZENTA', 0.50, df_plot[(df_plot[COLUNA_TOXICITY] >= 0.20) & (df_plot[COLUNA_TOXICITY] < 0.80)]),
+        ('Classe IA: TÓXICO', 0.92, df_plot[df_plot[COLUNA_TOXICITY] >= 0.80])
+    ]
+    
+    # Estilo da caixa de texto (fundo branco translúcido para não bloquear os pontos)
+    props_bbox = dict(boxstyle="round,pad=0.5", facecolor="white", edgecolor="gray", alpha=0.85)
+    
+    for nome_zona, pos_x, df_zona in zonas:
+        if len(df_zona) > 0:
+            total_zona = len(df_zona)
+            pct_tot = (len(df_zona[df_zona['Concordancia'] == 'Concordância Total']) / total_zona) * 100
+            pct_par = (len(df_zona[df_zona['Concordancia'] == 'Concordância Parcial']) / total_zona) * 100
+            pct_dis = (len(df_zona[df_zona['Concordancia'] == 'Discordância Total']) / total_zona) * 100
+            
+            # Texto formatado com alinhamento rigoroso
+            texto = (f"{nome_zona}\n\n"
+                     f"Concordância total: {pct_tot:.1f}%\n"
+                     f"Concordância parcial: {pct_par:.1f}%\n"
+                     f"Discordância total: {pct_dis:.1f}%")
+            
+            # Posiciona a caixa no topo do gráfico (y=0.98), alinhada ao centro do eixo x definido
+            ax.text(pos_x, 0.98, texto, ha='center', va='top', 
+                    fontsize=9, weight='bold', bbox=props_bbox)
+
     # Configuração de Eixos
     ax.set_xlim(-0.05, 1.05)
     ax.set_ylim(-0.05, 1.05)
     ax.set_xlabel('Score de Confiança: Detoxify (0 a 1)', weight='bold')
     ax.set_ylabel('Score de Confiança: Perspective API (0 a 1)', weight='bold')
-    ax.set_title('Gráfico de Dispersão: Discordância Humana vs. Confiança da IA', pad=20, weight='bold')
-    ax.legend(loc='lower right', framealpha=0.9)
+    ax.set_title('Gráfico de Dispersão: Aderência Humana vs. Confiança da IA', pad=20, weight='bold')
+    
+    # Move a legenda para a margem inferior para evitar sobreposição com as novas caixas
+    ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.15), ncol=3, framealpha=0.9)
     
     plt.grid(True, linestyle=':', alpha=0.6)
     plt.tight_layout()
@@ -442,7 +498,7 @@ def gerar_grafico_dispersao_concordancia(df_raw, matriz_pivot):
     plt.savefig(caminho_salvamento, dpi=300, bbox_inches='tight')
     plt.close()
     
-    print(f" └── Gráfico de dispersão salvo em: 'dispersao_concordancia_ia.png'")
+    print(f" └── Gráfico de dispersão atualizado salvo em: 'dispersao_concordancia_ia_proporcoes.png'")
 
 """
     Cruza os dados da matriz de anotação com os textos originais ('tiras') 

@@ -310,3 +310,88 @@ if __name__ == "__main__":
     
     # Opcional (porém super recomendado): Exporta o arquivo segmentado por voluntário
     gerar_arquivos_individuais_avaliadores(df_master_label_studio)
+
+
+'''
+Guidelines para anotação:
+
+<div>
+    
+    <h3>📋 Diretrizes de Anotação: Classificação de Toxicidade Infantil</h3>
+    
+    <br>
+    <p>
+        <strong>Objetivo:</strong> Classificar transcrições de vídeos de <em>Minecraft</em> e <em>Roblox</em> destinados a <strong>crianças</strong> (de até 12 anos de idade, contemplando o público do <em>Youtube Kids</em>) nas classes Não Tóxico, Zona Cinzenta e Tóxico. 
+        <br><br>
+        Considere as seguintes definições iniciais antes de detalhar cada classe disponível:
+    </p>
+    
+    <br>
+    
+    <ul>
+        <li>
+            <strong>Toxicidade:</strong> Qualquer comentário rude, desrespeitoso ou irracional que provavelmente fará as pessoas abandonarem uma discussão.
+        </li>
+        <li>
+            <strong>Ataque à Identidade:</strong> Comentários negativos ou odiosos dirigidos a alguém por causa de sua identidade (abrange ataques de raça, etnia, gênero, orientação sexual, religião, etc.).
+        </li>
+        <li>
+            <strong>Insulto:</strong> Comentário insultuoso, inflamatório ou negativo focado em uma pessoa ou grupo (inclui xingamentos diretos como "lixo", "burro", "idiota").
+        </li>
+        <li>
+            <strong>Profanação/Palavrões:</strong> Uso de palavrões ou outra linguagem obscena ou profana, sendo estritamente inaceitável para o público infantil.
+        </li>
+        <li>
+            <strong>Ameaça: </strong> Textos que descrevem a intenção de infligir dor, ferimento ou violência contra um indivíduo ou grupo.
+        </li>
+    </ul>
+
+    <br>
+    <hr>
+    <br>
+    
+    <div>
+        <h4>💡 A Regra de Ouro: O Contexto Infantil</h4>
+        <p>
+            Existem três opções a serem marcadas. Se o conteúdo causou desconforto, possui um palavrão ou ataca alguém, marque como <strong>Tóxico</strong>. Se a intenção é puramente ambígua e depende muito do contexto do jogo, marque como <strong>Zona Cinzenta</strong>. Na total ausência de malícia e risco, marque como <strong>Não Tóxico</strong>.
+        </p>
+    </div>
+    
+    <br>
+    <hr>
+    <br>
+    
+    <h4>✅ Não Tóxico</h4>
+    <p>
+        Textos completamente seguros e inofensivos para o público infantil. Não contêm linguagem obscena, hostilidade, insultos ou qualquer forma de agressividade. A comunicação é neutra, amigável ou focada estritamente na jogabilidade (<em>gameplay</em>).
+    </p>
+
+    
+    <br>
+    
+    <h4>⚠️ Zona Cinzenta</h4>
+    <p>
+        Textos ambíguos ou limítrofes. Incluem gírias do universo gamer (como "noob" ou "bot") usadas de maneira neutra ou em tom de brincadeira, sem intenção clara de humilhar. São comentários que causam dúvida: não são puramente amigáveis, mas também não atingem o limiar de uma ofensa clara ou uso de palavrões que exija classificação imediata como tóxico.
+    </p>
+
+    
+    <br>
+    
+    <h4>🛑 Tóxico</h4>
+    <p>
+        O texto deve ser classificado como Tóxico se apresentar qualquer nível de hostilidade ou inadequação para crianças, manifestando-se através de um ou mais dos conceitos descritos anteriormente.
+    </p>
+    
+    <br>
+    <hr>
+    <br>
+    
+    <div>
+        <h4>🎧 Atenção às Transcrições e Dinâmica</h4>
+        <p>
+            Lembre-se de que os textos avaliados são gerados automaticamente e <strong>a transcrição pode ter falhas</strong> (como erros de reconhecimento de palavras ou ausência de pontuação). Além disso, quando houver <strong>mais de uma pessoa conversando simultaneamente</strong>, é necessário ter atenção redobrada para entender adequadamente a <strong>dinâmica da conversa entre os interlocutores</strong> antes de aplicar o rótulo final.
+        </p>
+    </div>
+
+</div>
+'''
